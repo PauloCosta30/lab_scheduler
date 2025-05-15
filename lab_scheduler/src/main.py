@@ -75,10 +75,5 @@ if __name__ == '__main__':
     # Example: app.config['MAIL_SUPPRESS_SEND'] = True
     app.run(host='0.0.0.0', port=5000, debug=True)
 
-from fastapi import FastAPI
-from lab_scheduler.src.routes import download  # certifique-se que o import está certo
 
-app = FastAPI()
-
-app.include_router(download.router)
 
