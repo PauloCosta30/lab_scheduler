@@ -1,0 +1,10 @@
+# render.yaml
+services:
+  - type: web
+    name: lab-scheduler
+    env: python
+    buildCommand: ""
+    startCommand: gunicorn src.main:app
+    region: oregon
+    plan: free
+    branch: main

@@ -1,0 +1,264 @@
+/* /home/ubuntu/lab_scheduler/src/static/style.css */
+body {
+    font-family: sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 20px;
+    background-color: #f4f4f4;
+    color: #333;
+}
+
+.container {
+    max-width: 1100px; /* Aumentado para melhor visualização da tabela */
+    margin: auto;
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+h1, h2 {
+    color: #333;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="date"],
+select {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+button {
+    display: inline-block;
+    background: #5cb85c;
+    color: #fff;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.3s ease;
+}
+
+button:hover {
+    background: #4cae4c;
+}
+
+button:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+.form-container, .schedule-container {
+    margin-bottom: 30px;
+    padding: 20px;
+    border: 1px solid #eee;
+    border-radius: 5px;
+}
+
+.message {
+    padding: 10px;
+    margin-top: 10px;
+    border-radius: 4px;
+    text-align: center;
+    font-weight: bold;
+}
+
+.message.success {
+    background-color: #dff0d8;
+    color: #3c763d;
+    border: 1px solid #d6e9c6;
+}
+
+.message.error {
+    background-color: #f2dede;
+    color: #a94442;
+    border: 1px solid #ebccd1;
+}
+
+#scheduleTableContainer table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+#scheduleTableContainer th, 
+#scheduleTableContainer td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: center;
+    min-width: 70px; /* Ajustado */
+    height: 40px; /* Altura fixa para melhor clique */
+}
+
+#scheduleTableContainer th {
+    background-color: #f2f2f2;
+}
+
+#scheduleTableContainer td.available {
+    background-color: #e6ffe6; /* Verde claro para disponível */
+    cursor: pointer;
+}
+
+#scheduleTableContainer td.available:hover {
+    background-color: #cce8cc;
+}
+
+#scheduleTableContainer td.selected {
+    background-color: #a0d3a0; /* Verde mais escuro para selecionado */
+    font-weight: bold;
+    color: #fff;
+}
+
+#scheduleTableContainer td.booked {
+    background-color: #ffe0b2; /* Laranja claro para ocupado */
+    color: #8c5a00;
+    cursor: not-allowed;
+}
+
+/* Modal Styles */
+.modal {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 1000; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgba(0,0,0,0.6); /* Black w/ opacity */
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 10% auto; /* 10% from the top and centered */
+    padding: 25px;
+    border: 1px solid #888;
+    width: 80%; /* Could be more or less, depending on screen size */
+    max-width: 600px;
+    border-radius: 8px;
+    position: relative;
+}
+
+.close-button {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    position: absolute;
+    top: 10px;
+    right: 20px;
+}
+
+.close-button:hover,
+.close-button:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+#selectedSlotsSummary ul {
+    list-style-type: none;
+    padding-left: 0;
+}
+#selectedSlotsSummary li {
+    background-color: #f9f9f9;
+    border: 1px solid #eee;
+    padding: 5px;
+    margin-bottom: 5px;
+    border-radius: 3px;
+}
+
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    input[type="text"],
+    input[type="email"],
+    input[type="date"],
+    select {
+        font-size: 16px; 
+    }
+
+    button {
+        width: 100%;
+        padding: 12px;
+        margin-top: 10px; /* Espaçamento entre botões */
+    }
+
+    .container {
+        padding: 10px;
+    }
+
+    h1 {
+        font-size: 1.6em;
+    }
+
+    h2 {
+        font-size: 1.3em;
+    }
+    
+    #scheduleTableContainer {
+        overflow-x: auto; 
+    }
+
+    .modal-content {
+        margin: 5% auto;
+        width: 90%;
+    }
+}
+
+
+
+
+/* Styles for Header with Logo */
+.header-container {
+    display: flex;
+    align-items: center;
+    justify-content: center; /* Centraliza o conteúdo do cabeçalho */
+    margin-bottom: 20px;
+    flex-wrap: wrap; /* Permite que os itens quebrem linha em telas menores */
+}
+
+#appLogo {
+    max-height: 140px; /* Altura máxima do logo, ajuste conforme necessário */
+    margin-right: 15px; /* Espaço entre o logo e o título */
+}
+
+/* Ajuste para o título H1 quando o logo estiver presente */
+.header-container h1 {
+    margin-bottom: 0; /* Remove a margem inferior padrão do h1 se ele estiver no flex container */
+    text-align: left; /* Alinha o texto à esquerda, o container já centraliza */
+}
+
+/* Media query para telas menores */
+@media (max-width: 768px) {
+    .header-container {
+        flex-direction: column; /* Empilha logo e título */
+        text-align: center;
+    }
+
+    #appLogo {
+        margin-right: 0;
+        margin-bottom: 10px; /* Espaço abaixo do logo quando empilhado */
+        max-height: 60px; /* Logo um pouco menor em telas pequenas */
+    }
+
+    .header-container h1 {
+        text-align: center; /* Centraliza o título em telas menores */
+        font-size: 1.4em; /* Ajusta o tamanho do título para telas menores */
+    }
+}
+
