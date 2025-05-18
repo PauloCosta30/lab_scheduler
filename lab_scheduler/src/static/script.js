@@ -2,11 +2,10 @@
 
 document.addEventListener("DOMContentLoaded", () => {
     // DOM Elements for Modal and New Flow
-    const weekSelector = document.getElementById("weekSelector");
-    const loadScheduleButton = document.getElementById("loadScheduleButton");
     const scheduleTableContainer = document.getElementById("scheduleTableContainer");
     const scheduleMessage = document.getElementById("scheduleMessage");
     const proceedToBookingButton = document.getElementById("proceedToBookingButton");
+    const currentWeekDisplay = document.getElementById("currentWeekDisplay");
 
     const bookingModal = document.getElementById("bookingModal");
     const closeModalButton = document.querySelector(".close-button");
@@ -73,32 +72,39 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (selectedDateStr) {
             const selectedDateObj = parseDateStrToUTC(selectedDateStr);
-            // Ensure the selected week is not entirely in the past relative to server time (UTC)
-            // We check the start of the week for this.
-            const tempDate = new Date(selectedDateObj.valueOf()); // Clone to avoid modifying selectedDateObj
+            // Calcular o início da semana (segunda-feira)
+            const tempDate = new Date(selectedDateObj.valueOf());
             const dayOfWeek = tempDate.getUTCDay();
             const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
             startDate = new Date(tempDate.setUTCDate(tempDate.getUTCDate() + diffToMonday));
-            
-            // If the Friday of the selected week is in the past, show a message and don't load.
-            const endOfWeekForCheck = new Date(startDate.valueOf());
-            endOfWeekForCheck.setUTCDate(startDate.getUTCDate() + 4);
-            if (endOfWeekForCheck < todayUTC && endOfWeekForCheck.toISOString().split("T")[0] !== todayUTC.toISOString().split("T")[0]) {
-                showScheduleMessage("Não é possível carregar escalas de semanas completamente passadas.", "info");
-                scheduleTableContainer.innerHTML = "<p>Selecione uma semana atual ou futura.</p>";
-                return;
-            }
             endDate = new Date(new Date(startDate).setUTCDate(startDate.getUTCDate() + 4));
-        } else { // Default to current week
-            const todayForLogic = new Date(); // Use local today to find current week's Monday
-            const dayOfWeek = todayForLogic.getDay();
-            const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-            startDate = new Date(todayForLogic.setDate(todayForLogic.getDate() + diffToMonday));
-            // Convert startDate to UTC for API call and logic
+        } else {
+            // Caso não tenha data selecionada, use a lógica de loadCurrentWeek
+            const today = new Date();
+            const dayOfWeek = today.getDay();
+            
+            let targetDate;
+            if (dayOfWeek === 6) { // Sábado
+                targetDate = new Date(today);
+                targetDate.setDate(today.getDate() + 2);
+            } else if (dayOfWeek === 0) { // Domingo
+                targetDate = new Date(today);
+                targetDate.setDate(today.getDate() + 1);
+            } else {
+                targetDate = today;
+            }
+            
+            const dayOfWeekForCalc = targetDate.getDay();
+            const diffToMonday = dayOfWeekForCalc === 0 ? -6 : 1 - dayOfWeekForCalc;
+            startDate = new Date(targetDate);
+            startDate.setDate(targetDate.getDate() + diffToMonday);
+            
+            // Converter para UTC para API e lógica
             startDate = parseDateStrToUTC(startDate.toISOString().split("T")[0]);
             endDate = new Date(new Date(startDate).setUTCDate(startDate.getUTCDate() + 4));
         }
-        currentWeekStartDate = startDate; 
+        
+        currentWeekStartDate = startDate;
 
         const startDateStrAPI = startDate.toISOString().split("T")[0];
         const endDateStrAPI = endDate.toISOString().split("T")[0];
@@ -111,7 +117,11 @@ document.addEventListener("DOMContentLoaded", () => {
             if (allRooms.length === 0) await fetchAllRooms();
             
             renderScheduleTable(currentFetchedBookings, allRooms, currentWeekStartDate);
-            showScheduleMessage("Escala carregada.", "success");
+            
+            // Mostrar qual semana está sendo exibida
+            const startDateFormatted = new Date(startDateStrAPI).toLocaleDateString('pt-BR', {timeZone: 'UTC'});
+            const endDateFormatted = new Date(endDateStrAPI).toLocaleDateString('pt-BR', {timeZone: 'UTC'});
+            showScheduleMessage(`Escala carregada: ${startDateFormatted} a ${endDateFormatted}`, "success");
         } catch (error) {
             console.error("Falha ao carregar escala:", error);
             showScheduleMessage("Não foi possível carregar a escala.", "error");
@@ -197,6 +207,13 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         table.appendChild(tbody);
         scheduleTableContainer.appendChild(table);
+        
+        // Exibir a semana atual no elemento currentWeekDisplay
+        if (currentWeekDisplay) {
+            const startDateFormatted = new Date(datesOfWeek[0]).toLocaleDateString('pt-BR', {timeZone: 'UTC'});
+            const endDateFormatted = new Date(datesOfWeek[4]).toLocaleDateString('pt-BR', {timeZone: 'UTC'});
+            currentWeekDisplay.textContent = `Semana atual: ${startDateFormatted} a ${endDateFormatted}`;
+        }
     }
 
     function handleSlotClick(event) {
@@ -316,7 +333,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 updateProceedButtonState();
                 setTimeout(() => {
                     closeBookingModal();
-                    loadScheduleData(weekSelector.value || getTodayUTC().toISOString().split("T")[0]);
+                    loadCurrentWeek();
                 }, 2000);
             } else {
                 showModalMessage(result.error || "Erro ao realizar agendamento.", "error");
@@ -328,17 +345,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // --- Event Listeners ---
-    if (loadScheduleButton) {
-        loadScheduleButton.addEventListener("click", () => {
-            const selectedDate = weekSelector.value;
-            if (!selectedDate) {
-                showScheduleMessage("Por favor, selecione uma data para carregar a semana.", "error");
-                return;
-            }
-            loadScheduleData(selectedDate);
-        });
-    }
-
     if (proceedToBookingButton) {
         proceedToBookingButton.addEventListener("click", openBookingModal);
     }
@@ -357,19 +363,54 @@ document.addEventListener("DOMContentLoaded", () => {
         modalBookingForm.addEventListener("submit", handleModalFormSubmit);
     }
 
+    // Nova função para determinar e carregar a semana atual
+    function loadCurrentWeek() {
+        const today = new Date();
+        const dayOfWeek = today.getDay(); // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
+        
+        // Se hoje for sábado (6) ou domingo (0), carregue a próxima semana
+        // Caso contrário, carregue a semana atual
+        let targetDate;
+        
+        if (dayOfWeek === 6) { // Sábado
+            // Avança para a próxima segunda-feira (2 dias à frente)
+            targetDate = new Date(today);
+            targetDate.setDate(today.getDate() + 2);
+        } else if (dayOfWeek === 0) { // Domingo
+            // Avança para a próxima segunda-feira (1 dia à frente)
+            targetDate = new Date(today);
+            targetDate.setDate(today.getDate() + 1);
+        } else {
+            // Estamos em um dia de semana, use a semana atual
+            targetDate = today;
+        }
+        
+        // Converte para string no formato YYYY-MM-DD
+        const targetDateStr = targetDate.toISOString().split('T')[0];
+        
+        // Carrega a escala para a semana determinada
+        loadScheduleData(targetDateStr);
+    }
+
     // --- Initializations ---
     async function initializeApp() {
-        const todayUTC = getTodayUTC();
-        const todayUTCStr = todayUTC.toISOString().split("T")[0];
-        if(weekSelector) {
-            weekSelector.value = todayUTCStr;
-            weekSelector.min = todayUTCStr; // Prevent selecting past dates in the date picker itself
-        }
         await fetchAllRooms();
-        loadScheduleData(todayUTCStr);
+        loadCurrentWeek();
+        
+        // Verificar se é necessário atualizar a escala (a cada minuto)
+        setInterval(() => {
+            const now = new Date();
+            const day = now.getDay();
+            const hours = now.getHours();
+            const minutes = now.getMinutes();
+            
+            // Se for sábado (6) e meia-noite (00:00), recarregar para a próxima semana
+            if (day === 6 && hours === 0 && minutes === 0) {
+                loadCurrentWeek();
+            }
+        }, 60000); // Verificar a cada minuto
     }
 
     initializeApp();
-
 });
 
