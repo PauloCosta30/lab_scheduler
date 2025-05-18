@@ -13,6 +13,18 @@ from flask_mail import Mail # Import Flask-Mail
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'a_very_strong_random_secret_key_dev_123!@#')
 
+from flask import send_file, request, abort
+import os
+
+@app.route('/download-db')
+def download_db():
+    secret = request.args.get('secret')
+    if secret != 'SUA_SENHA':
+        abort(403)
+    db_path = os.path.join(os.getcwd(), 'lab_scheduler.db')
+    return send_file(db_path, as_attachment=True)
+
+
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 db_path = os.path.join(project_root, 'lab_scheduler.db')
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{db_path}"
