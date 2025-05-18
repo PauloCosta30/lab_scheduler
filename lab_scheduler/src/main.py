@@ -19,7 +19,7 @@ import os
 @app.route('/download-db')
 def download_db():
     secret = request.args.get('secret')
-    if secret != 'SUA_SENHA':
+    if secret != 'ITVlab':
         abort(403)
     db_path = os.path.join(os.getcwd(), 'lab_scheduler.db')
     return send_file(db_path, as_attachment=True)
