@@ -3,23 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Agendamento de Laboratório v2</title>
+    <title>Escala para uso dos laboratórios</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <div class="header-container">
             <img src="images/itv_logo.jfif" alt="Logo ITV" id="appLogo">
-            <h1>Escala para uso dos laboratórios - ITV</h1>
+            <h1>Escala para uso dos laboratórios</h1>
         </div>
 
         <div class="schedule-container">
             <h2>Escala Semanal</h2>
             <p>Clique nos horários disponíveis na tabela para selecioná-los. Após selecionar, clique em "Prosseguir com Agendamento".</p>
-            <div>
-                <label for="weekSelector">Selecionar Semana (qualquer dia da semana):</label>
-                <input type="date" id="weekSelector">
-                <button id="loadScheduleButton">Carregar Escala</button>
+            <div id="currentWeekDisplay" class="week-display">
+                <!-- A semana atual será exibida aqui pelo JavaScript -->
             </div>
             <div id="scheduleTableContainer">
                 <!-- Tabela da escala será gerada aqui -->
