@@ -55,7 +55,7 @@ from src.models.entities import Room, Booking # Certifique-se que Room está imp
 with app.app_context():
     db.create_all()
     if not Room.query.first():
-        room_names = ["Geral 1", "Geral 2", "Geral 3", "Geral 4", "Geral 5", "Citometria - Bancada", "Sala Clara - Lupa esquerda", "Geologia 1", "Geologia Micrótomo", "Cultivo A1"]
+        room_names = ["Geral 1", "Geral 2", "Geral 3", "Geral 4", "Geral 5","Geral 6","Geral 7","Geral 8","Citometria - Bancada", "Sala Clara - Lupa esquerda", "Sala Clara - Lupa direita","Sala Clara - Lupa com Câmera","Sala Clara - Microscópio","Sala Escura - Axio Imager.M2", "Sala Escura - Axio Scope.A1","Sala Escura - Microscópio CONFOCAL-LMSN","Microbiologia - Capela de Fluxo Laminar","Microbiologia - Lupa", "Microbiologia - Equipamento","Geologia 1", "Geologia Micrótomo", "Cultivo A1","Cultivo A2","Cultivo B1","Cultivo B2"]
         # Certifique-se de ter 10 nomes se o range(1,11) for mantido, ou ajuste o loop
         for name in room_names: # Ou use um loop com índice se preferir
             room = Room(name=name)
