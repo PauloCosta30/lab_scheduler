@@ -34,11 +34,13 @@ body {
 
 #appLogo {
     max-height: 70px;
+    text-align: center;
     margin-right: 20px;
 }
 
 h1 {
     color: #333;
+    text-align: center;
     margin: 0;
 }
 
