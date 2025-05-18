@@ -10,6 +10,26 @@
     text-align: center;
 }
 
+/* Styles for Header with Logo */
+.header-container {
+    display: flex;
+    align-items: center;
+    justify-content: center; /* Centraliza o conteúdo do cabeçalho */
+    margin-bottom: 20px;
+    flex-wrap: wrap; /* Permite que os itens quebrem linha em telas menores */
+}
+
+#appLogo {
+    max-height: 140px; /* Altura máxima do logo, ajuste conforme necessário */
+    margin-right: 15px; /* Espaço entre o logo e o título */
+}
+
+/* Ajuste para o título H1 quando o logo estiver presente */
+.header-container h1 {
+    margin-bottom: 0; /* Remove a margem inferior padrão do h1 se ele estiver no flex container */
+    text-align: left; /* Alinha o texto à esquerda, o container já centraliza */
+}
+
 /* Estilos existentes mantidos abaixo */
 body {
     font-family: Arial, sans-serif;
