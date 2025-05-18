@@ -21,7 +21,7 @@ def download_db():
     secret = request.args.get('secret')
     if secret != 'ITVlab':
         abort(403)
-    db_path = os.path.join(os.getcwd(), 'lab_scheduler.db')
+    db_path = os.path.join(os.getcwd(), 'lab_scheduler', 'lab_scheduler.db')
     return send_file(db_path, as_attachment=True)
 
 
