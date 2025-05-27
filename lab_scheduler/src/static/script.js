@@ -238,7 +238,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         cell.textContent = booking.user_name;
                         cell.classList.add("booked");
                     } else if (isPastDate) {
-                        cell.textContent = "Passado";
+                        cell.textContent = "Indisponível";
                         cell.classList.add("past");
                     } else if (!isBookingAllowedForSlot) {
                         cell.textContent = "Bloqueado";
