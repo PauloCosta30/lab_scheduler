@@ -70,18 +70,18 @@ document.addEventListener("DOMContentLoaded", () => {
         const release = new Date(status.next_week_release);
 
         if (status.current_week_open) {
-            message += `Aberto para a semana atual (até ${formatUTCDate(cutoff, {weekday: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'UTC'})} UTC). `;
+            message += `Aberto para a semana atual (até ${formatUTCDate(cutoff, {weekday: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'UTC'})}). `;
         } else {
-            message += `Fechado para a semana atual (encerrado ${formatUTCDate(cutoff, {weekday: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'UTC'})} UTC). `;
+            message += `Fechado para a semana atual (encerrado ${formatUTCDate(cutoff, {weekday: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'UTC'})}). `;
         }
 
         if (status.next_week_open) {
             const nextCutoff = new Date(status.next_week_release);
             nextCutoff.setUTCDate(nextCutoff.getUTCDate() + (status.current_week_cutoff.getDay() || 7) - (status.next_week_release.getDay() || 7) + 7); // Calculate next cutoff
-            message += `Aberto para a próxima semana (até ${formatUTCDate(nextCutoff, {weekday: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'UTC'})} UTC).`;
+            message += `Aberto para a próxima semana (até ${formatUTCDate(nextCutoff, {weekday: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'UTC'})}).`;
         } else {
              if (now < release) {
-                 message += `Aguardando abertura para a próxima semana (abre ${formatUTCDate(release, {weekday: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'UTC'})} UTC).`;
+                 message += `Aguardando abertura para a próxima semana (abre ${formatUTCDate(release, {weekday: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'UTC'})}).`;
              } else {
                  message += `Fechado para a próxima semana.`; // Already past next week's cutoff
              }
