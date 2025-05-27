@@ -71,7 +71,7 @@ def is_booking_allowed(booking_date_obj):
     cutoff_datetime = datetime.combine(start_of_current_week + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME)
     release_datetime = datetime.combine(start_of_current_week + timedelta(days=RELEASE_WEEKDAY), RELEASE_TIME)
 
-     if booking_date_obj.weekday() >= 5:
+    if booking_date_obj.weekday() >= 5:
         return False, f"Agendamentos só permitidos de Seg-Sex. Data: {booking_date_obj.strftime('%d/%m/%Y')} é fim de semana."
     if booking_date_obj < today_utc:
         return False, f"Data de agendamento {booking_date_obj.strftime('%d/%m/%Y')} no passado."
@@ -92,6 +92,7 @@ def is_booking_allowed(booking_date_obj):
                 return True, "OK"
     else:
         return False, f"Só é possível agendar para semana atual ou próxima. Data: {booking_date_obj.strftime('%d/%m/%Y')} fora do período."
+
 
 @bookings_bp.route("/rooms", methods=["GET"])
 def get_rooms():
