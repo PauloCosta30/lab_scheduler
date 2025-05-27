@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Escala Semanal - {{ week_start_date_formatted }} a {{ week_end_date_formatted }}</title>
+    <style>
+        body { font-family: sans-serif; font-size: 10px; }
+        h1, h2 { text-align: center; color: #333; margin-bottom: 5px; }
+        h2 { font-size: 1.1em; margin-top: 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; page-break-inside: avoid; }
+        th, td { border: 1px solid #ccc; padding: 4px; text-align: center; word-wrap: break-word; }
+        th { background-color: #f2f2f2; font-weight: bold; }
+        td.booked { background-color: #f8d7da; color: #721c24; font-style: italic; }
+        td.room-name { text-align: left; font-weight: bold; width: 15%; }
+        thead th { vertical-align: middle; }
+        tbody td { height: 30px; vertical-align: middle; }
+        .period-header { font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <h1>Escala de Uso dos Laboratórios - ITV</h1>
+    <h2>Semana de {{ week_start_date_formatted }} a {{ week_end_date_formatted }}</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Sala</th>
+                {% for i in range(5) %}
+                <th colspan="2">{{ days_locale[i] }} ({{ dates_of_week[i] | format_date }})</th>
+                {% endfor %}
+            </tr>
+            <tr>
+                <td></td>
+                {% for i in range(5) %}
+                <th class="period-header">Manhã</th>
+                <th class="period-header">Tarde</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for room in rooms %}
+            <tr>
+                <td class="room-name">{{ room.name }}</td>
+                {% for date_str in dates_of_week %}
+                    {% set booking_manha = schedule_data[room.id][date_str]["Manhã"] %}
+                    {% set booking_tarde = schedule_data[room.id][date_str]["Tarde"] %}
+                    <td class="{{ 'booked' if booking_manha else '' }}">{{ booking_manha if booking_manha else '' }}</td>
+                    <td class="{{ 'booked' if booking_tarde else '' }}">{{ booking_tarde if booking_tarde else '' }}</td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>
