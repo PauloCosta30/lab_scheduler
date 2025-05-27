@@ -71,27 +71,27 @@ def is_booking_allowed(booking_date_obj):
     cutoff_datetime = datetime.combine(start_of_current_week + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME)
     release_datetime = datetime.combine(start_of_current_week + timedelta(days=RELEASE_WEEKDAY), RELEASE_TIME)
 
-    if booking_date_obj.weekday() >= 5:
-return False, f"Agendamentos só permitidos de Seg-Sex. Data: {booking_date_obj.strftime('%d/%m/%Y')} é fim de semana."
+     if booking_date_obj.weekday() >= 5:
+        return False, f"Agendamentos só permitidos de Seg-Sex. Data: {booking_date_obj.strftime('%d/%m/%Y')} é fim de semana."
     if booking_date_obj < today_utc:
-return False, f"Data de agendamento {booking_date_obj.strftime('%d/%m/%Y')} no passado."
+        return False, f"Data de agendamento {booking_date_obj.strftime('%d/%m/%Y')} no passado."
 
     if start_of_current_week <= booking_date_obj < start_of_next_week:
         if now_utc >= cutoff_datetime:
-return False, f"Agendamento para semana atual ({start_of_current_week.strftime('%d/%m')}-{(start_of_current_week + timedelta(days=4)).strftime('%d/%m')}) encerrou Qua 18:00 UTC."
+            return False, f"Agendamento para semana atual ({start_of_current_week.strftime('%d/%m')}-{(start_of_current_week + timedelta(days=4)).strftime('%d/%m')}) encerrou Qua 18:00 UTC."
         else:
             return True, "OK"
     elif start_of_next_week <= booking_date_obj <= end_of_next_week:
         if now_utc < release_datetime:
-return False, f"Agendamento para próxima semana ({start_of_next_week.strftime('%d/%m')}-{end_of_next_week.strftime('%d/%m')}) abre Sex 00:00 UTC."
+            return False, f"Agendamento para próxima semana ({start_of_next_week.strftime('%d/%m')}-{end_of_next_week.strftime('%d/%m')}) abre Sex 00:00 UTC."
         else:
-             cutoff_next_week = datetime.combine(start_of_next_week + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME)
-             if now_utc >= cutoff_next_week:
-return False, f"Agendamento para semana de {start_of_next_week.strftime('%d/%m')} já encerrou."
-             else:
-                 return True, "OK"
+            cutoff_next_week = datetime.combine(start_of_next_week + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME)
+            if now_utc >= cutoff_next_week:
+                return False, f"Agendamento para semana de {start_of_next_week.strftime('%d/%m')} já encerrou."
+            else:
+                return True, "OK"
     else:
-return False, f"Só é possível agendar para semana atual ou próxima. Data: {booking_date_obj.strftime('%d/%m/%Y')} fora do período."
+        return False, f"Só é possível agendar para semana atual ou próxima. Data: {booking_date_obj.strftime('%d/%m/%Y')} fora do período."
 
 @bookings_bp.route("/rooms", methods=["GET"])
 def get_rooms():
