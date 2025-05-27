@@ -150,10 +150,15 @@ def create_booking():
         daily_new_bookings_count[booking_date_obj] += 1
 
     # Validation: max 3 bookings per day per user
-    for booking_date_obj, count_for_this_request in daily_new_bookings_count.items():
-        existing_bookings_on_day = Booking.query.filter_by(user_name=user_name, booking_date=booking_date_obj).count()
-        if (existing_bookings_on_day + count_for_this_request) > MAX_BOOKINGS_PER_DAY:
-return jsonify({"error": f"Limite de {MAX_BOOKINGS_PER_DAY} agendamentos/dia para '{user_name}' excedido em {booking_date_obj.strftime('%Y-%m-%d')}."}), 409
+for booking_date_obj, count_for_this_request in daily_new_bookings_count.items():
+    existing_bookings_on_day = Booking.query.filter_by(
+        user_name=user_name, booking_date=booking_date_obj
+    ).count()
+    if (existing_bookings_on_day + count_for_this_request) > MAX_BOOKINGS_PER_DAY:
+        return jsonify({
+            "error": f"Limite de {MAX_BOOKINGS_PER_DAY} agendamentos/dia para '{user_name}' excedido em {booking_date_obj.strftime('%Y-%m-%d')}."
+        }), 409
+
 
     # Validation: Limit one "Geral" room per day per user
     geral_rooms_requested_this_request_by_day = defaultdict(set)
