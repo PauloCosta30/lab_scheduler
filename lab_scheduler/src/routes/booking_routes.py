@@ -74,8 +74,8 @@ def is_booking_allowed(booking_date_obj):
 
     if booking_date_obj.weekday() >= 5:
         return False, f"Agendamentos só permitidos de Seg-Sex. Data: {booking_date_obj.strftime('%d/%m/%Y')} é fim de semana."
-    if booking_date_obj < today_utc:
-        return False, f"Data de agendamento {booking_date_obj.strftime('%d/%m/%Y')} no passado."
+    "if booking_date_obj < today_utc:
+        return False, f"Data de agendamento {booking_date_obj.strftime('%d/%m/%Y')} no passado.""
 
     if start_of_current_week <= booking_date_obj < start_of_next_week:
         if now_utc >= cutoff_datetime:
