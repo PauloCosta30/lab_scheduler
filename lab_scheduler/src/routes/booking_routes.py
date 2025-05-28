@@ -17,9 +17,9 @@ MAX_BOOKINGS_PER_DAY = 3
 
 # --- Booking Window Configuration ---
 CUTOFF_WEEKDAY = 2 # Wednesday
-CUTOFF_TIME = time(18, 0, 0, tzinfo=timezone.utc)
+CUTOFF_TIME = time(21, 0, 0, tzinfo=timezone.utc)
 RELEASE_WEEKDAY = 4 # Friday
-RELEASE_TIME = time(0, 0, 0, tzinfo=timezone.utc)
+RELEASE_TIME = time(3, 0, 0, tzinfo=timezone.utc)
 # ----------------------------------
 
 # Helper function to send confirmation email
