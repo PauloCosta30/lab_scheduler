@@ -281,28 +281,50 @@ def get_bookings():
         })
     return jsonify(result)
 
+# Adjusted booking status endpoint with error handling
 @bookings_bp.route("/booking-status", methods=["GET"])
 def get_booking_status():
     try:
         now_utc = datetime.now(timezone.utc)
         today_utc = now_utc.date()
+        
+        # Calcular início e fim da semana atual (segunda a sexta)
         start_of_current_week = today_utc - timedelta(days=today_utc.weekday())
+        end_of_current_week = start_of_current_week + timedelta(days=4)  # Sexta-feira
+        
+        # Calcular início e fim da próxima semana (segunda a sexta)
         start_of_next_week = start_of_current_week + timedelta(days=7)
-        end_of_current_week = start_of_current_week + timedelta(days=4)
-        end_of_next_week = start_of_next_week + timedelta(days=4)
-
-        cutoff_datetime_current_week = datetime.combine(start_of_current_week + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME)
-
+        end_of_next_week = start_of_next_week + timedelta(days=4)  # Sexta-feira
+        
+        # Data e hora de corte para semana atual (Quarta 18:00 Hora Brasil / 21:00 UTC)
+        cutoff_datetime_current_week = datetime.combine(
+            start_of_current_week + timedelta(days=CUTOFF_WEEKDAY), 
+            CUTOFF_TIME
+        )
+        
+        # Data para liberação da próxima semana (Quinta-feira)
         thursday_current_week = start_of_current_week + timedelta(days=RELEASE_WEEKDAY)
-        release_datetime_for_next_week = datetime.combine(thursday_current_week, RELEASE_TIME)
-        if RELEASE_TIME < time(0,0,0) or (RELEASE_TIME > time(0,0,0) and RELEASE_TIME < time(3,0,0)):
+        
+        # Hora de liberação para próxima semana (Quinta 23:59 Hora Brasil / Sexta 02:59 UTC)
+        release_datetime_for_next_week = datetime.combine(
+            thursday_current_week, 
+            RELEASE_TIME
+        )
+        
+        # Ajuste se o horário estiver entre meia-noite e 3 da manhã UTC
+        if RELEASE_TIME.hour < 3 and RELEASE_TIME.hour >= 0:
             release_datetime_for_next_week += timedelta(days=1)
-
-        cutoff_datetime_next_week = datetime.combine(start_of_next_week + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME)
-
+        
+        # Data e hora de corte para próxima semana
+        cutoff_datetime_next_week = datetime.combine(
+            start_of_next_week + timedelta(days=CUTOFF_WEEKDAY), 
+            CUTOFF_TIME
+        )
+        
+        # Verificar status dos agendamentos
         current_week_open = now_utc < cutoff_datetime_current_week
-        next_week_open = release_datetime_for_next_week <= now_utc < cutoff_datetime_next_week
-
+        next_week_open = now_utc >= release_datetime_for_next_week and now_utc < cutoff_datetime_next_week
+        
         return jsonify({
             "current_week_start": start_of_current_week.isoformat(),
             "current_week_end": end_of_current_week.isoformat(),
@@ -314,6 +336,10 @@ def get_booking_status():
             "next_week_release": release_datetime_for_next_week.isoformat(),
             "server_time_utc": now_utc.isoformat()
         })
+    except Exception as e:
+        current_app.logger.error(f"Erro ao calcular status de agendamento: {str(e)}")
+        return jsonify({"error": "Não foi possível verificar o status do agendamento", 
+                       "details": str(e)}), 500
 
 # --- PDF Generation Route (Reverted to 5 days) --- 
 @bookings_bp.route("/generate-pdf", methods=["GET"])
@@ -401,9 +427,6 @@ def generate_schedule_pdf():
         return response
 
     except Exception as e:
-        current_app.logger.error(f"Erro ao verificar status do agendamento: {str(e)}")
-        return jsonify({
-            "error": "Falha ao verificar status de agendamento",
-            "details": str(e)
-        }), 500
+        current_app.logger.error(f"Erro ao gerar PDF para semana {week_start_date_str}: {str(e)}")
+        return jsonify({"error": "Falha ao gerar PDF no servidor", "details": str(e)}), 500
 # --- End of PDF Route ---
