@@ -281,39 +281,39 @@ def get_bookings():
         })
     return jsonify(result)
 
-# Adjusted booking status endpoint (Reverted end dates to Friday)
 @bookings_bp.route("/booking-status", methods=["GET"])
 def get_booking_status():
-    now_utc = datetime.now(timezone.utc)
-    today_utc = now_utc.date()
-    start_of_current_week = today_utc - timedelta(days=today_utc.weekday())
-    start_of_next_week = start_of_current_week + timedelta(days=7)
-    end_of_current_week = start_of_current_week + timedelta(days=4) # Friday (Reverted)
-    end_of_next_week = start_of_next_week + timedelta(days=4) # Friday (Reverted)
+    try:
+        now_utc = datetime.now(timezone.utc)
+        today_utc = now_utc.date()
+        start_of_current_week = today_utc - timedelta(days=today_utc.weekday())
+        start_of_next_week = start_of_current_week + timedelta(days=7)
+        end_of_current_week = start_of_current_week + timedelta(days=4)
+        end_of_next_week = start_of_next_week + timedelta(days=4)
 
-    cutoff_datetime_current_week = datetime.combine(start_of_current_week + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME)
-    
-    thursday_current_week = start_of_current_week + timedelta(days=RELEASE_WEEKDAY)
-    release_datetime_for_next_week = datetime.combine(thursday_current_week, RELEASE_TIME)
-    if RELEASE_TIME < time(0,0,0) or (RELEASE_TIME > time(0,0,0) and RELEASE_TIME < time(3,0,0)):
-         release_datetime_for_next_week += timedelta(days=1)
-         
-    cutoff_datetime_next_week = datetime.combine(start_of_next_week + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME)
+        cutoff_datetime_current_week = datetime.combine(start_of_current_week + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME)
 
-    current_week_open = now_utc < cutoff_datetime_current_week
-    next_week_open = now_utc >= release_datetime_for_next_week and now_utc < cutoff_datetime_next_week
-        
-    return jsonify({
-        "current_week_start": start_of_current_week.isoformat(),
-        "current_week_end": end_of_current_week.isoformat(), # Now ends on Friday
-        "current_week_open": current_week_open,
-        "current_week_cutoff": cutoff_datetime_current_week.isoformat(),
-        "next_week_start": start_of_next_week.isoformat(),
-        "next_week_end": end_of_next_week.isoformat(), # Now ends on Friday
-        "next_week_open": next_week_open,
-        "next_week_release": release_datetime_for_next_week.isoformat(), # New release time
-        "server_time_utc": now_utc.isoformat()
-    })
+        thursday_current_week = start_of_current_week + timedelta(days=RELEASE_WEEKDAY)
+        release_datetime_for_next_week = datetime.combine(thursday_current_week, RELEASE_TIME)
+        if RELEASE_TIME < time(0,0,0) or (RELEASE_TIME > time(0,0,0) and RELEASE_TIME < time(3,0,0)):
+            release_datetime_for_next_week += timedelta(days=1)
+
+        cutoff_datetime_next_week = datetime.combine(start_of_next_week + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME)
+
+        current_week_open = now_utc < cutoff_datetime_current_week
+        next_week_open = release_datetime_for_next_week <= now_utc < cutoff_datetime_next_week
+
+        return jsonify({
+            "current_week_start": start_of_current_week.isoformat(),
+            "current_week_end": end_of_current_week.isoformat(),
+            "current_week_open": current_week_open,
+            "current_week_cutoff": cutoff_datetime_current_week.isoformat(),
+            "next_week_start": start_of_next_week.isoformat(),
+            "next_week_end": end_of_next_week.isoformat(),
+            "next_week_open": next_week_open,
+            "next_week_release": release_datetime_for_next_week.isoformat(),
+            "server_time_utc": now_utc.isoformat()
+        })
 
 # --- PDF Generation Route (Reverted to 5 days) --- 
 @bookings_bp.route("/generate-pdf", methods=["GET"])
@@ -401,6 +401,9 @@ def generate_schedule_pdf():
         return response
 
     except Exception as e:
-        current_app.logger.error(f"Erro ao gerar PDF para semana {week_start_date_str}: {str(e)}")
-        return jsonify({"error": "Falha ao gerar PDF no servidor", "details": str(e)}), 500
+        current_app.logger.error(f"Erro ao verificar status do agendamento: {str(e)}")
+        return jsonify({
+            "error": "Falha ao verificar status de agendamento",
+            "details": str(e)
+        }), 500
 # --- End of PDF Route ---
