@@ -8,6 +8,8 @@ from flask_mail import Message # Import Message for Flask-Mail
 from weasyprint import HTML, CSS
 from jinja2 import Environment, FileSystemLoader
 import os
+# *** ADDED: Import joinedload for eager loading ***
+from sqlalchemy.orm import joinedload
 
 bookings_bp = Blueprint("bookings_bp", __name__)
 
@@ -38,12 +40,13 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, boo
 
     html_body = f"""<p>Olá {user_name},</p><p>Seu agendamento foi confirmado:</p><ul>"""
     for slot in booked_slots_details:
-        booking_date_formatted = slot["booking_date"]
+        booking_date_formatted = slot['booking_date'] # Use single quotes inside f-string
         try:
-            booking_date_formatted = datetime.strptime(slot["booking_date"], "%Y-%m-%d").strftime("%d/%m/%Y")
+            # Use single quotes inside f-string
+            booking_date_formatted = datetime.strptime(slot['booking_date'], "%Y-%m-%d").strftime("%d/%m/%Y")
         except ValueError:
             pass
-        # *** CORRECTED: Use single quotes inside f-string for dictionary keys ***
+        # Use single quotes inside f-string for dictionary keys
         html_body += f"<li>Sala: {slot['room_name']} - Data: {booking_date_formatted} - Período: {slot['period']}</li>"
     html_body += f"</ul><p>Coordenador: {coordinator_name}</p><p>Obrigado!</p>"""
 
@@ -78,7 +81,7 @@ def is_booking_allowed(booking_date_obj):
     thursday_current_week = start_of_current_week + timedelta(days=RELEASE_WEEKDAY)
     release_datetime_for_next_week = datetime.combine(thursday_current_week, RELEASE_TIME)
     
-    # *** CORRECTED: Make time objects timezone-aware for comparison ***
+    # Make time objects timezone-aware for comparison
     time_midnight_utc = time(0, 0, 0, tzinfo=timezone.utc)
     time_3am_utc = time(3, 0, 0, tzinfo=timezone.utc)
     # Compare RELEASE_TIME (aware) with aware time objects
@@ -174,13 +177,13 @@ def create_booking():
                 return jsonify({"error": f"Slot inválido: {slot_input}. Requer room_id, booking_date, period"}), 400
             if period not in ["Manhã", "Tarde"]:
                 current_app.logger.warning(f"Invalid period: {period}")
-                # *** CORRECTED: Use single quotes inside f-string ***
+                # Use single quotes inside f-string
                 return jsonify({"error": f"Período inválido '{period}'. Use 'Manhã' ou 'Tarde'"}), 400
             try:
                 booking_date_obj = datetime.strptime(booking_date_str, "%Y-%m-%d").date()
             except ValueError:
                 current_app.logger.warning(f"Invalid date format: {booking_date_str}")
-                # *** CORRECTED: Use single quotes inside f-string ***
+                # Use single quotes inside f-string
                 return jsonify({"error": f"Formato de data inválido '{booking_date_str}'. Use YYYY-MM-DD"}), 400
             
             # Check booking window rules first
@@ -209,14 +212,14 @@ def create_booking():
             existing_bookings_on_day = Booking.query.filter_by(user_name=user_name, booking_date=booking_date_obj).count()
             if (existing_bookings_on_day + count_for_this_request) > MAX_BOOKINGS_PER_DAY:
                 current_app.logger.info(f"Booking limit exceeded for {user_name} on {booking_date_obj}")
-                # *** CORRECTED: Use single quotes inside f-string ***
+                # Use single quotes inside f-string
                 return jsonify({"error": f"Limite de {MAX_BOOKINGS_PER_DAY} agendamentos/dia para '{user_name}' excedido em {booking_date_obj.strftime('%Y-%m-%d')}."}), 409
 
         # --- Validation: Limit "Geral" room bookings per day per user based on periods --- 
         current_app.logger.debug("Validating Geral room limits")
         geral_slots_in_request_by_day = defaultdict(list)
         for slot in processed_slots:
-            # *** CORRECTED: Use single quotes inside f-string for dictionary keys ***
+            # Use single quotes inside f-string for dictionary keys
             if slot['room_name'].startswith("Geral "):
                 geral_slots_in_request_by_day[slot['booking_date_obj']].append(
                     {"room_id": slot['room_id'], "period": slot['period']}
@@ -233,10 +236,10 @@ def create_booking():
                 combined_geral_slots.append({"room_id": booking.room_id, "period": booking.period})
             existing_tuples = {(b.room_id, b.period) for b in existing_geral_bookings}
             for req_slot in requested_geral_slots:
-                 # *** CORRECTED: Use single quotes inside f-string for dictionary keys ***
+                 # Use single quotes inside f-string for dictionary keys
                  if (req_slot['room_id'], req_slot['period']) not in existing_tuples:
                      combined_geral_slots.append(req_slot)
-            # *** CORRECTED: Use single quotes inside f-string for dictionary keys ***
+            # Use single quotes inside f-string for dictionary keys
             geral_periods_booked = {slot['period'] for slot in combined_geral_slots}
             geral_rooms_booked_ids = {slot['room_id'] for slot in combined_geral_slots}
             num_geral_periods = len(geral_periods_booked)
@@ -244,15 +247,15 @@ def create_booking():
             current_app.logger.debug(f"Geral validation for {booking_date_obj}: Periods={num_geral_periods}, Rooms={num_geral_rooms}")
             if num_geral_periods > 2:
                 current_app.logger.info(f"Geral limit exceeded (periods) for {user_name} on {booking_date_obj}")
-                # *** CORRECTED: Use single quotes inside f-string ***
+                # Use single quotes inside f-string
                 return jsonify({"error": f"Não é possível agendar mais de dois períodos ('Manhã' e 'Tarde') em salas 'Geral' no mesmo dia ({booking_date_obj.strftime('%Y-%m-%d')})."}), 409
             if num_geral_periods == 2 and num_geral_rooms > 2:
                  current_app.logger.info(f"Geral limit exceeded (rooms/periods) for {user_name} on {booking_date_obj}")
-                 # *** CORRECTED: Use single quotes inside f-string ***
+                 # Use single quotes inside f-string
                  return jsonify({"error": f"Não é possível agendar mais de duas salas 'Geral' diferentes no mesmo dia ({booking_date_obj.strftime('%Y-%m-%d')})."}), 409
             if num_geral_periods == 1 and num_geral_rooms > 2:
                  current_app.logger.info(f"Geral limit exceeded (rooms) for {user_name} on {booking_date_obj}")
-                 # *** CORRECTED: Use single quotes inside f-string ***
+                 # Use single quotes inside f-string
                  return jsonify({"error": f"Não é possível agendar mais de duas salas 'Geral' diferentes no mesmo dia ({booking_date_obj.strftime('%Y-%m-%d')})."}), 409
         current_app.logger.debug("Geral room validation passed")
         # --- End of Geral Validation ---
@@ -260,39 +263,53 @@ def create_booking():
         # Validation: Slot already taken (Keep this check)
         current_app.logger.debug("Checking for booking conflicts")
         for slot in processed_slots:
-            # *** CORRECTED: Use single quotes inside f-string for dictionary keys ***
+            # Use single quotes inside f-string for dictionary keys
             if check_booking_conflict(slot['room_id'], slot['booking_date_obj'], slot['period']):
                 current_app.logger.info(f"Booking conflict found: Room {slot['room_id']}, Date {slot['booking_date_str']}, Period {slot['period']}")
-                # *** CORRECTED: Use single quotes inside f-string for dictionary keys ***
+                # Use single quotes inside f-string for dictionary keys
                 return jsonify({"error": f"Sala '{slot['room_name']}' já reservada para '{slot['period']}' em {slot['booking_date_str']}."}), 409
         current_app.logger.debug("Conflict check passed")
         
-        newly_created_bookings_details_for_email = []
-        current_app.logger.debug("Attempting to create bookings in DB")
-        # Start transaction
-        # try: # Already inside a try block
+        # All validations passed, create bookings
+        current_app.logger.debug("All validations passed, creating bookings")
+        new_bookings = []
+        booked_slots_details = []
         for slot in processed_slots:
-            # *** CORRECTED: Use single quotes inside f-string for dictionary keys ***
+            # Use single quotes inside f-string for dictionary keys
             new_booking = Booking(
-                user_name=user_name, user_email=user_email, coordinator_name=coordinator_name,
-                room_id=slot['room_id'], booking_date=slot['booking_date_obj'], period=slot['period']
+                user_name=user_name,
+                user_email=user_email,
+                coordinator_name=coordinator_name,
+                room_id=slot['room_id'],
+                booking_date=slot['booking_date_obj'],
+                period=slot['period']
             )
             db.session.add(new_booking)
-            # *** CORRECTED: Use single quotes inside f-string for dictionary keys ***
-            newly_created_bookings_details_for_email.append({
-                "room_name": slot['room_name'], "booking_date": slot['booking_date_str'], "period": slot['period']
+            new_bookings.append(new_booking)
+            booked_slots_details.append({
+                "room_name": slot['room_name'],
+                "booking_date": slot['booking_date_str'],
+                "period": slot['period']
             })
-        db.session.commit()
-        current_app.logger.info(f"Bookings created successfully for {user_name}: {len(newly_created_bookings_details_for_email)} slots")
-        # Send email after successful commit
-        email_sent_successfully = send_booking_confirmation_email(user_email, user_name, coordinator_name, newly_created_bookings_details_for_email)
-        response_message = "Agendamento(s) criado(s) com sucesso!"
-        if not email_sent_successfully:
-            response_message += " (Falha ao enviar e-mail de confirmação.)"
-        return jsonify({"message": response_message, "bookings_created": newly_created_bookings_details_for_email}), 201
+        
+        # Commit to database
+        try:
+            db.session.commit()
+            current_app.logger.info(f"Successfully created {len(new_bookings)} bookings for {user_name}")
+            
+            # Send confirmation email
+            email_sent = send_booking_confirmation_email(user_email, user_name, coordinator_name, booked_slots_details)
+            if not email_sent:
+                current_app.logger.warning(f"Booking created but email not sent to {user_email}")
+            
+            return jsonify({"message": "Agendamento(s) criado(s) com sucesso", "email_sent": email_sent})
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error during booking commit: {str(e)}", exc_info=True)
+            return jsonify({"error": "Erro ao salvar agendamento(s) no banco de dados"}), 500
+            
     except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Falha ao processar ou criar agendamento(s): {str(e)}", exc_info=True)
+        current_app.logger.error(f"Unexpected error during booking processing: {str(e)}", exc_info=True)
         return jsonify({"error": "Falha ao processar ou criar agendamento(s) no servidor.", "details": str(e)}), 500
 
 @bookings_bp.route("/bookings", methods=["GET"])
@@ -306,11 +323,12 @@ def get_bookings():
     try:
         start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
         end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-        # Query only Mon-Fri
-        query = Booking.query.join(Room).filter(
+        current_app.logger.debug(f"Querying bookings between {start_date} and {end_date}")
+        # Use joinedload to eagerly load Room data
+        query = Booking.query.options(joinedload(Booking.room)).filter(
             Booking.booking_date.between(start_date, end_date),
             Booking.booking_date.op("strftime")("%w").notin_(["0", "6"]) # Exclude Sunday (0) and Saturday (6)
-        ).order_by(Booking.booking_date, Room.id, Booking.period)
+        ).order_by(Booking.booking_date, Booking.room_id, Booking.period) # Order by room_id instead of Room.id if not joining explicitly
     except ValueError:
         current_app.logger.warning(f"Invalid date format for fetching bookings: {start_date_str} or {end_date_str}")
         return jsonify({"error": "Formato de data inválido para start_date ou end_date. Use YYYY-MM-DD"}), 400
@@ -319,19 +337,29 @@ def get_bookings():
         return jsonify({"error": "Erro ao preparar consulta de agendamentos"}), 500
     
     try:
+        # Execute query and get all results at once
         bookings = query.all()
         current_app.logger.debug(f"Found {len(bookings)} bookings for the period")
         result = []
+        # Access related data *before* the session might close implicitly
         for booking in bookings:
+            # Check if room was loaded correctly
+            room_name = booking.room.name if booking.room else "Sala Desconhecida"
+            if not booking.room:
+                 current_app.logger.warning(f"Booking ID {booking.id} has no associated room!")
+                 
             result.append({
                 "id": booking.id, "user_name": booking.user_name, "user_email": booking.user_email,
                 "coordinator_name": booking.coordinator_name, "room_id": booking.room_id,
-                "room_name": booking.room.name, "booking_date": booking.booking_date.isoformat(),
+                "room_name": room_name, # Use the loaded room name
+                "booking_date": booking.booking_date.isoformat(),
                 "period": booking.period, "created_at": booking.created_at.isoformat() if booking.created_at else None
             })
+        current_app.logger.debug("Successfully processed booking results")
         return jsonify(result)
     except Exception as e:
-        current_app.logger.error(f"Error fetching or processing bookings: {str(e)}", exc_info=True)
+        # Log the specific error, which might be the DetachedInstanceError (f405)
+        current_app.logger.error(f"Error processing booking results (potentially accessing detached instance): {str(e)}", exc_info=True)
         return jsonify({"error": "Erro ao buscar ou processar agendamentos"}), 500
 
 # Adjusted booking status endpoint (Reverted end dates to Friday) with Logging
@@ -356,7 +384,7 @@ def get_booking_status():
         thursday_current_week = start_of_current_week + timedelta(days=RELEASE_WEEKDAY)
         release_datetime_for_next_week = datetime.combine(thursday_current_week, RELEASE_TIME)
         
-        # *** CORRECTED: Make time objects timezone-aware for comparison ***
+        # Make time objects timezone-aware for comparison
         time_midnight_utc = time(0, 0, 0, tzinfo=timezone.utc)
         time_3am_utc = time(3, 0, 0, tzinfo=timezone.utc)
         # Compare RELEASE_TIME (aware) with aware time objects
@@ -420,16 +448,21 @@ def generate_schedule_pdf():
         # Fetch data for the specified week (Mon-Fri)
         current_app.logger.debug("Fetching rooms and bookings for PDF")
         rooms = Room.query.order_by(Room.id).all()
-        bookings_query = Booking.query.join(Room).filter(
+        # Use joinedload for PDF data as well
+        bookings_query = Booking.query.options(joinedload(Booking.room)).filter(
             Booking.booking_date.between(week_start_date, week_end_date)
             # No need for weekday filter here as between() already covers Mon-Fri
-        ).order_by(Booking.booking_date, Room.id, Booking.period)
+        ).order_by(Booking.booking_date, Booking.room_id, Booking.period)
         bookings = bookings_query.all()
         current_app.logger.debug(f"Found {len(bookings)} bookings for PDF week")
         
         # Prepare data for template
         schedule_data = defaultdict(lambda: defaultdict(lambda: {"Manhã": None, "Tarde": None}))
         for booking in bookings:
+            # Check if room was loaded correctly
+            room_name = booking.room.name if booking.room else "Sala Desconhecida"
+            if not booking.room:
+                 current_app.logger.warning(f"Booking ID {booking.id} has no associated room for PDF!")
             schedule_data[booking.room_id][booking.booking_date.isoformat()][booking.period] = booking.user_name
             
         dates_of_week = [(week_start_date + timedelta(days=i)).isoformat() for i in range(5)] # Changed back to 5 days
@@ -459,10 +492,6 @@ def generate_schedule_pdf():
             week_end_date_formatted=week_end_date.strftime("%d/%m/%Y")
         )
         
-        # Define CSS for the PDF (using style block in template now)
-        # css_string = """ ... """
-        # css = CSS(string=css_string)
-        
         # Generate PDF
         current_app.logger.debug("Generating PDF bytes using WeasyPrint")
         pdf_bytes = HTML(string=html_string).write_pdf() # Removed explicit CSS, assuming it's in template or default
@@ -478,4 +507,36 @@ def generate_schedule_pdf():
     except Exception as e:
         current_app.logger.error(f"Erro ao gerar PDF para semana {week_start_date_str}: {str(e)}", exc_info=True)
         return jsonify({"error": "Falha ao gerar PDF no servidor", "details": str(e)}), 500
-# --- End of PDF Route ---
+
+# --- Admin Route to Download Database --- 
+@bookings_bp.route("/admin/download-database", methods=["GET"])
+def download_database():
+    password = request.args.get("password")
+    correct_password = current_app.config.get("ADMIN_PASSWORD", "default_admin_password") # Get from env or use default
+    
+    if password != correct_password:
+        current_app.logger.warning("Unauthorized attempt to download database")
+        return jsonify({"error": "Unauthorized"}), 401
+        
+    db_uri = current_app.config.get("SQLALCHEMY_DATABASE_URI")
+    if not db_uri or not db_uri.startswith("sqlite:///"):
+        current_app.logger.error("Database download requested, but not using SQLite")
+        return jsonify({"error": "Database download only supported for SQLite"}), 400
+        
+    db_path = db_uri.replace("sqlite:///", "")
+    
+    if not os.path.exists(db_path):
+        current_app.logger.error(f"SQLite database file not found at: {db_path}")
+        return jsonify({"error": "Database file not found"}), 404
+        
+    try:
+        current_app.logger.info(f"Admin download of database file: {db_path}")
+        return Response(
+            open(db_path, "rb"),
+            mimetype="application/vnd.sqlite3",
+            headers={"Content-Disposition": "attachment;filename=lab_scheduler.db"}
+        )
+    except Exception as e:
+        current_app.logger.error(f"Error serving database file: {str(e)}", exc_info=True)
+        return jsonify({"error": "Error serving database file"}), 500
+# --- End of Admin Route ---
