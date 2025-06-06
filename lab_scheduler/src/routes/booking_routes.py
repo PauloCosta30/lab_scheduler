@@ -40,17 +40,17 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, boo
     sender = current_app.config.get("MAIL_DEFAULT_SENDER", "noreply@example.com")
     recipients = [user_email]
 
-    html_body = f"""<p>Olá {user_name},</p><p>Seu agendamento foi confirmado:</p><ul>"""
+    # Using single quotes for the main f-string to allow double quotes inside HTML easily
+    html_body = f'''<p>Olá {user_name},</p><p>Seu agendamento foi confirmado:</p><ul>'''
     for slot in booked_slots_details:
-        booking_date_formatted = slot["booking_date"] # Use single quotes inside f-string
+        booking_date_formatted = slot["booking_date"] # Use double quotes here, it's fine inside single-quoted f-string
         try:
-            # Use single quotes inside f-string
             booking_date_formatted = datetime.strptime(slot["booking_date"], "%Y-%m-%d").strftime("%d/%m/%Y")
         except ValueError:
             pass
-        # Use single quotes inside f-string for dictionary keys
-        html_body += f"<li>Sala: {slot["room_name"]} - Data: {booking_date_formatted} - Período: {slot["period"]}</li>"
-    html_body += f"</ul><p>Coordenador: {coordinator_name}</p><p>Obrigado!</p>"""
+        # Use double quotes for dictionary keys inside single-quoted f-string
+        html_body += f'''<li>Sala: {slot["room_name"]} - Data: {booking_date_formatted} - Período: {slot["period"]}</li>'''
+    html_body += f'''</ul><p>Coordenador: {coordinator_name}</p><p>Obrigado!</p>'''
 
     msg = Message(subject, sender=sender, recipients=recipients)
     msg.html = html_body
@@ -95,24 +95,28 @@ def is_booking_allowed(booking_date_obj):
 
     # Re-enable weekend check
     if booking_date_obj.weekday() >= 5:
-        return False, f"Agendamentos só permitidos de Seg-Sex. Data: {booking_date_obj.strftime("%d/%m/%Y")} é fim de semana."
+        # Use double quotes for f-string, single quotes inside
+        return False, f"Agendamentos só permitidos de Seg-Sex. Data: {booking_date_obj.strftime('%d/%m/%Y')} é fim de semana."
     
     # Removed past date check as requested by user
     # if booking_date_obj < today_utc:
-    #     return False, f"Data de agendamento {booking_date_obj.strftime("%d/%m/%Y")} no passado."
+    #     return False, f"Data de agendamento {booking_date_obj.strftime('%d/%m/%Y')} no passado."
 
     # Check booking date against windows (using Friday as end of week)
     if start_of_current_week <= booking_date_obj <= end_of_current_week: # Booking for current week (Mon-Fri)
         if now_utc >= cutoff_datetime_current_week:
-            return False, f"Agendamento para semana atual ({start_of_current_week.strftime("%d/%m")}-{end_of_current_week.strftime("%d/%m")}) encerrou Qua 18:00 (Horário Local)."
+            # Use double quotes for f-string, single quotes inside
+            return False, f"Agendamento para semana atual ({start_of_current_week.strftime('%d/%m')}-{end_of_current_week.strftime('%d/%m')}) encerrou Qua 18:00 (Horário Local)."
         else:
             return True, "OK"
             
     elif start_of_next_week <= booking_date_obj <= end_of_next_week: # Booking for next week (Mon-Fri)
         if now_utc < release_datetime_for_next_week:
-             return False, f"Agendamento para próxima semana ({start_of_next_week.strftime("%d/%m")}-{end_of_next_week.strftime("%d/%m")}) abre Qui 23:59 (Horário Local)."
+             # Use double quotes for f-string, single quotes inside
+             return False, f"Agendamento para próxima semana ({start_of_next_week.strftime('%d/%m')}-{end_of_next_week.strftime('%d/%m')}) abre Qui 23:59 (Horário Local)."
         elif now_utc >= cutoff_datetime_next_week:
-             return False, f"Agendamento para semana de {start_of_next_week.strftime("%d/%m")} já encerrou (Qua 18:00 Horário Local)."
+             # Use double quotes for f-string, single quotes inside
+             return False, f"Agendamento para semana de {start_of_next_week.strftime('%d/%m')} já encerrou (Qua 18:00 Horário Local)."
         else:
              # It's after release time and before next week's cutoff
              return True, "OK"
@@ -122,11 +126,13 @@ def is_booking_allowed(booking_date_obj):
         if booking_date_obj < start_of_current_week:
              # Still need to check if the past date is a weekend
              if booking_date_obj.weekday() >= 5:
-                 return False, f"Agendamentos só permitidos de Seg-Sex. Data: {booking_date_obj.strftime("%d/%m/%Y")} é fim de semana."
+                 # Use double quotes for f-string, single quotes inside
+                 return False, f"Agendamentos só permitidos de Seg-Sex. Data: {booking_date_obj.strftime('%d/%m/%Y')} é fim de semana."
              else:
                  return True, "OK" 
         else: # Booking for week after next or later
-            return False, f"Só é possível agendar para semana atual ou próxima. Data: {booking_date_obj.strftime("%d/%m/%Y")} fora do período permitido."
+            # Use double quotes for f-string, single quotes inside
+            return False, f"Só é possível agendar para semana atual ou próxima. Data: {booking_date_obj.strftime('%d/%m/%Y')} fora do período permitido."
 
 @bookings_bp.route("/rooms", methods=["GET"])
 def get_rooms():
@@ -179,14 +185,14 @@ def create_booking():
                 return jsonify({"error": f"Slot inválido: {slot_input}. Requer room_id, booking_date, period"}), 400
             if period not in ["Manhã", "Tarde"]:
                 current_app.logger.warning(f"Invalid period: {period}")
-                # Use single quotes inside f-string
-                return jsonify({"error": f"Período inválido \'{period}\'. Use \'Manhã\' ou \'Tarde\'"}), 400
+                # Simplified f-string: double quotes outside, single quotes inside
+                return jsonify({"error": f"Período inválido '{period}'. Use 'Manhã' ou 'Tarde'"}), 400
             try:
                 booking_date_obj = datetime.strptime(booking_date_str, "%Y-%m-%d").date()
             except ValueError:
                 current_app.logger.warning(f"Invalid date format: {booking_date_str}")
-                # Use single quotes inside f-string
-                return jsonify({"error": f"Formato de data inválido \'{booking_date_str}\'. Use YYYY-MM-DD"}), 400
+                # Simplified f-string: double quotes outside, single quotes inside
+                return jsonify({"error": f"Formato de data inválido '{booking_date_str}'. Use YYYY-MM-DD"}), 400
             
             # Check booking window rules first
             current_app.logger.debug(f"Checking booking window for {booking_date_obj}")
@@ -214,14 +220,15 @@ def create_booking():
             existing_bookings_on_day = Booking.query.filter_by(user_name=user_name, booking_date=booking_date_obj).count()
             if (existing_bookings_on_day + count_for_this_request) > MAX_BOOKINGS_PER_DAY:
                 current_app.logger.info(f"Booking limit exceeded for {user_name} on {booking_date_obj}")
-                # Use single quotes inside f-string
-                return jsonify({"error": f"Limite de {MAX_BOOKINGS_PER_DAY} agendamentos/dia para \'{user_name}\' excedido em {booking_date_obj.strftime("%Y-%m-%d")}."}), 409
+                # Simplified f-string: double quotes outside, single quotes inside
+                date_str = booking_date_obj.strftime('%Y-%m-%d')
+                return jsonify({"error": f"Limite de {MAX_BOOKINGS_PER_DAY} agendamentos/dia para '{user_name}' excedido em {date_str}."}), 409
 
         # --- Validation: Limit "Geral" room bookings per day per user based on periods --- 
         current_app.logger.debug("Validating Geral room limits")
         geral_slots_in_request_by_day = defaultdict(list)
         for slot in processed_slots:
-            # Use single quotes inside f-string for dictionary keys
+            # Use double quotes for dictionary keys inside single-quoted f-string
             if slot["room_name"].startswith("Geral "):
                 geral_slots_in_request_by_day[slot["booking_date_obj"]].append(
                     {"room_id": slot["room_id"], "period": slot["period"]}
@@ -238,38 +245,39 @@ def create_booking():
                 combined_geral_slots.append({"room_id": booking.room_id, "period": booking.period})
             existing_tuples = {(b.room_id, b.period) for b in existing_geral_bookings}
             for req_slot in requested_geral_slots:
-                 # Use single quotes inside f-string for dictionary keys
+                 # Use double quotes for dictionary keys inside single-quoted f-string
                  if (req_slot["room_id"], req_slot["period"]) not in existing_tuples:
                      combined_geral_slots.append(req_slot)
-            # Use single quotes inside f-string for dictionary keys
+            # Use double quotes for dictionary keys inside single-quoted f-string
             geral_periods_booked = {slot["period"] for slot in combined_geral_slots}
             geral_rooms_booked_ids = {slot["room_id"] for slot in combined_geral_slots}
             num_geral_periods = len(geral_periods_booked)
             num_geral_rooms = len(geral_rooms_booked_ids)
             current_app.logger.debug(f"Geral validation for {booking_date_obj}: Periods={num_geral_periods}, Rooms={num_geral_rooms}")
+            date_str = booking_date_obj.strftime('%Y-%m-%d')
             if num_geral_periods > 2:
                 current_app.logger.info(f"Geral limit exceeded (periods) for {user_name} on {booking_date_obj}")
-                # Use single quotes inside f-string
-                return jsonify({"error": f"Não é possível agendar mais de dois períodos (\'Manhã\' e \'Tarde\') em salas \'Geral\' no mesmo dia ({booking_date_obj.strftime("%Y-%m-%d")})."}), 409
+                # Simplified f-string: double quotes outside, single quotes inside
+                return jsonify({"error": f"Não é possível agendar mais de dois períodos ('Manhã' e 'Tarde') em salas 'Geral' no mesmo dia ({date_str})."}), 409
             if num_geral_periods == 2 and num_geral_rooms > 2:
                  current_app.logger.info(f"Geral limit exceeded (rooms/periods) for {user_name} on {booking_date_obj}")
-                 # Use single quotes inside f-string
-                 return jsonify({"error": f"Não é possível agendar mais de duas salas \'Geral\' diferentes no mesmo dia ({booking_date_obj.strftime("%Y-%m-%d")})."}), 409
+                 # Simplified f-string: double quotes outside, single quotes inside
+                 return jsonify({"error": f"Não é possível agendar mais de duas salas 'Geral' diferentes no mesmo dia ({date_str})."}), 409
             if num_geral_periods == 1 and num_geral_rooms > 2:
                  current_app.logger.info(f"Geral limit exceeded (rooms) for {user_name} on {booking_date_obj}")
-                 # Use single quotes inside f-string
-                 return jsonify({"error": f"Não é possível agendar mais de duas salas \'Geral\' diferentes no mesmo dia ({booking_date_obj.strftime("%Y-%m-%d")})."}), 409
+                 # Simplified f-string: double quotes outside, single quotes inside
+                 return jsonify({"error": f"Não é possível agendar mais de duas salas 'Geral' diferentes no mesmo dia ({date_str})."}), 409
         current_app.logger.debug("Geral room validation passed")
         # --- End of Geral Validation ---
 
         # Validation: Slot already taken (Keep this check)
         current_app.logger.debug("Checking for booking conflicts")
         for slot in processed_slots:
-            # Use single quotes inside f-string for dictionary keys
+            # Use double quotes for dictionary keys inside single-quoted f-string
             if check_booking_conflict(slot["room_id"], slot["booking_date_obj"], slot["period"]):
-                current_app.logger.info(f"Booking conflict found: Room {slot["room_id"]}, Date {slot["booking_date_str"]}, Period {slot["period"]}")
-                # Use single quotes inside f-string for dictionary keys
-                return jsonify({"error": f"Sala \'{slot["room_name"]}\' já reservada para \'{slot["period"]}\' em {slot["booking_date_str"]}."}), 409
+                current_app.logger.info(f"Booking conflict found: Room {slot['room_id']}, Date {slot['booking_date_str']}, Period {slot['period']}")
+                # Simplified f-string: double quotes outside, single quotes inside
+                return jsonify({"error": f"Sala '{slot['room_name']}' já reservada para '{slot['period']}' em {slot['booking_date_str']}."}), 409
         current_app.logger.debug("Conflict check passed")
         
         # All validations passed, create bookings
@@ -277,7 +285,7 @@ def create_booking():
         new_bookings = []
         booked_slots_details = []
         for slot in processed_slots:
-            # Use single quotes inside f-string for dictionary keys
+            # Use double quotes for dictionary keys inside single-quoted f-string
             new_booking = Booking(
                 user_name=user_name,
                 user_email=user_email,
@@ -326,10 +334,10 @@ def get_bookings():
         start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
         end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
         current_app.logger.debug(f"Querying bookings between {start_date} and {end_date}")
-        # *** CORRECTED: Use func.extract("dow", ...) for PostgreSQL compatibility ***
+        # *** CORRECTED: Use func.extract('dow', ...) for PostgreSQL compatibility ***
         query = Booking.query.options(joinedload(Booking.room)).filter(
             Booking.booking_date.between(start_date, end_date),
-            func.extract("dow", Booking.booking_date).notin_([0, 6]) # Exclude Sunday (0) and Saturday (6)
+            func.extract('dow', Booking.booking_date).notin_([0, 6]) # Exclude Sunday (0) and Saturday (6)
         ).order_by(Booking.booking_date, Booking.room_id, Booking.period)
     except ValueError:
         current_app.logger.warning(f"Invalid date format for fetching bookings: {start_date_str} or {end_date_str}")
@@ -450,10 +458,10 @@ def generate_schedule_pdf():
         # Fetch data for the specified week (Mon-Fri)
         current_app.logger.debug("Fetching rooms and bookings for PDF")
         rooms = Room.query.order_by(Room.id).all()
-        # *** CORRECTED: Use func.extract("dow", ...) for PostgreSQL compatibility ***
+        # *** CORRECTED: Use func.extract('dow', ...) for PostgreSQL compatibility ***
         bookings_query = Booking.query.options(joinedload(Booking.room)).filter(
             Booking.booking_date.between(week_start_date, week_end_date),
-            func.extract("dow", Booking.booking_date).notin_([0, 6]) # Exclude Sunday (0) and Saturday (6)
+            func.extract('dow', Booking.booking_date).notin_([0, 6]) # Exclude Sunday (0) and Saturday (6)
         ).order_by(Booking.booking_date, Booking.room_id, Booking.period)
         bookings = bookings_query.all()
         current_app.logger.debug(f"Found {len(bookings)} bookings for PDF week")
