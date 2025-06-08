@@ -70,22 +70,20 @@ document.addEventListener("DOMContentLoaded", () => {
         let message = "Status do Agendamento: ";
         const now = new Date(status.server_time_utc);
         const cutoff = new Date(status.current_week_cutoff); // Wednesday 21:00 UTC
-        const release = new Date(status.next_week_release); // Friday 02:59 UTC
+        const release = new Date(status.next_week_release); // Thursday 02:59 UTC (updated from Friday)
 
         // Get weekday names based on UTC date
-        const cutoffWeekday = cutoff.toLocaleDateString("pt-BR", { weekday: "long", timeZone: "UTC" });
-        // const releaseWeekday = release.toLocaleDateString("pt-BR", { weekday: "long", timeZone: "UTC" }); // Should be Friday
-        const releaseDayDisplay = "Quinta-feira"; // Display Thursday for release
+        const cutoffWeekday = "quarta-feira"; // Hardcoded for clarity
+        const releaseDayDisplay = "quinta-feira"; // Hardcoded for clarity (updated from Friday)
 
         // Hardcoded display times (local Brazil Time)
         const displayCutoffTime = "18:00";
         const displayReleaseTime = "23:59";
-        const releaseDayDisplay = "Quinta-feira"; // Display Thursday for release
 
         if (status.current_week_open) {
             message += `Aberto para a semana atual (até ${cutoffWeekday}, ${displayCutoffTime}). `;
         } else {
-            message += `Fechado para a semana atual (encerrado ${cutoffWeekday}, ${displayCutoffTime}). `;
+            message += `Fechado para a semana atual (encerrou ${cutoffWeekday}, ${displayCutoffTime}). `;
         }
 
         if (status.next_week_open) {
@@ -93,14 +91,14 @@ document.addEventListener("DOMContentLoaded", () => {
             const nextWeekStart = new Date(status.next_week_start);
             const nextCutoffDate = new Date(nextWeekStart);
             nextCutoffDate.setUTCDate(nextWeekStart.getUTCDate() + 2); // Wednesday of next week
-            const nextCutoffWeekday = nextCutoffDate.toLocaleDateString("pt-BR", { weekday: "long", timeZone: "UTC" });
+            const nextCutoffWeekday = "quarta-feira"; // Hardcoded for clarity
 
             message += `Aberto para a próxima semana (até ${nextCutoffWeekday}, ${displayCutoffTime}).`;
         } else {
              if (now < release) {
                  message += `Aguardando abertura para a próxima semana (abre ${releaseDayDisplay}, ${displayReleaseTime}).`;
              } else {
-                 // If now >= release but next_week_open is false, it means next week"s cutoff has passed
+                 // If now >= release but next_week_open is false, it means next week's cutoff has passed
                  message += `Fechado para a próxima semana.`;
              }
         }
@@ -160,7 +158,7 @@ document.addEventListener("DOMContentLoaded", () => {
         } else {
             // Default week logic: Load current or next week based on release time
             const now = new Date(fetchedStatus.server_time_utc);
-            const release = new Date(fetchedStatus.next_week_release); // Friday 02:59 UTC
+            const release = new Date(fetchedStatus.next_week_release); // Thursday 02:59 UTC (updated from Friday)
             const todayForLogic = new Date(now); // Use server time for consistency
             const dayOfWeek = todayForLogic.getUTCDay();
             const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
@@ -201,7 +199,7 @@ document.addEventListener("DOMContentLoaded", () => {
                      if (allRooms.length === 0) await fetchAllRooms();
                 })()
             ];
-            // Only fetch status again if it wasn"t fetched for default week logic
+            // Only fetch status again if it wasn't fetched for default week logic
             if (selectedDateStr) {
                  promises.push(fetchBookingStatus());
             }
@@ -323,20 +321,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Check if the slot date falls within the current week (Mon-Fri)
         if (slotDateUTC >= currentWeekStart && slotDateUTC <= currentWeekEnd) {
-            // Also check if it"s a weekend (shouldn"t happen with backend block, but good practice)
+            // Also check if it's a weekend (shouldn't happen with backend block, but good practice)
             if (slotDateUTC.getUTCDay() === 0 || slotDateUTC.getUTCDay() === 6) return false;
-            return now < cutoffCurrent; // Allowed only if before current week"s cutoff
+            return now < cutoffCurrent; // Allowed only if before current week's cutoff
         }
         // Check if the slot date falls within the next week (Mon-Fri)
         else if (slotDateUTC >= nextWeekStart && slotDateUTC <= nextWeekEnd) {
-            // Also check if it"s a weekend
+            // Also check if it's a weekend
             if (slotDateUTC.getUTCDay() === 0 || slotDateUTC.getUTCDay() === 6) return false;
-            // Allowed only if after release time AND before next week"s cutoff
+            // Allowed only if after release time AND before next week's cutoff
             return now >= releaseNext && now < cutoffNext;
         }
         // Allow past dates based on backend logic (if user configured it)
         else if (slotDateUTC < currentWeekStart) {
-            // Check if it"s a weekend
+            // Check if it's a weekend
             if (slotDateUTC.getUTCDay() === 0 || slotDateUTC.getUTCDay() === 6) return false;
             // Assume backend handles validation for past dates
             return true; // Allow interaction, backend will validate
@@ -472,7 +470,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 body: JSON.stringify(requestData)
             });
             const result = await response.json();
-            if (response.ok && response.status === 201) {
+            if (response.ok) {
                 showModalMessage(result.message || "Agendamento(s) realizado(s) com sucesso!", "success");
                 // Clear selection and update UI immediately
                 selectedSlots.forEach(slot => {
