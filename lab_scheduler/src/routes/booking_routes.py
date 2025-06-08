@@ -1,3 +1,5 @@
+# /home/ubuntu/lab_scheduler/src/routes/booking_routes.py
+
 from flask import Blueprint, request, jsonify, current_app, Response, make_response
 from src.extensions import db
 from src.models.entities import Room, Booking
@@ -224,51 +226,47 @@ def create_booking():
                 date_str = booking_date_obj.strftime('%Y-%m-%d')
                 return jsonify({"error": f"Limite de {MAX_BOOKINGS_PER_DAY} agendamentos/dia para '{user_name}' excedido em {date_str}."}), 409
 
-        # --- Validation: Limit "Geral" room bookings per day per user based on periods --- 
-        current_app.logger.debug("Validating Geral room limits")
-        geral_slots_in_request_by_day = defaultdict(list)
+        # --- MODIFICADO: Validação de salas Geral para permitir períodos diferentes no mesmo dia ---
+        current_app.logger.debug("Validating Geral room limits - MODIFIED to allow different periods")
+        # Agrupar slots de salas Geral por dia e período
+        geral_slots_by_day_and_period = defaultdict(lambda: defaultdict(list))
+        
         for slot in processed_slots:
-            # Use double quotes for dictionary keys inside single-quoted f-string
             if slot["room_name"].startswith("Geral "):
-                geral_slots_in_request_by_day[slot["booking_date_obj"]].append(
-                    {"room_id": slot["room_id"], "period": slot["period"]}
-                )
-
-        for booking_date_obj, requested_geral_slots in geral_slots_in_request_by_day.items():
-            existing_geral_bookings = Booking.query.join(Room).filter(
-                Booking.user_name == user_name,
-                Booking.booking_date == booking_date_obj,
-                Room.name.startswith("Geral ")
-            ).all()
-            combined_geral_slots = []
-            for booking in existing_geral_bookings:
-                combined_geral_slots.append({"room_id": booking.room_id, "period": booking.period})
-            existing_tuples = {(b.room_id, b.period) for b in existing_geral_bookings}
-            for req_slot in requested_geral_slots:
-                 # Use double quotes for dictionary keys inside single-quoted f-string
-                 if (req_slot["room_id"], req_slot["period"]) not in existing_tuples:
-                     combined_geral_slots.append(req_slot)
-            # Use double quotes for dictionary keys inside single-quoted f-string
-            geral_periods_booked = {slot["period"] for slot in combined_geral_slots}
-            geral_rooms_booked_ids = {slot["room_id"] for slot in combined_geral_slots}
-            num_geral_periods = len(geral_periods_booked)
-            num_geral_rooms = len(geral_rooms_booked_ids)
-            current_app.logger.debug(f"Geral validation for {booking_date_obj}: Periods={num_geral_periods}, Rooms={num_geral_rooms}")
+                # Agrupar por dia e período
+                geral_slots_by_day_and_period[slot["booking_date_obj"]][slot["period"]].append({
+                    "room_id": slot["room_id"], 
+                    "room_name": slot["room_name"]
+                })
+        
+        # Verificar agendamentos existentes de salas Geral
+        for booking_date_obj, periods_data in geral_slots_by_day_and_period.items():
             date_str = booking_date_obj.strftime('%Y-%m-%d')
-            if num_geral_periods > 2:
-                current_app.logger.info(f"Geral limit exceeded (periods) for {user_name} on {booking_date_obj}")
-                # Simplified f-string: double quotes outside, single quotes inside
-                return jsonify({"error": f"Não é possível agendar mais de dois períodos ('Manhã' e 'Tarde') em salas 'Geral' no mesmo dia ({date_str})."}), 409
-            if num_geral_periods == 2 and num_geral_rooms > 2:
-                 current_app.logger.info(f"Geral limit exceeded (rooms/periods) for {user_name} on {booking_date_obj}")
-                 # Simplified f-string: double quotes outside, single quotes inside
-                 return jsonify({"error": f"Não é possível agendar mais de duas salas 'Geral' diferentes no mesmo dia ({date_str})."}), 409
-            if num_geral_periods == 1 and num_geral_rooms > 2:
-                 current_app.logger.info(f"Geral limit exceeded (rooms) for {user_name} on {booking_date_obj}")
-                 # Simplified f-string: double quotes outside, single quotes inside
-                 return jsonify({"error": f"Não é possível agendar mais de duas salas 'Geral' diferentes no mesmo dia ({date_str})."}), 409
+            
+            # Verificar agendamentos existentes para cada período
+            for period, slots in periods_data.items():
+                # Verificar se o usuário já tem agendamento para este período em outra sala Geral
+                existing_geral_bookings = Booking.query.join(Room).filter(
+                    Booking.user_name == user_name,
+                    Booking.booking_date == booking_date_obj,
+                    Booking.period == period,
+                    Room.name.startswith("Geral ")
+                ).all()
+                
+                # Se já existe agendamento para este período e estamos tentando agendar outra sala Geral
+                if existing_geral_bookings and len(slots) > 0:
+                    existing_room_names = [b.room.name for b in existing_geral_bookings]
+                    current_app.logger.info(f"User {user_name} already has Geral room booking for {date_str}, {period}: {existing_room_names}")
+                    return jsonify({"error": f"Você já possui agendamento para sala '{existing_room_names[0]}' no período da '{period}' em {date_str}."}), 409
+                
+                # Verificar se estamos tentando agendar mais de uma sala Geral no mesmo período
+                if len(slots) > 1:
+                    room_names = [s["room_name"] for s in slots]
+                    current_app.logger.info(f"User {user_name} trying to book multiple Geral rooms in same period: {room_names}")
+                    return jsonify({"error": f"Não é possível agendar mais de uma sala 'Geral' no mesmo período ('{period}') em {date_str}."}), 409
+        
         current_app.logger.debug("Geral room validation passed")
-        # --- End of Geral Validation ---
+        # --- Fim da validação modificada de salas Geral ---
 
         # Validation: Slot already taken (Keep this check)
         current_app.logger.debug("Checking for booking conflicts")
