@@ -80,6 +80,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Hardcoded display times (local Brazil Time)
         const displayCutoffTime = "18:00";
         const displayReleaseTime = "23:59";
+        const releaseDayDisplay = "Quinta-feira"; // Display Thursday for release
 
         if (status.current_week_open) {
             message += `Aberto para a semana atual (até ${cutoffWeekday}, ${displayCutoffTime}). `;
