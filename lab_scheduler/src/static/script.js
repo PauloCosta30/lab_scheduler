@@ -1,5 +1,3 @@
-// /home/ubuntu/lab_scheduler/src/static/script.js
-
 document.addEventListener("DOMContentLoaded", () => {
     // DOM Elements
     const weekSelector = document.getElementById("weekSelector");
@@ -65,43 +63,28 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // Function to display booking status with local time hints
+    // Function to display booking status with local time hints - CORRIGIDO
     function showBookingStatusMessage(status) {
         let message = "Status do Agendamento: ";
         const now = new Date(status.server_time_utc);
         const cutoff = new Date(status.current_week_cutoff); // Wednesday 21:00 UTC
-        const release = new Date(status.next_week_release); // Thursday 02:59 UTC (updated from Friday)
-
-        // Get weekday names based on UTC date
-        const cutoffWeekday = "quarta-feira"; // Hardcoded for clarity
-        const releaseDayDisplay = "quinta-feira"; // Hardcoded for clarity (updated from Friday)
+        const release = new Date(status.next_week_release); // Thursday 02:59 UTC
 
         // Hardcoded display times (local Brazil Time)
         const displayCutoffTime = "18:00";
         const displayReleaseTime = "23:59";
 
+        // Simplificado para mostrar apenas o status atual sem informações confusas
         if (status.current_week_open) {
-            message += `Aberto para a semana atual (até ${cutoffWeekday}, ${displayCutoffTime}). `;
+            message += `Aberto para a semana atual (até quarta-feira, ${displayCutoffTime}).`;
+        } else if (status.next_week_open) {
+            message += `Aberto para a próxima semana (até quarta-feira, ${displayCutoffTime}).`;
+        } else if (now < release) {
+            message += `Fechado para a semana atual. Aguardando abertura para a próxima semana (abre quinta-feira, ${displayReleaseTime}).`;
         } else {
-            message += `Fechado para a semana atual (encerrou ${cutoffWeekday}, ${displayCutoffTime}). `;
+            message += `Fechado para agendamentos.`;
         }
-
-        if (status.next_week_open) {
-            // Calculate approximate next cutoff date for display
-            const nextWeekStart = new Date(status.next_week_start);
-            const nextCutoffDate = new Date(nextWeekStart);
-            nextCutoffDate.setUTCDate(nextWeekStart.getUTCDate() + 2); // Wednesday of next week
-            const nextCutoffWeekday = "quarta-feira"; // Hardcoded for clarity
-
-            message += `Aberto para a próxima semana (até ${nextCutoffWeekday}, ${displayCutoffTime}).`;
-        } else {
-             if (now < release) {
-                 message += `Aguardando abertura para a próxima semana (abre ${releaseDayDisplay}, ${displayReleaseTime}).`;
-             } else {
-                 // If now >= release but next_week_open is false, it means next week's cutoff has passed
-                 message += `Fechado para a próxima semana.`;
-             }
-        }
+        
         bookingStatusMessage.textContent = message;
         bookingStatusMessage.className = "message info";
     }
