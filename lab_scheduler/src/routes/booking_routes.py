@@ -28,6 +28,10 @@ RELEASE_WEEKDAY = 3 # Thursday (alterado de 4/Friday para 3/Thursday)
 RELEASE_TIME = time(2, 59, 0, tzinfo=timezone.utc) # Alterado de 2:00 para 2:59
 # ----------------------------------
 
+# --- Admin Configuration ---
+ADMIN_PASSWORD = "lab_scheduler_admin" # Default password, should be overridden in config
+# ----------------------------------
+
 # Helper function to send confirmation email
 def send_booking_confirmation_email(user_email, user_name, coordinator_name, booked_slots_details):
     mail = current_app.extensions.get("mail")
@@ -520,7 +524,7 @@ def generate_schedule_pdf():
 @bookings_bp.route("/admin/download-database", methods=["GET"])
 def download_database():
     password = request.args.get("password")
-    correct_password = current_app.config.get("ADMIN_PASSWORD", "default_admin_password") # Get from env or use default
+    correct_password = current_app.config.get("ADMIN_PASSWORD", ADMIN_PASSWORD) # Get from env or use default
     
     if password != correct_password:
         current_app.logger.warning("Unauthorized attempt to download database")
@@ -547,4 +551,92 @@ def download_database():
     except Exception as e:
         current_app.logger.error(f"Error serving database file: {str(e)}", exc_info=True)
         return jsonify({"error": "Error serving database file"}), 500
-# --- End of Admin Route ---
+
+# --- NOVA ROTA: Admin Route to Clear Bookings ---
+@bookings_bp.route("/admin/clear-bookings", methods=["POST"])
+def clear_bookings():
+    data = request.get_json()
+    if not data:
+        current_app.logger.warning("Invalid input for clear bookings: No data")
+        return jsonify({"error": "Invalid input"}), 400
+        
+    password = data.get("password")
+    start_date_str = data.get("start_date")
+    end_date_str = data.get("end_date")
+    room_id = data.get("room_id")
+    period = data.get("period")
+    
+    # Verificar senha
+    correct_password = current_app.config.get("ADMIN_PASSWORD", ADMIN_PASSWORD) # Get from env or use default
+    if password != correct_password:
+        current_app.logger.warning("Unauthorized attempt to clear bookings")
+        return jsonify({"error": "Senha administrativa incorreta"}), 401
+    
+    try:
+        # Construir a query base
+        query = Booking.query
+        
+        # Aplicar filtros se fornecidos
+        if start_date_str and end_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                query = query.filter(Booking.booking_date.between(start_date, end_date))
+                current_app.logger.info(f"Filtering bookings to clear by date range: {start_date} to {end_date}")
+            except ValueError:
+                current_app.logger.warning(f"Invalid date format for clear bookings: {start_date_str} or {end_date_str}")
+                return jsonify({"error": "Formato de data inválido. Use YYYY-MM-DD"}), 400
+        elif start_date_str:
+            try:
+                single_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                query = query.filter(Booking.booking_date == single_date)
+                current_app.logger.info(f"Filtering bookings to clear by single date: {single_date}")
+            except ValueError:
+                current_app.logger.warning(f"Invalid date format for clear bookings: {start_date_str}")
+                return jsonify({"error": "Formato de data inválido. Use YYYY-MM-DD"}), 400
+                
+        if room_id:
+            query = query.filter(Booking.room_id == room_id)
+            current_app.logger.info(f"Filtering bookings to clear by room_id: {room_id}")
+            
+        if period and period in ["Manhã", "Tarde"]:
+            query = query.filter(Booking.period == period)
+            current_app.logger.info(f"Filtering bookings to clear by period: {period}")
+            
+        # Contar e obter os agendamentos a serem excluídos
+        bookings_to_delete = query.all()
+        count = len(bookings_to_delete)
+        
+        if count == 0:
+            current_app.logger.info("No bookings found matching criteria for deletion")
+            return jsonify({"message": "Nenhum agendamento encontrado com os critérios especificados", "count": 0}), 200
+            
+        # Registrar detalhes dos agendamentos a serem excluídos (para log)
+        booking_details = []
+        for booking in bookings_to_delete:
+            booking_details.append({
+                "id": booking.id,
+                "user_name": booking.user_name,
+                "room_id": booking.room_id,
+                "booking_date": booking.booking_date.isoformat(),
+                "period": booking.period
+            })
+            
+        # Excluir os agendamentos
+        for booking in bookings_to_delete:
+            db.session.delete(booking)
+            
+        db.session.commit()
+        current_app.logger.info(f"Successfully deleted {count} bookings")
+        
+        return jsonify({
+            "message": f"{count} agendamento(s) removido(s) com sucesso",
+            "count": count,
+            "details": booking_details
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error clearing bookings: {str(e)}", exc_info=True)
+        return jsonify({"error": f"Erro ao limpar agendamentos: {str(e)}"}), 500
+# --- Fim da Nova Rota ---
