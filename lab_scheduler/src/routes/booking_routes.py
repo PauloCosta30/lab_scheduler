@@ -56,7 +56,7 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, boo
             pass
         # Use double quotes for dictionary keys inside single-quoted f-string
         html_body += f'''<li>Sala: {slot["room_name"]} - Data: {booking_date_formatted} - Período: {slot["period"]}</li>'''
-    html_body += f'''</ul><p>Coordenador: {coordinator_name}</p><p>Obrigado!Observação: Em caso de dúvidas sobre a escala, entre em contato com Ana Correa pelo e-mail: ana.correa@itv.org</p>'''
+    html_body += f'''</ul><p>Coordenador: {coordinator_name}</p><p>Obrigado! Observação: Em caso de dúvidas sobre a escala, entre em contato com Ana Correa pelo e-mail: ana.correa@itv.org</p>'''
 
     msg = Message(subject, sender=sender, recipients=recipients)
     msg.html = html_body
