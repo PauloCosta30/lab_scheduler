@@ -1,3 +1,5 @@
+// /home/ubuntu/lab_scheduler/src/static/script.js
+
 document.addEventListener("DOMContentLoaded", () => {
     // DOM Elements
     const weekSelector = document.getElementById("weekSelector");
@@ -120,7 +122,6 @@ document.addEventListener("DOMContentLoaded", () => {
     // --- Schedule Logic (Loading and Rendering) ---
     async function loadScheduleData(selectedDateStr) {
         let startDate, endDate;
-        // const todayUTC = getTodayUTC(); // Not needed directly here
         let fetchedStatus = currentBookingStatus; // Use cached status first
 
         // Always fetch latest status before deciding which week to load by default
@@ -136,15 +137,35 @@ document.addEventListener("DOMContentLoaded", () => {
             // If a date is selected, load that specific week (Mon-Fri)
             const selectedDateObj = parseDateStrToUTC(selectedDateStr);
             const dayOfWeek = selectedDateObj.getUTCDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-            const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Calculate difference to previous Monday
+            
+            // CORREÇÃO: Garantir que a semana sempre comece na segunda-feira
+            // Se for domingo (0), vá para a segunda-feira seguinte (+1)
+            // Se for outro dia, vá para a segunda-feira da mesma semana
+            let diffToMonday;
+            if (dayOfWeek === 0) {
+                diffToMonday = 1; // Domingo -> Segunda (próxima)
+            } else {
+                diffToMonday = 1 - dayOfWeek; // Outros dias -> Segunda (mesma semana)
+            }
+            
             startDate = new Date(Date.UTC(selectedDateObj.getUTCFullYear(), selectedDateObj.getUTCMonth(), selectedDateObj.getUTCDate() + diffToMonday));
         } else {
             // Default week logic: Load current or next week based on release time
             const now = new Date(fetchedStatus.server_time_utc);
-            const release = new Date(fetchedStatus.next_week_release); // Thursday 02:59 UTC (updated from Friday)
+            const release = new Date(fetchedStatus.next_week_release); // Thursday 02:59 UTC
             const todayForLogic = new Date(now); // Use server time for consistency
             const dayOfWeek = todayForLogic.getUTCDay();
-            const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+            
+            // CORREÇÃO: Garantir que a semana sempre comece na segunda-feira
+            // Se for domingo (0), vá para a segunda-feira seguinte (+1)
+            // Se for outro dia, vá para a segunda-feira da mesma semana
+            let diffToMonday;
+            if (dayOfWeek === 0) {
+                diffToMonday = 1; // Domingo -> Segunda (próxima)
+            } else {
+                diffToMonday = 1 - dayOfWeek; // Outros dias -> Segunda (mesma semana)
+            }
+            
             const currentMonday = new Date(Date.UTC(todayForLogic.getUTCFullYear(), todayForLogic.getUTCMonth(), todayForLogic.getUTCDate() + diffToMonday));
 
             if (now >= release) {
@@ -159,7 +180,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         // Calculate end date (Friday of the week)
-        endDate = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate() + 4)); // Reverted to +4 for Friday
+        endDate = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate() + 4)); // +4 para sexta-feira
         currentWeekStartDate = startDate; // Store the Monday of the displayed week
 
         const startDateStrAPI = startDate.toISOString().split("T")[0];
@@ -203,7 +224,6 @@ document.addEventListener("DOMContentLoaded", () => {
         scheduleTableContainer.innerHTML = "";
         selectedSlots = [];
         updateProceedButtonState();
-        // const todayUTC = getTodayUTC(); // Not needed for display logic anymore
 
         const table = document.createElement("table");
         table.id = "scheduleTable"; // Add ID for PDF generation
@@ -212,11 +232,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const headerRow = document.createElement("tr");
         headerRow.innerHTML = "<th>Sala</th>";
-        const days = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"]; // Reverted to 5 days
+        const days = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"]; // 5 dias (Seg-Sex)
         const periods = ["Manhã", "Tarde"];
         const datesOfWeek = [];
 
-        // Loop for 5 days
+        // Loop for 5 days (Mon-Fri)
         for (let i = 0; i < 5; i++) {
             const currentDate = new Date(weekStartDateObj.valueOf());
             currentDate.setUTCDate(weekStartDateObj.getUTCDate() + i);
@@ -506,9 +526,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- Initialization ---
     function initialize() {
-        // Populate week selector (optional, could be simplified)
-        // weekSelector.value = getTodayUTC().toISOString().split("T")[0];
-
         // Event Listeners
         loadScheduleButton.addEventListener("click", () => loadScheduleData(weekSelector.value));
         proceedToBookingButton.addEventListener("click", openBookingModal);
