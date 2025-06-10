@@ -32,6 +32,16 @@ RELEASE_TIME = time(2, 59, 0, tzinfo=timezone.utc) # Alterado de 2:00 para 2:59
 ADMIN_PASSWORD = "lab_scheduler_admin" # Default password, should be overridden in config
 # ----------------------------------
 
+# Helper function to get Monday of a week containing the given date
+def get_monday_of_week(input_date):
+    # weekday() returns 0 for Monday, 1 for Tuesday, etc.
+    # If it's Sunday (6), we want the next day (Monday)
+    if input_date.weekday() == 6:  # Sunday
+        return input_date + timedelta(days=1)
+    else:
+        # For all other days, go back to Monday of the same week
+        return input_date - timedelta(days=input_date.weekday())
+
 # Helper function to send confirmation email
 def send_booking_confirmation_email(user_email, user_name, coordinator_name, booked_slots_details):
     mail = current_app.extensions.get("mail")
@@ -56,7 +66,7 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, boo
             pass
         # Use double quotes for dictionary keys inside single-quoted f-string
         html_body += f'''<li>Sala: {slot["room_name"]} - Data: {booking_date_formatted} - Período: {slot["period"]}</li>'''
-    html_body += f'''</ul><p>Coordenador: {coordinator_name}</p><p>Obrigado! Observação: Em caso de dúvidas sobre a escala, entre em contato com Ana Correa pelo e-mail: ana.correa@itv.org</p>'''
+    html_body += f'''</ul><p>Coordenador: {coordinator_name}</p><p>Obrigado!</p>'''
 
     msg = Message(subject, sender=sender, recipients=recipients)
     msg.html = html_body
@@ -77,10 +87,12 @@ def check_booking_conflict(room_id, booking_date_obj, period):
 def is_booking_allowed(booking_date_obj):
     now_utc = datetime.now(timezone.utc)
     today_utc = now_utc.date()
-    start_of_current_week = today_utc - timedelta(days=today_utc.weekday()) # Monday of current week
+    
+    # CORREÇÃO: Garantir que a semana sempre comece na segunda-feira
+    start_of_current_week = get_monday_of_week(today_utc)
     start_of_next_week = start_of_current_week + timedelta(days=7) # Monday of next week
-    end_of_current_week = start_of_current_week + timedelta(days=4) # Friday of current week (Reverted)
-    end_of_next_week = start_of_next_week + timedelta(days=4) # Friday of next week (Reverted)
+    end_of_current_week = start_of_current_week + timedelta(days=4) # Friday of current week
+    end_of_next_week = start_of_next_week + timedelta(days=4) # Friday of next week
 
     # Cutoff for the *current* week is Wednesday 18:00 Brazil Time (21:00 UTC)
     cutoff_datetime_current_week = datetime.combine(start_of_current_week + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME)
@@ -335,6 +347,13 @@ def get_bookings():
     try:
         start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
         end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        
+        # CORREÇÃO: Garantir que a data de início seja uma segunda-feira
+        if start_date.weekday() != 0:  # Se não for segunda-feira
+            start_date = get_monday_of_week(start_date)
+            start_date_str = start_date.strftime("%Y-%m-%d")
+            current_app.logger.debug(f"Adjusted start_date to Monday: {start_date_str}")
+        
         current_app.logger.debug(f"Querying bookings between {start_date} and {end_date}")
         # *** CORRECTED: Use func.extract('dow', ...) for PostgreSQL compatibility ***
         query = Booking.query.options(joinedload(Booking.room)).filter(
@@ -383,10 +402,12 @@ def get_booking_status():
         today_utc = now_utc.date()
         current_app.logger.debug(f"Current UTC time: {now_utc}, Today UTC: {today_utc}")
 
-        start_of_current_week = today_utc - timedelta(days=today_utc.weekday())
+        # CORREÇÃO: Garantir que a semana sempre comece na segunda-feira
+        start_of_current_week = get_monday_of_week(today_utc)
         start_of_next_week = start_of_current_week + timedelta(days=7)
-        end_of_current_week = start_of_current_week + timedelta(days=4) # Friday (Reverted)
-        end_of_next_week = start_of_next_week + timedelta(days=4) # Friday (Reverted)
+        end_of_current_week = start_of_current_week + timedelta(days=4) # Friday
+        end_of_next_week = start_of_next_week + timedelta(days=4) # Friday
+        
         current_app.logger.debug(f"Current week: {start_of_current_week} to {end_of_current_week}")
         current_app.logger.debug(f"Next week: {start_of_next_week} to {end_of_next_week}")
 
@@ -440,11 +461,12 @@ def generate_schedule_pdf():
     
     try:
         week_start_date = datetime.strptime(week_start_date_str, "%Y-%m-%d").date()
-        # Ensure it's a Monday
-        if week_start_date.weekday() != 0:
-             current_app.logger.debug(f"Adjusting PDF start date from {week_start_date} to Monday")
-             week_start_date -= timedelta(days=week_start_date.weekday())
-             week_start_date_str = week_start_date.isoformat()
+        
+        # CORREÇÃO: Garantir que a data de início seja uma segunda-feira
+        if week_start_date.weekday() != 0:  # Se não for segunda-feira
+            week_start_date = get_monday_of_week(week_start_date)
+            week_start_date_str = week_start_date.isoformat()
+            current_app.logger.debug(f"Adjusted PDF start date to Monday: {week_start_date_str}")
              
         week_end_date = week_start_date + timedelta(days=4) # Changed back to 4 for Friday
         week_end_date_str = week_end_date.isoformat()
