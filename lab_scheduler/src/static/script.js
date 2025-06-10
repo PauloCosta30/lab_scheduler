@@ -36,7 +36,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return new Date(Date.UTC(year, month - 1, day));
     }
 
-    function formatUTCDate(dateObj, options = { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Sao_Paulo" }) {
+    function formatUTCDate(dateObj, options = { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }) {
         if (!dateObj) return "";
         // Use toLocaleDateString for formatting
         return dateObj.toLocaleDateString("pt-BR", options);
@@ -220,10 +220,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Renders the schedule table for 5 days (Mon-Fri)
-    function renderScheduleTable(bookings, roomsData, weekStartDateObj) {
+        function renderScheduleTable(bookings, roomsData, weekStartDateObj) {
         scheduleTableContainer.innerHTML = "";
         selectedSlots = [];
         updateProceedButtonState();
+        const todayUTC = getTodayUTC();
 
         const table = document.createElement("table");
         table.id = "scheduleTable"; // Add ID for PDF generation
@@ -232,25 +233,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const headerRow = document.createElement("tr");
         headerRow.innerHTML = "<th>Sala</th>";
-        const days = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"]; // 5 dias (Seg-Sex)
+        const days = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"];
         const periods = ["Manhã", "Tarde"];
         const datesOfWeek = [];
 
-        // Loop for 5 days (Mon-Fri)
         for (let i = 0; i < 5; i++) {
             const currentDate = new Date(weekStartDateObj.valueOf());
             currentDate.setUTCDate(weekStartDateObj.getUTCDate() + i);
             datesOfWeek.push(currentDate.toISOString().split("T")[0]);
             const th = document.createElement("th");
             th.colSpan = 2;
-            th.textContent = `${days[i]} (${formatUTCDate(currentDate, {day: "2-digit", month: "2-digit"})})`; // Short format
+            th.textContent = `${days[i]} (${formatUTCDate(currentDate)})`;
             headerRow.appendChild(th);
         }
         thead.appendChild(headerRow);
 
         const subHeaderRow = document.createElement("tr");
-        subHeaderRow.innerHTML = "<td></td>"; // Empty cell for room column
-        // Loop for 5 days * 2 periods
+        subHeaderRow.innerHTML = "<td></td>";
         for (let i = 0; i < 5; i++) {
             periods.forEach(p => {
                 const th = document.createElement("th");
@@ -269,6 +268,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             datesOfWeek.forEach(dateStr => {
                 const slotDateUTC = parseDateStrToUTC(dateStr);
+                const isPastDate = slotDateUTC < todayUTC;
                 const isBookingAllowedForSlot = checkBookingWindowFrontend(slotDateUTC);
 
                 periods.forEach(period => {
@@ -283,7 +283,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         cell.classList.add("booked");
                     } else if (!isBookingAllowedForSlot) {
                         cell.textContent = "Bloqueado";
-                        cell.classList.add("locked"); // Use "locked" for slots outside booking window
+                        cell.classList.add("locked"); // New class for slots outside booking window
                     } else {
                         cell.textContent = "Disponível";
                         cell.classList.add("available");
