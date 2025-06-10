@@ -36,7 +36,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return new Date(Date.UTC(year, month - 1, day));
     }
 
-    function formatUTCDate(dateObj, options = { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }) {
+    function formatUTCDate(dateObj, options = { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Sao_Paulo" }) {
         if (!dateObj) return "";
         // Use toLocaleDateString for formatting
         return dateObj.toLocaleDateString("pt-BR", options);
@@ -220,94 +220,88 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Renders the schedule table for 5 days (Mon-Fri)
-    
-// Correção no script para garantir que domingo nunca seja exibido na tabela, mesmo que venha do backend
-// Trecho modificado: renderScheduleTable()
+    function renderScheduleTable(bookings, roomsData, weekStartDateObj) {
+        scheduleTableContainer.innerHTML = "";
+        selectedSlots = [];
+        updateProceedButtonState();
 
-function renderScheduleTable(bookings, roomsData, weekStartDateObj) {
-    scheduleTableContainer.innerHTML = "";
-    selectedSlots = [];
-    updateProceedButtonState();
+        const table = document.createElement("table");
+        table.id = "scheduleTable"; // Add ID for PDF generation
+        const thead = document.createElement("thead");
+        const tbody = document.createElement("tbody");
 
-    const table = document.createElement("table");
-    table.id = "scheduleTable";
-    const thead = document.createElement("thead");
-    const tbody = document.createElement("tbody");
+        const headerRow = document.createElement("tr");
+        headerRow.innerHTML = "<th>Sala</th>";
+        const days = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"]; // 5 dias (Seg-Sex)
+        const periods = ["Manhã", "Tarde"];
+        const datesOfWeek = [];
 
-    const headerRow = document.createElement("tr");
-    headerRow.innerHTML = "<th>Sala</th>";
-    const days = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"];
-    const periods = ["Manhã", "Tarde"];
-    const datesOfWeek = [];
-
-    for (let i = 0; i < 5; i++) {
-        const currentDate = new Date(weekStartDateObj.valueOf());
-        currentDate.setUTCDate(weekStartDateObj.getUTCDate() + i);
-        datesOfWeek.push(currentDate.toISOString().split("T")[0]);
-        const th = document.createElement("th");
-        th.colSpan = 2;
-        th.textContent = `${days[i]} (${formatUTCDate(currentDate, {day: "2-digit", month: "2-digit"})})`;
-        headerRow.appendChild(th);
-    }
-    thead.appendChild(headerRow);
-
-    const subHeaderRow = document.createElement("tr");
-    subHeaderRow.innerHTML = "<td></td>";
-    for (let i = 0; i < 5; i++) {
-        periods.forEach(p => {
+        // Loop for 5 days (Mon-Fri)
+        for (let i = 0; i < 5; i++) {
+            const currentDate = new Date(weekStartDateObj.valueOf());
+            currentDate.setUTCDate(weekStartDateObj.getUTCDate() + i);
+            datesOfWeek.push(currentDate.toISOString().split("T")[0]);
             const th = document.createElement("th");
-            th.textContent = p;
-            subHeaderRow.appendChild(th);
-        });
-    }
-    thead.appendChild(subHeaderRow);
-    table.appendChild(thead);
+            th.colSpan = 2;
+            th.textContent = `${days[i]} (${formatUTCDate(currentDate, {day: "2-digit", month: "2-digit"})})`; // Short format
+            headerRow.appendChild(th);
+        }
+        thead.appendChild(headerRow);
 
-    roomsData.sort((a, b) => a.id - b.id).forEach(room => {
-        const row = document.createElement("tr");
-        const roomCell = document.createElement("td");
-        roomCell.textContent = room.name;
-        row.appendChild(roomCell);
-
-        datesOfWeek.forEach(dateStr => {
-            const slotDateUTC = parseDateStrToUTC(dateStr);
-            const dayOfWeek = slotDateUTC.getUTCDay();
-
-            // Ignorar se for domingo (0) ou sábado (6)
-            if (dayOfWeek === 0 || dayOfWeek === 6) return;
-
-            const isBookingAllowedForSlot = checkBookingWindowFrontend(slotDateUTC);
-
-            periods.forEach(period => {
-                const cell = document.createElement("td");
-                const booking = bookings.find(b => 
-                    b.room_id === room.id && 
-                    b.booking_date === dateStr && 
-                    b.period === period
-                );
-                if (booking) {
-                    cell.textContent = booking.user_name;
-                    cell.classList.add("booked");
-                } else if (!isBookingAllowedForSlot) {
-                    cell.textContent = "Bloqueado";
-                    cell.classList.add("locked");
-                } else {
-                    cell.textContent = "Disponível";
-                    cell.classList.add("available");
-                    cell.dataset.roomId = room.id;
-                    cell.dataset.roomName = room.name;
-                    cell.dataset.date = dateStr;
-                    cell.dataset.period = period;
-                    cell.addEventListener("click", handleSlotClick);
-                }
-                row.appendChild(cell);
+        const subHeaderRow = document.createElement("tr");
+        subHeaderRow.innerHTML = "<td></td>"; // Empty cell for room column
+        // Loop for 5 days * 2 periods
+        for (let i = 0; i < 5; i++) {
+            periods.forEach(p => {
+                const th = document.createElement("th");
+                th.textContent = p;
+                subHeaderRow.appendChild(th);
             });
+        }
+        thead.appendChild(subHeaderRow);
+        table.appendChild(thead);
+
+        roomsData.sort((a,b) => a.id - b.id).forEach(room => {
+            const row = document.createElement("tr");
+            const roomCell = document.createElement("td");
+            roomCell.textContent = room.name;
+            row.appendChild(roomCell);
+
+            datesOfWeek.forEach(dateStr => {
+                const slotDateUTC = parseDateStrToUTC(dateStr);
+                const isBookingAllowedForSlot = checkBookingWindowFrontend(slotDateUTC);
+
+                periods.forEach(period => {
+                    const cell = document.createElement("td");
+                    const booking = bookings.find(b => 
+                        b.room_id === room.id && 
+                        b.booking_date === dateStr && 
+                        b.period === period
+                    );
+                    if (booking) {
+                        cell.textContent = booking.user_name;
+                        cell.classList.add("booked");
+                    } else if (!isBookingAllowedForSlot) {
+                        cell.textContent = "Bloqueado";
+                        cell.classList.add("locked"); // Use "locked" for slots outside booking window
+                    } else {
+                        cell.textContent = "Disponível";
+                        cell.classList.add("available");
+                        cell.dataset.roomId = room.id;
+                        cell.dataset.roomName = room.name;
+                        cell.dataset.date = dateStr;
+                        cell.dataset.period = period;
+                        cell.addEventListener("click", handleSlotClick);
+                    }
+                    row.appendChild(cell);
+                });
+            });
+            tbody.appendChild(row);
         });
-        tbody.appendChild(row);
-    });
-    table.appendChild(tbody);
-    scheduleTableContainer.appendChild(table);
-}
+        table.appendChild(tbody);
+        scheduleTableContainer.appendChild(table);
+    }
+
     // Frontend check based on fetched status (uses UTC dates)
     function checkBookingWindowFrontend(slotDateUTC) {
         if (!currentBookingStatus || !currentBookingStatus.current_week_start) {
