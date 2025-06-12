@@ -716,16 +716,16 @@ def get_booking_status():
             response_data["next_week_open"] = True
 
         response_data = {
-            "current_week_start": start_of_current_week.isoformat(),
-            "current_week_end": end_of_current_week.isoformat(), # Now ends on Friday
-            "current_week_open": current_week_open,
-            "current_week_cutoff": cutoff_datetime_current_week.isoformat(),
-            "next_week_start": start_of_next_week.isoformat(),
-            "next_week_end": end_of_next_week.isoformat(), # Now ends on Friday
-            "next_week_open": next_week_open,
-            "next_week_release": release_datetime_for_next_week.isoformat(), # New release time
-            "server_time_utc": now_utc.isoformat()
-        }
+    "current_week_start": start_of_current_week.isoformat(),
+    "current_week_end": end_of_current_week.isoformat(),
+    "current_week_open": current_week_open,
+    "current_week_cutoff": cutoff_datetime_current_week.isoformat(),
+    "next_week_start": start_of_next_week.isoformat(),
+    "next_week_end": end_of_next_week.isoformat(),
+    "next_week_open": next_week_open,
+    "next_week_release": release_datetime_for_next_week.isoformat(),
+    "server_time_utc": now_utc.isoformat()
+}
         
         current_app.logger.debug(f"--- Exiting get_booking_status with data: {response_data} --- ")
         return jsonify(response_data)
