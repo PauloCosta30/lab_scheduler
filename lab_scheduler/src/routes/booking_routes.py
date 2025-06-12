@@ -701,7 +701,20 @@ def get_booking_status():
         current_week_open = now_utc < cutoff_datetime_current_week
         next_week_open = now_utc >= release_datetime_for_next_week and now_utc < cutoff_datetime_next_week
         current_app.logger.debug(f"Calculated status: current_week_open={current_week_open}, next_week_open={next_week_open}")
-            
+
+        # Verificar parâmetro de override para testes
+override = request.args.get('admin_override')
+if override == 'open_all' and request.args.get('password') == ADMIN_PASSWORD:
+    current_app.logger.info("Admin override: Forçando abertura de ambas as semanas")
+    response_data["current_week_open"] = True
+    response_data["next_week_open"] = True
+elif override == 'open_current' and request.args.get('password') == ADMIN_PASSWORD:
+    current_app.logger.info("Admin override: Forçando abertura da semana atual")
+    response_data["current_week_open"] = True
+elif override == 'open_next' and request.args.get('password') == ADMIN_PASSWORD:
+    current_app.logger.info("Admin override: Forçando abertura da próxima semana")
+    response_data["next_week_open"] = True
+
         response_data = {
             "current_week_start": start_of_current_week.isoformat(),
             "current_week_end": end_of_current_week.isoformat(), # Now ends on Friday
