@@ -662,3 +662,90 @@ def clear_bookings():
         current_app.logger.error(f"Error clearing bookings: {str(e)}", exc_info=True)
         return jsonify({"error": f"Erro ao limpar agendamentos: {str(e)}"}), 500
 # --- Fim da Nova Rota ---
+# Adicione este código ao final do arquivo booking_routes.py
+
+# --- NOVA ROTA: Admin Route to Override Schedule Status ---
+@bookings_bp.route("/admin/override-schedule-status", methods=["POST"])
+def override_schedule_status():
+    data = request.get_json()
+    if not data:
+        current_app.logger.warning("Invalid input for schedule override: No data")
+        return jsonify({"error": "Invalid input"}), 400
+        
+    password = data.get("password")
+    mode = data.get("mode", "both")  # current, next, both
+    action = data.get("action", "open")  # open, restore
+    
+    # Verificar senha
+    correct_password = current_app.config.get("ADMIN_PASSWORD", ADMIN_PASSWORD)
+    if password != correct_password:
+        current_app.logger.warning("Unauthorized attempt to override schedule status")
+        return jsonify({"error": "Senha administrativa incorreta"}), 401
+    
+    try:
+        # Criar ou atualizar configuração global
+        config_key = "schedule_override"
+        config = {
+            "enabled": action == "open",
+            "mode": mode if action == "open" else None,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Armazenar a configuração no app.config para uso temporário
+        current_app.config[config_key] = config
+        current_app.logger.info(f"Schedule override set: {config}")
+        
+        # Modificar a função get_booking_status para verificar esta configuração
+        # (Isso é feito através de monkey patching da função original)
+        original_get_booking_status = bookings_bp.view_functions.get('get_booking_status')
+        
+        def patched_get_booking_status():
+            # Verificar se há override ativo
+            override = current_app.config.get(config_key, {})
+            if override.get("enabled", False):
+                current_app.logger.debug("Using schedule override configuration")
+                # Obter o resultado normal
+                response = original_get_booking_status()
+                
+                # Se for um erro, retornar como está
+                if not isinstance(response, tuple) and response.status_code >= 400:
+                    return response
+                
+                # Modificar o resultado conforme o modo
+                try:
+                    data = response.get_json()
+                    override_mode = override.get("mode", "both")
+                    
+                    if override_mode in ["current", "both"]:
+                        data["current_week_open"] = True
+                        current_app.logger.debug("Overriding current_week_open to True")
+                    
+                    if override_mode in ["next", "both"]:
+                        data["next_week_open"] = True
+                        current_app.logger.debug("Overriding next_week_open to True")
+                    
+                    # Retornar resposta modificada
+                    return jsonify(data)
+                except Exception as e:
+                    current_app.logger.error(f"Error applying schedule override: {str(e)}", exc_info=True)
+                    return response
+            else:
+                # Comportamento normal
+                return original_get_booking_status()
+        
+        # Substituir a função original pela versão patcheada
+        if action == "open":
+            bookings_bp.view_functions['get_booking_status'] = patched_get_booking_status
+            message = f"Escala aberta temporariamente para o modo: {mode}"
+        else:
+            # Restaurar comportamento original
+            bookings_bp.view_functions['get_booking_status'] = original_get_booking_status
+            message = "Comportamento normal da escala restaurado"
+        
+        current_app.logger.info(message)
+        return jsonify({"message": message, "status": "success"})
+        
+    except Exception as e:
+        current_app.logger.error(f"Error overriding schedule status: {str(e)}", exc_info=True)
+        return jsonify({"error": f"Erro ao modificar status da escala: {str(e)}"}), 500
+
