@@ -727,19 +727,6 @@ def get_booking_status():
             "server_time_utc": now_utc.isoformat()
         }
         
-        # Verificar parâmetro de override para testes
-        override = request.args.get('admin_override')
-        if override == 'open_all' and request.args.get('password') == ADMIN_PASSWORD:
-            current_app.logger.info("Admin override: Forçando abertura de ambas as semanas")
-            response_data["current_week_open"] = True
-            response_data["next_week_open"] = True
-        elif override == 'open_current' and request.args.get('password') == ADMIN_PASSWORD:
-            current_app.logger.info("Admin override: Forçando abertura da semana atual")
-            response_data["current_week_open"] = True
-        elif override == 'open_next' and request.args.get('password') == ADMIN_PASSWORD:
-            current_app.logger.info("Admin override: Forçando abertura da próxima semana")
-            response_data["next_week_open"] = True
-        
         current_app.logger.debug(f"--- Exiting get_booking_status with data: {response_data} --- ")
         return jsonify(response_data)
         
