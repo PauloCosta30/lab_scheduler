@@ -662,90 +662,75 @@ def clear_bookings():
         current_app.logger.error(f"Error clearing bookings: {str(e)}", exc_info=True)
         return jsonify({"error": f"Erro ao limpar agendamentos: {str(e)}"}), 500
 # --- Fim da Nova Rota ---
-# Adicione este código ao final do arquivo booking_routes.py
+# Função get_booking_status atualizada com suporte para override temporário
 
-# --- NOVA ROTA: Admin Route to Override Schedule Status ---
-@bookings_bp.route("/admin/override-schedule-status", methods=["POST"])
-def override_schedule_status():
-    data = request.get_json()
-    if not data:
-        current_app.logger.warning("Invalid input for schedule override: No data")
-        return jsonify({"error": "Invalid input"}), 400
-        
-    password = data.get("password")
-    mode = data.get("mode", "both")  # current, next, both
-    action = data.get("action", "open")  # open, restore
-    
-    # Verificar senha
-    correct_password = current_app.config.get("ADMIN_PASSWORD", ADMIN_PASSWORD)
-    if password != correct_password:
-        current_app.logger.warning("Unauthorized attempt to override schedule status")
-        return jsonify({"error": "Senha administrativa incorreta"}), 401
-    
+@bookings_bp.route("/booking-status", methods=["GET"])
+def get_booking_status():
+    current_app.logger.debug("--- Entering get_booking_status --- ")
     try:
-        # Criar ou atualizar configuração global
-        config_key = "schedule_override"
-        config = {
-            "enabled": action == "open",
-            "mode": mode if action == "open" else None,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+        now_utc = datetime.now(timezone.utc)
+        today_utc = now_utc.date()
+        current_app.logger.debug(f"Current UTC time: {now_utc}, Today UTC: {today_utc}")
+
+        # CORREÇÃO: Garantir que a semana sempre comece na segunda-feira
+        start_of_current_week = get_monday_of_week(today_utc)
+        start_of_next_week = start_of_current_week + timedelta(days=7)
+        end_of_current_week = start_of_current_week + timedelta(days=4) # Friday
+        end_of_next_week = start_of_next_week + timedelta(days=4) # Friday
+        
+        current_app.logger.debug(f"Current week: {start_of_current_week} to {end_of_current_week}")
+        current_app.logger.debug(f"Next week: {start_of_next_week} to {end_of_next_week}")
+
+        cutoff_datetime_current_week = datetime.combine(start_of_current_week + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME)
+        current_app.logger.debug(f"Current week cutoff UTC: {cutoff_datetime_current_week}")
+        
+        thursday_current_week = start_of_current_week + timedelta(days=RELEASE_WEEKDAY)
+        release_datetime_for_next_week = datetime.combine(thursday_current_week, RELEASE_TIME)
+        
+        # Make time objects timezone-aware for comparison
+        time_midnight_utc = time(0, 0, 0, tzinfo=timezone.utc)
+        time_3am_utc = time(3, 0, 0, tzinfo=timezone.utc)
+        # Compare RELEASE_TIME (aware) with aware time objects
+        if RELEASE_TIME < time_midnight_utc or (RELEASE_TIME >= time_midnight_utc and RELEASE_TIME < time_3am_utc):
+             release_datetime_for_next_week += timedelta(days=1)
+        current_app.logger.debug(f"Next week release UTC (adjusted if needed): {release_datetime_for_next_week}")
+             
+        cutoff_datetime_next_week = datetime.combine(start_of_next_week + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME)
+        current_app.logger.debug(f"Next week cutoff UTC: {cutoff_datetime_next_week}")
+
+        current_week_open = now_utc < cutoff_datetime_current_week
+        next_week_open = now_utc >= release_datetime_for_next_week and now_utc < cutoff_datetime_next_week
+        current_app.logger.debug(f"Calculated status: current_week_open={current_week_open}, next_week_open={next_week_open}")
+            
+        response_data = {
+            "current_week_start": start_of_current_week.isoformat(),
+            "current_week_end": end_of_current_week.isoformat(), # Now ends on Friday
+            "current_week_open": current_week_open,
+            "current_week_cutoff": cutoff_datetime_current_week.isoformat(),
+            "next_week_start": start_of_next_week.isoformat(),
+            "next_week_end": end_of_next_week.isoformat(), # Now ends on Friday
+            "next_week_open": next_week_open,
+            "next_week_release": release_datetime_for_next_week.isoformat(), # New release time
+            "server_time_utc": now_utc.isoformat()
         }
         
-        # Armazenar a configuração no app.config para uso temporário
-        current_app.config[config_key] = config
-        current_app.logger.info(f"Schedule override set: {config}")
+        # Verificar parâmetro de override para testes
+        override = request.args.get('admin_override')
+        if override == 'open_all' and request.args.get('password') == ADMIN_PASSWORD:
+            current_app.logger.info("Admin override: Forçando abertura de ambas as semanas")
+            response_data["current_week_open"] = True
+            response_data["next_week_open"] = True
+        elif override == 'open_current' and request.args.get('password') == ADMIN_PASSWORD:
+            current_app.logger.info("Admin override: Forçando abertura da semana atual")
+            response_data["current_week_open"] = True
+        elif override == 'open_next' and request.args.get('password') == ADMIN_PASSWORD:
+            current_app.logger.info("Admin override: Forçando abertura da próxima semana")
+            response_data["next_week_open"] = True
         
-        # Modificar a função get_booking_status para verificar esta configuração
-        # (Isso é feito através de monkey patching da função original)
-        original_get_booking_status = bookings_bp.view_functions.get('get_booking_status')
-        
-        def patched_get_booking_status():
-            # Verificar se há override ativo
-            override = current_app.config.get(config_key, {})
-            if override.get("enabled", False):
-                current_app.logger.debug("Using schedule override configuration")
-                # Obter o resultado normal
-                response = original_get_booking_status()
-                
-                # Se for um erro, retornar como está
-                if not isinstance(response, tuple) and response.status_code >= 400:
-                    return response
-                
-                # Modificar o resultado conforme o modo
-                try:
-                    data = response.get_json()
-                    override_mode = override.get("mode", "both")
-                    
-                    if override_mode in ["current", "both"]:
-                        data["current_week_open"] = True
-                        current_app.logger.debug("Overriding current_week_open to True")
-                    
-                    if override_mode in ["next", "both"]:
-                        data["next_week_open"] = True
-                        current_app.logger.debug("Overriding next_week_open to True")
-                    
-                    # Retornar resposta modificada
-                    return jsonify(data)
-                except Exception as e:
-                    current_app.logger.error(f"Error applying schedule override: {str(e)}", exc_info=True)
-                    return response
-            else:
-                # Comportamento normal
-                return original_get_booking_status()
-        
-        # Substituir a função original pela versão patcheada
-        if action == "open":
-            bookings_bp.view_functions['get_booking_status'] = patched_get_booking_status
-            message = f"Escala aberta temporariamente para o modo: {mode}"
-        else:
-            # Restaurar comportamento original
-            bookings_bp.view_functions['get_booking_status'] = original_get_booking_status
-            message = "Comportamento normal da escala restaurado"
-        
-        current_app.logger.info(message)
-        return jsonify({"message": message, "status": "success"})
+        current_app.logger.debug(f"--- Exiting get_booking_status with data: {response_data} --- ")
+        return jsonify(response_data)
         
     except Exception as e:
-        current_app.logger.error(f"Error overriding schedule status: {str(e)}", exc_info=True)
-        return jsonify({"error": f"Erro ao modificar status da escala: {str(e)}"}), 500
+        current_app.logger.error(f"!!! Error in get_booking_status: {str(e)} !!!", exc_info=True)
+        return jsonify({"error": "Erro interno ao calcular status do agendamento"}), 500
 
