@@ -19,8 +19,8 @@ bookings_bp = Blueprint("bookings_bp", __name__)
 
 # --- MODIFICADO: Limite de 3 dias por semana na mesma sala ---
 MAX_DAYS_PER_WEEK_PER_ROOM = 3
-# Mantido para compatibilidade, mas não será usado na nova lógica
-MAX_BOOKINGS_PER_DAY = 3
+# Removido o limite de agendamentos por dia
+# MAX_BOOKINGS_PER_DAY = 3  # Esta linha foi removida
 
 # --- Booking Window Configuration (Ajustado para os horários corretos) ---
 CUTOFF_WEEKDAY = 2 # Wednesday
@@ -277,6 +277,10 @@ def create_booking():
             
             # Rastrear novas datas por sala
             new_dates_by_room[room_id].add(booking_date_obj)
+
+        # --- REMOVIDO: Validação de limite diário por usuário ---
+        # A validação de MAX_BOOKINGS_PER_DAY foi removida completamente
+        # Agora apenas a validação de dias por semana por sala é aplicada
 
         # --- MODIFICADO: Validação de limite de dias por semana por sala ---
         current_app.logger.debug("Validating max days per week per room")
