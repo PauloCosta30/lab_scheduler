@@ -17,6 +17,9 @@ from sqlalchemy import func
 
 bookings_bp = Blueprint("bookings_bp", __name__)
 
+# --- MODIFICADO: Limite de 3 dias por semana na mesma sala ---
+MAX_DAYS_PER_WEEK_PER_ROOM = 3
+# Mantido para compatibilidade, mas não será usado na nova lógica
 MAX_BOOKINGS_PER_DAY = 3
 
 # --- Booking Window Configuration (Ajustado para os horários corretos) ---
@@ -66,7 +69,7 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, boo
             pass
         # Use double quotes for dictionary keys inside single-quoted f-string
         html_body += f'''<li>Sala: {slot["room_name"]} - Data: {booking_date_formatted} - Período: {slot["period"]}</li>'''
-    html_body += f'''</ul><p>Coordenador: {coordinator_name}</p><p>Obrigado! Observação: Em caso de dúvidas sobre a escala, entre em contato com Ana Correa pelo e-mail: ana.correa@itv.org</p>'''
+    html_body += f'''</ul><p>Coordenador: {coordinator_name}</p><p>Obrigado!</p>'''
 
     msg = Message(subject, sender=sender, recipients=recipients)
     msg.html = html_body
@@ -152,6 +155,45 @@ def is_booking_allowed(booking_date_obj):
             # Use double quotes for f-string, single quotes inside
             return False, f"Só é possível agendar para semana atual ou próxima. Data: {booking_date_obj.strftime('%d/%m/%Y')} fora do período permitido."
 
+# --- NOVA FUNÇÃO: Verificar limite de dias por semana por sala ---
+def check_days_per_week_per_room_limit(user_name, room_id, booking_date_obj, new_dates_for_room):
+    """
+    Verifica se o usuário excede o limite de dias distintos por semana para uma sala específica.
+    
+    Args:
+        user_name: Nome do usuário
+        room_id: ID da sala
+        booking_date_obj: Data do agendamento atual
+        new_dates_for_room: Lista de novas datas distintas para esta sala nesta requisição
+        
+    Returns:
+        (bool, str): (True, None) se dentro do limite, (False, mensagem_erro) se excede o limite
+    """
+    # Obter a segunda-feira da semana do agendamento
+    week_start = get_monday_of_week(booking_date_obj)
+    week_end = week_start + timedelta(days=6)  # Domingo
+    
+    # Buscar dias distintos que o usuário já tem agendamento nesta sala nesta semana
+    existing_bookings = Booking.query.filter(
+        Booking.user_name == user_name,
+        Booking.room_id == room_id,
+        Booking.booking_date.between(week_start, week_end)
+    ).all()
+    
+    # Extrair datas distintas dos agendamentos existentes
+    existing_dates = set(booking.booking_date for booking in existing_bookings)
+    
+    # Contar quantos dias distintos o usuário já tem + quantos novos dias distintos está tentando agendar
+    total_distinct_days = len(existing_dates.union(new_dates_for_room))
+    
+    if total_distinct_days > MAX_DAYS_PER_WEEK_PER_ROOM:
+        room = Room.query.get(room_id)
+        room_name = room.name if room else f"Sala {room_id}"
+        week_str = f"{week_start.strftime('%d/%m/%Y')} a {week_end.strftime('%d/%m/%Y')}"
+        return False, f"Limite de {MAX_DAYS_PER_WEEK_PER_ROOM} dias por semana na sala '{room_name}' excedido para a semana de {week_str}."
+    
+    return True, None
+
 @bookings_bp.route("/rooms", methods=["GET"])
 def get_rooms():
     try:
@@ -189,7 +231,9 @@ def create_booking():
         return jsonify({"error": "Formato de email inválido"}), 400
 
     processed_slots = []
-    daily_new_bookings_count = defaultdict(int)
+    
+    # --- MODIFICADO: Rastrear novas datas por sala para validação de limite semanal ---
+    new_dates_by_room = defaultdict(set)
 
     try: # Wrap slot processing in try/except
         for slot_input in slots_data:
@@ -230,17 +274,24 @@ def create_booking():
                 "booking_date_obj": booking_date_obj, "booking_date_str": booking_date_str,
                 "period": period
             })
-            daily_new_bookings_count[booking_date_obj] += 1
+            
+            # Rastrear novas datas por sala
+            new_dates_by_room[room_id].add(booking_date_obj)
 
-        # Validation: max 3 bookings per day per user
-        current_app.logger.debug("Validating max bookings per day")
-        for booking_date_obj, count_for_this_request in daily_new_bookings_count.items():
-            existing_bookings_on_day = Booking.query.filter_by(user_name=user_name, booking_date=booking_date_obj).count()
-            if (existing_bookings_on_day + count_for_this_request) > MAX_BOOKINGS_PER_DAY:
-                current_app.logger.info(f"Booking limit exceeded for {user_name} on {booking_date_obj}")
-                # Simplified f-string: double quotes outside, single quotes inside
-                date_str = booking_date_obj.strftime('%Y-%m-%d')
-                return jsonify({"error": f"Limite de {MAX_BOOKINGS_PER_DAY} agendamentos/dia para '{user_name}' excedido em {date_str}."}), 409
+        # --- MODIFICADO: Validação de limite de dias por semana por sala ---
+        current_app.logger.debug("Validating max days per week per room")
+        for room_id, new_dates in new_dates_by_room.items():
+            # Verificar cada data separadamente para obter a semana correta
+            for booking_date_obj in new_dates:
+                allowed, message = check_days_per_week_per_room_limit(
+                    user_name, room_id, booking_date_obj, new_dates
+                )
+                if not allowed:
+                    current_app.logger.info(f"Weekly room limit exceeded: {message}")
+                    return jsonify({"error": message}), 409
+        
+        current_app.logger.debug("Weekly room limit validation passed")
+        # --- Fim da validação de limite de dias por semana por sala ---
 
         # --- MODIFICADO: Validação de salas Geral para permitir períodos diferentes no mesmo dia ---
         current_app.logger.debug("Validating Geral room limits - MODIFIED to allow different periods")
@@ -443,6 +494,20 @@ def get_booking_status():
             "next_week_release": release_datetime_for_next_week.isoformat(), # New release time
             "server_time_utc": now_utc.isoformat()
         }
+        
+        # Verificar parâmetro de override para testes
+        override = request.args.get('admin_override')
+        if override == 'open_all' and request.args.get('password') == ADMIN_PASSWORD:
+            current_app.logger.info("Admin override: Forçando abertura de ambas as semanas")
+            response_data["current_week_open"] = True
+            response_data["next_week_open"] = True
+        elif override == 'open_current' and request.args.get('password') == ADMIN_PASSWORD:
+            current_app.logger.info("Admin override: Forçando abertura da semana atual")
+            response_data["current_week_open"] = True
+        elif override == 'open_next' and request.args.get('password') == ADMIN_PASSWORD:
+            current_app.logger.info("Admin override: Forçando abertura da próxima semana")
+            response_data["next_week_open"] = True
+        
         current_app.logger.debug(f"--- Exiting get_booking_status with data: {response_data} --- ")
         return jsonify(response_data)
         
