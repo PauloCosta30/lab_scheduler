@@ -382,10 +382,7 @@ document.addEventListener("DOMContentLoaded", () => {
             cell.textContent = "Disponível";
         } else {
             // Check max selection limit (e.g., 3 per request)
-            if (selectedSlots.length >= 3) {
-                 showScheduleMessage("Você pode selecionar no máximo 3 horários por vez.", "info");
-                 return;
-            }
+            
             selectedSlots.push(slotData);
             cell.classList.add("selected");
             cell.textContent = "Selecionado";
