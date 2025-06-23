@@ -46,26 +46,6 @@ app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', ('LAB.ITV',
 mail = Mail(app) # Initialize Flask-Mail
 db.init_app(app)
 
-# Função para ordenar salas de forma personalizada
-def custom_room_sort_key(room):
-    """
-    Função para ordenar salas de forma personalizada:
-    1. Salas "Geral" em ordem numérica (1-12)
-    2. Outras salas em ordem alfabética
-    """
-    if room.name.startswith("Geral "):
-        # Extrair o número após "Geral "
-        try:
-            number = int(room.name.split("Geral ")[1])
-            # Retornar uma tupla com 0 (para priorizar salas Geral) e o número
-            return (0, number)
-        except (ValueError, IndexError):
-            # Se não conseguir extrair um número, usar valor alto
-            return (0, 999)
-    else:
-        # Para salas não-Geral, usar 1 (para colocar após as salas Geral) e o nome
-        return (1, room.name)
-
 # Inicialização do banco de dados e criação automática de salas
 with app.app_context():
     db.create_all()
@@ -108,19 +88,7 @@ with app.app_context():
         else:
             print("Todas as salas Gerais já existem no banco de dados.")
 
-    # Sobrescrever a função get_rooms no blueprint para garantir ordenação personalizada
-    @bookings_bp.route("/rooms", methods=["GET"])
-    def get_rooms():
-        try:
-            rooms = Room.query.all()
-            # Ordenar as salas usando a função de ordenação personalizada
-            rooms.sort(key=custom_room_sort_key)
-            room_list = [{"id": room.id, "name": room.name} for room in rooms]
-            return jsonify(room_list)
-        except Exception as e:
-            print(f"Erro ao buscar salas: {str(e)}")
-            return jsonify({"error": "Erro ao buscar salas"}), 500
-
+# Não sobrescrever a função get_rooms aqui, pois isso causaria conflito com o blueprint
 
 app.register_blueprint(bookings_bp, url_prefix='/api')
 
