@@ -46,25 +46,50 @@ app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', ('LAB.ITV',
 mail = Mail(app) # Initialize Flask-Mail
 db.init_app(app)
 
+# Função para ordenar salas de forma personalizada
+def custom_room_sort_key(room):
+    """
+    Função para ordenar salas de forma personalizada:
+    1. Salas "Geral" em ordem numérica (1-12)
+    2. Outras salas em ordem alfabética
+    """
+    if room.name.startswith("Geral "):
+        # Extrair o número após "Geral "
+        try:
+            number = int(room.name.split("Geral ")[1])
+            # Retornar uma tupla com 0 (para priorizar salas Geral) e o número
+            return (0, number)
+        except (ValueError, IndexError):
+            # Se não conseguir extrair um número, usar valor alto
+            return (0, 999)
+    else:
+        # Para salas não-Geral, usar 1 (para colocar após as salas Geral) e o nome
+        return (1, room.name)
+
 # Inicialização do banco de dados e criação automática de salas
 with app.app_context():
     db.create_all()
     
     # Verificar e criar salas iniciais se o banco estiver vazio
     if not Room.query.first():
-        room_names = ["Geral 1", "Geral 2", "Geral 3", "Geral 4", "Geral 5", "Geral 6", "Geral 7", "Geral 8", 
-                      "Geral 9", "Geral 10", "Geral 11", "Geral 12",  # Adicionadas as novas salas Gerais
-                      "Citometria - Bancada", "Sala Clara - Lupa esquerda", "Sala Clara - Lupa direita",
-                      "Sala Clara - Lupa com Câmera", "Sala Clara - Microscópio", "Sala Escura - Axio Imager.M2", 
-                      "Sala Escura - Axio Scope.A1", "Sala Escura - Microscópio CONFOCAL-LMSN",
-                      "Microbiologia - Capela de Fluxo Laminar", "Microbiologia - Lupa", "Microbiologia - Equipamento",
-                      "Geologia 1", "Geologia Micrótomo", "Cultivo A1", "Cultivo A2", "Cultivo B1", "Cultivo B2"]
+        room_names = [
+            # Salas Geral em ordem numérica
+            "Geral 1", "Geral 2", "Geral 3", "Geral 4", "Geral 5", "Geral 6", "Geral 7", "Geral 8", 
+            "Geral 9", "Geral 10", "Geral 11", "Geral 12",
+            # Outras salas em ordem alfabética
+            "Citometria - Bancada", "Cultivo A1", "Cultivo A2", "Cultivo B1", "Cultivo B2",
+            "Geologia 1", "Geologia Micrótomo", 
+            "Microbiologia - Capela de Fluxo Laminar", "Microbiologia - Equipamento", "Microbiologia - Lupa",
+            "Sala Clara - Lupa com Câmera", "Sala Clara - Lupa direita", "Sala Clara - Lupa esquerda", 
+            "Sala Clara - Microscópio", "Sala Escura - Axio Imager.M2", "Sala Escura - Axio Scope.A1", 
+            "Sala Escura - Microscópio CONFOCAL-LMSN"
+        ]
         
         for name in room_names:
             room = Room(name=name)
             db.session.add(room)
         db.session.commit()
-        print("Database initialized with all rooms created.")
+        print("Database initialized with all rooms created in correct order.")
     else:
         # Verificar e adicionar as novas salas Gerais mesmo se o banco já tiver outras salas
         new_geral_rooms = ["Geral 9", "Geral 10", "Geral 11", "Geral 12"]
@@ -82,6 +107,19 @@ with app.app_context():
             print("Novas salas Gerais adicionadas ao banco de dados.")
         else:
             print("Todas as salas Gerais já existem no banco de dados.")
+
+    # Sobrescrever a função get_rooms no blueprint para garantir ordenação personalizada
+    @bookings_bp.route("/rooms", methods=["GET"])
+    def get_rooms():
+        try:
+            rooms = Room.query.all()
+            # Ordenar as salas usando a função de ordenação personalizada
+            rooms.sort(key=custom_room_sort_key)
+            room_list = [{"id": room.id, "name": room.name} for room in rooms]
+            return jsonify(room_list)
+        except Exception as e:
+            print(f"Erro ao buscar salas: {str(e)}")
+            return jsonify({"error": "Erro ao buscar salas"}), 500
 
 
 app.register_blueprint(bookings_bp, url_prefix='/api')
