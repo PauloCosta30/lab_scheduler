@@ -248,7 +248,7 @@ def create_booking():
         
         # Also check if trying to book a third Geral room even if only one period is used so far
         if num_geral_periods == 1 and num_geral_rooms > 2:
-             return jsonify({"error": f"Não é possível agendar mais de duas salas \"Geral\" diferentes no mesmo dia ({booking_date_obj.strftime(\"%Y-%m-%d\")})."}), 409
+             return jsonify({"error": f"Não é possível agendar mais de duas salas "Geral" diferentes no mesmo dia ({booking_date_obj.strftime(\"%Y-%m-%d\")})."}), 409
 
     # --- End of Geral Validation ---
 
