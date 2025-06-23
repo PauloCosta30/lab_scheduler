@@ -7,7 +7,7 @@ from flask import Flask, send_from_directory, send_file, jsonify, request
 from src.extensions import db
 from src.models.entities import Room, Booking
 from src.routes.booking_routes import bookings_bp
-from flask_mail import Mail  # Import Flask-Mail
+from flask_mail import Mail # Import Flask-Mail
 import datetime
 import shutil
 
@@ -28,65 +28,91 @@ if database_url.startswith("postgres://"):
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Flask-Mail configuration
+# Flask-Mail configuration - Replace with your actual SMTP server details in production
+# For development, you might use a local SMTP debugging server or a service like Mailtrap
+# IMPORTANT: Use environment variables for sensitive information in production!
 app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
 app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'true').lower() in ['true', '1', 't']
 app.config['MAIL_USE_SSL'] = os.getenv('MAIL_USE_SSL', 'false').lower() in ['true', '1', 't']
 app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', 'itvdslab@gmail.com')
-app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'dsfv gkwr qcal fqev')
+app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'uzwq hnnd bbye dkik')
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', ('LAB.ITV', 'noreply@gmail.com'))
 
-mail = Mail(app)  # Initialize Flask-Mail
+# For local testing without a real SMTP server, you can suppress sending or use a console mail server.
+# app.config['MAIL_SUPPRESS_SEND'] = True # Uncomment to suppress emails during testing if no SMTP server is configured
+#app.config['MAIL_SUPPRESS_SEND'] = True # Suppress emails for current testing phase
+
+mail = Mail(app) # Initialize Flask-Mail
 db.init_app(app)
 
-from src.models.entities import Room, Booking
-
+# Inicialização do banco de dados e criação automática de salas
 with app.app_context():
     db.create_all()
+    
+    # Verificar e criar salas iniciais se o banco estiver vazio
     if not Room.query.first():
-        room_names = [f"Geral {i}" for i in range(1, 13)] + [
-            "Citometria - Bancada",
-            "Sala Clara - Lupa esquerda",
-            "Sala Clara - Lupa direita",
-            "Sala Clara - Lupa com Câmera",
-            "Sala Clara - Microscópio",
-            "Sala Escura - Axio Imager.M2",
-            "Sala Escura - Axio Scope.A1",
-            "Sala Escura - Microscópio CONFOCAL-LMSN",
-            "Microbiologia - Capela de Fluxo Laminar",
-            "Microbiologia - Lupa",
-            "Microbiologia - Equipamento",
-            "Geologia 1",
-            "Geologia Micrótomo",
-            "Cultivo A1",
-            "Cultivo A2",
-            "Cultivo B1",
-            "Cultivo B2"
+        room_names = [
+            # Salas Geral em ordem numérica
+            "Geral 1", "Geral 2", "Geral 3", "Geral 4", "Geral 5", "Geral 6", "Geral 7", "Geral 8", 
+            "Geral 9", "Geral 10", "Geral 11", "Geral 12",
+            # Outras salas em ordem alfabética
+            "Citometria - Bancada", "Cultivo A1", "Cultivo A2", "Cultivo B1", "Cultivo B2",
+            "Geologia 1", "Geologia Micrótomo", 
+            "Microbiologia - Capela de Fluxo Laminar", "Microbiologia - Equipamento", "Microbiologia - Lupa",
+            "Sala Clara - Lupa com Câmera", "Sala Clara - Lupa direita", "Sala Clara - Lupa esquerda", 
+            "Sala Clara - Microscópio", "Sala Escura - Axio Imager.M2", "Sala Escura - Axio Scope.A1", 
+            "Sala Escura - Microscópio CONFOCAL-LMSN"
         ]
+        
         for name in room_names:
             room = Room(name=name)
             db.session.add(room)
         db.session.commit()
-        print("Database initialized and custom rooms created.")
+        print("Database initialized with all rooms created in correct order.")
+    else:
+        # Verificar e adicionar as novas salas Gerais mesmo se o banco já tiver outras salas
+        new_geral_rooms = ["Geral 9", "Geral 10", "Geral 11", "Geral 12"]
+        rooms_added = False
+        
+        for room_name in new_geral_rooms:
+            if not Room.query.filter_by(name=room_name).first():
+                new_room = Room(name=room_name)
+                db.session.add(new_room)
+                rooms_added = True
+                print(f"Sala '{room_name}' adicionada ao banco de dados.")
+        
+        if rooms_added:
+            db.session.commit()
+            print("Novas salas Gerais adicionadas ao banco de dados.")
+        else:
+            print("Todas as salas Gerais já existem no banco de dados.")
+
+# Não sobrescrever a função get_rooms aqui, pois isso causaria conflito com o blueprint
 
 app.register_blueprint(bookings_bp, url_prefix='/api')
 
 # Rota para download do banco de dados
 @app.route('/admin/download-database')
 def download_database():
+    # Verificar senha de administrador (básica para demonstração)
     admin_password = os.getenv('ADMIN_PASSWORD', 'admin123')
     password = request.args.get('password', '')
-
+    
     if password != admin_password:
         return jsonify({"error": "Acesso não autorizado"}), 401
-
+    
+    # Se estiver usando SQLite
     if database_url.startswith('sqlite'):
+        # Criar uma cópia do banco para download
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         download_filename = f"lab_scheduler_backup_{timestamp}.db"
         download_path = os.path.join(project_root, download_filename)
+        
+        # Copiar o arquivo do banco de dados
         shutil.copy2(db_path, download_path)
-
+        
+        # Enviar o arquivo para download
         return send_file(
             download_path,
             as_attachment=True,
@@ -94,6 +120,7 @@ def download_database():
             mimetype='application/octet-stream'
         )
     else:
+        # Para PostgreSQL ou outros bancos, informar que download direto não é suportado
         return jsonify({
             "error": "Download direto não disponível para PostgreSQL",
             "message": "Para PostgreSQL, use ferramentas como pg_dump para backup"
@@ -104,7 +131,7 @@ def download_database():
 def serve(path):
     static_folder_path = app.static_folder
     if static_folder_path is None:
-        return "Static folder not configured", 404
+            return "Static folder not configured", 404
 
     if path != "" and os.path.exists(os.path.join(static_folder_path, path)):
         return send_from_directory(static_folder_path, path)
@@ -116,4 +143,6 @@ def serve(path):
             return "index.html not found in static folder. Please create it.", 404
 
 if __name__ == '__main__':
+    # For local testing, you might want to set MAIL_SUPPRESS_SEND to True if SMTP is not set up
+    # Example: app.config['MAIL_SUPPRESS_SEND'] = True
     app.run(host='0.0.0.0', port=5000, debug=True)
