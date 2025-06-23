@@ -240,15 +240,15 @@ def create_booking():
         num_geral_rooms = len(geral_rooms_booked_ids)
 
         if num_geral_periods > 2:
-            return jsonify({"error": f"Não é possível agendar mais de dois períodos (\"Manhã\" e \"Tarde\") em salas \"Geral\" no mesmo dia ({booking_date_obj.strftime(\"%Y-%m-%d\")})."}), 409
+            return jsonify({"error": f'Não é possível agendar mais de dois períodos ("Manhã" e "Tarde") em salas "Geral" no mesmo dia ({booking_date_obj.strftime("%Y-%m-%d")}).'}), 409
 
         if num_geral_periods == 2 and num_geral_rooms > 2:
              # This case implies booking 2 periods across 3+ different Geral rooms
-             return jsonify({"error": f"Não é possível agendar mais de duas salas \"Geral\" diferentes no mesmo dia ({booking_date_obj.strftime(\"%Y-%m-%d\")})."}), 409
+             return jsonify({"error": f'Não é possível agendar mais de duas salas "Geral" diferentes no mesmo dia ({booking_date_obj.strftime("%Y-%m-%d")}).'}), 409
         
         # Also check if trying to book a third Geral room even if only one period is used so far
         if num_geral_periods == 1 and num_geral_rooms > 2:
-             return jsonify({"error": f"Não é possível agendar mais de duas salas \"Geral\" diferentes no mesmo dia ({booking_date_obj.strftime(\"%Y-%m-%d\")})."}), 409
+             return jsonify({"error": f'Não é possível agendar mais de duas salas "Geral" diferentes no mesmo dia ({booking_date_obj.strftime("%Y-%m-%d")}).'}), 409
 
     # --- End of Geral Validation ---
 
