@@ -1,486 +1,447 @@
-# /home/ubuntu/lab_scheduler/src/routes/booking_routes.py
-
-from flask import Blueprint, request, jsonify, current_app, Response, make_response
-from src.extensions import db
-from src.models.entities import Room, Booking
-from datetime import datetime, date, time, timedelta, timezone
-from collections import defaultdict
-from flask_mail import Message # Import Message for Flask-Mail
-# PDF Generation
-from weasyprint import HTML, CSS
-from jinja2 import Environment, FileSystemLoader
 import os
-import re
+from datetime import datetime, timedelta, time, timezone
+from flask import Blueprint, request, jsonify, current_app, send_file
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func, and_
+from sqlalchemy.orm import joinedload
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import inch
+import io
 
-bookings_bp = Blueprint("bookings_bp", __name__)
+from src.extensions import db
+from src.models.entities import Booking, Room, User
 
-MAX_BOOKINGS_PER_DAY = 3
+bookings_bp = Blueprint('bookings_bp', __name__)
 
-# --- Booking Window Configuration (Adjusted) ---
-CUTOFF_WEEKDAY = 2 # Wednesday
-# Use 21:00 UTC to represent 18:00 Brazil Time (UTC-3)
-CUTOFF_TIME = time(21, 0, 0, tzinfo=timezone.utc)
-RELEASE_WEEKDAY = 3 # Thursday
-# Use 02:59 UTC (Friday) to represent 23:59 Brazil Time (Thursday UTC-3)
-RELEASE_TIME = time(2, 59, 0, tzinfo=timezone.utc)
-# ----------------------------------
+# Constantes de configuração
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "lab_scheduler_admin")
+# Horários em UTC
+CUTOFF_WEEKDAY = 2  # Wednesday (0=Monday, 1=Tuesday, ..., 6=Sunday)
+CUTOFF_TIME = time(21, 0, 0, tzinfo=timezone.utc)  # 18:00 Brasília = 21:00 UTC
+RELEASE_WEEKDAY = 3  # Thursday
+RELEASE_TIME = time(2, 59, 0, tzinfo=timezone.utc)  # 23:59 Brasília = 02:59 UTC (do dia seguinte)
 
-# Função para ordenar salas de forma personalizada
-def custom_room_sort_key(room):
-    """
-    Função para ordenar salas de forma personalizada:
-    1. Salas "Geral" em ordem numérica (1-12)
-    2. Outras salas em ordem alfabética
-    """
-    if room.name.startswith("Geral "):
-        # Extrair o número após "Geral "
-        try:
-            number = int(re.search(r'Geral (\d+)', room.name).group(1))
-            # Retornar uma tupla com 0 (para priorizar salas Geral) e o número
-            return (0, number)
-        except (ValueError, IndexError, AttributeError):
-            # Se não conseguir extrair um número, usar valor alto
-            return (0, 999)
+def get_monday_of_week(date_obj):
+    """Retorna a segunda-feira da semana de uma data."""
+    # Ajusta para garantir que o dia da semana 0 seja segunda-feira para cálculo
+    # Python's weekday() returns 0 for Monday, 6 for Sunday.
+    # We want to calculate difference from Monday (0).
+    day_of_week = date_obj.weekday() # 0 for Monday, 6 for Sunday
+    
+    # Se a data for domingo, ajusta para a segunda-feira seguinte
+    if day_of_week == 6: # Sunday
+        # Se for domingo, queremos a segunda-feira seguinte
+        return date_obj + timedelta(days=1)
     else:
-        # Para salas não-Geral, usar 1 (para colocar após as salas Geral) e o nome
-        return (1, room.name)
+        # Para outros dias, subtrai para chegar na segunda-feira da mesma semana
+        return date_obj - timedelta(days=day_of_week)
 
-# Helper function to send confirmation email
-def send_booking_confirmation_email(user_email, user_name, coordinator_name, booked_slots_details):
-    mail = current_app.extensions.get("mail")
-    if not mail:
-        current_app.logger.error("Flask-Mail not found. Email not sent.")
-        return False
-    if not booked_slots_details:
-        current_app.logger.info("No booking details for email.")
-        return False
-
-    subject = "Confirmação de Agendamento de Laboratório"
-    sender = current_app.config.get("MAIL_DEFAULT_SENDER", "noreply@example.com")
-    recipients = [user_email]
-
-    html_body = f"""<p>Olá {user_name},</p><p>Seu agendamento foi confirmado:</p><ul>"""
-    for slot in booked_slots_details:
-        booking_date_formatted = slot["booking_date"]
-        try:
-            booking_date_formatted = datetime.strptime(slot["booking_date"], "%Y-%m-%d").strftime("%d/%m/%Y")
-        except ValueError:
-            pass
-        # Use single quotes inside the f-string for dictionary keys
-        html_body += f"<li>Sala: {slot['room_name']} - Data: {booking_date_formatted} - Período: {slot['period']}</li>"
-    html_body += f"</ul><p>Coordenador: {coordinator_name}</p><p>Obrigado!</p>"""
-
-    msg = Message(subject, sender=sender, recipients=recipients)
-    msg.html = html_body
-
-    try:
-        mail.send(msg)
-        current_app.logger.info(f"Confirmation email sent to {user_email}")
-        return True
-    except Exception as e:
-        current_app.logger.error(f"Failed to send email to {user_email}: {str(e)}")
-        return False
-
-# Helper function to check for conflicts
-def check_booking_conflict(room_id, booking_date_obj, period):
-    return Booking.query.filter_by(room_id=room_id, booking_date=booking_date_obj, period=period).first() is not None
-
-# Helper function to check booking window rules (Reverted to block weekends)
-def is_booking_allowed(booking_date_obj):
-    now_utc = datetime.now(timezone.utc)
-    today_utc = now_utc.date()
-    start_of_current_week = today_utc - timedelta(days=today_utc.weekday()) # Monday of current week
-    start_of_next_week = start_of_current_week + timedelta(days=7) # Monday of next week
-    end_of_current_week = start_of_current_week + timedelta(days=4) # Friday of current week (Reverted)
-    end_of_next_week = start_of_next_week + timedelta(days=4) # Friday of next week (Reverted)
-
-    # Cutoff for the *current* week is Wednesday 18:00 Brazil Time (21:00 UTC)
-    cutoff_datetime_current_week = datetime.combine(start_of_current_week + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME)
+def get_brazilian_time(dt_utc):
+    """Converte um datetime UTC para o horário de Brasília (UTC-3)."""
+    if dt_utc.tzinfo is None:
+        # Se não tiver timezone, assume UTC
+        dt_utc = dt_utc.replace(tzinfo=timezone.utc)
     
-    # Release for the *next* week is Thursday 23:59 Brazil Time (Friday 02:59 UTC)
-    thursday_current_week = start_of_current_week + timedelta(days=RELEASE_WEEKDAY)
-    release_datetime_for_next_week = datetime.combine(thursday_current_week, RELEASE_TIME)
-    if RELEASE_TIME < time(0,0,0) or (RELEASE_TIME > time(0,0,0) and RELEASE_TIME < time(3,0,0)):
-         release_datetime_for_next_week += timedelta(days=1)
+    brazil_timezone = timezone(timedelta(hours=-3))
+    return dt_utc.astimezone(brazil_timezone)
 
-    # Cutoff for the *next* week is Wednesday 18:00 Brazil Time (21:00 UTC) of that next week
-    cutoff_datetime_next_week = datetime.combine(start_of_next_week + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME)
-
-    # Re-enable weekend check
-    if booking_date_obj.weekday() >= 5:
-        return False, f"Agendamentos só permitidos de Seg-Sex. Data: {booking_date_obj.strftime('%d/%m/%Y')} é fim de semana."
-    
-    # Removed past date check as requested by user
-    # if booking_date_obj < today_utc:
-    #     return False, f"Data de agendamento {booking_date_obj.strftime('%d/%m/%Y')} no passado."
-
-    # Check booking date against windows (using Friday as end of week)
-    if start_of_current_week <= booking_date_obj <= end_of_current_week: # Booking for current week (Mon-Fri)
-        if now_utc >= cutoff_datetime_current_week:
-            return False, f"Agendamento para semana atual ({start_of_current_week.strftime('%d/%m')}-{end_of_current_week.strftime('%d/%m')}) encerrou Qua 18:00 (Horário Local)."
-        else:
-            return True, "OK"
-            
-    elif start_of_next_week <= booking_date_obj <= end_of_next_week: # Booking for next week (Mon-Fri)
-        if now_utc < release_datetime_for_next_week:
-             return False, f"Agendamento para próxima semana ({start_of_next_week.strftime('%d/%m')}-{end_of_next_week.strftime('%d/%m')}) abre Qui 23:59 (Horário Local)."
-        elif now_utc >= cutoff_datetime_next_week:
-             return False, f"Agendamento para semana de {start_of_next_week.strftime('%d/%m')} já encerrou (Qua 18:00 Horário Local)."
-        else:
-             # It's after release time and before next week's cutoff
-             return True, "OK"
-             
-    else: # Booking for weeks beyond the next one, or past weeks
-        # Allow booking past dates based on previous user request
-        if booking_date_obj < start_of_current_week:
-             # Still need to check if the past date is a weekend
-             if booking_date_obj.weekday() >= 5:
-                 return False, f"Agendamentos só permitidos de Seg-Sex. Data: {booking_date_obj.strftime('%d/%m/%Y')} é fim de semana."
-             else:
-                 return True, "OK" 
-        else: # Booking for week after next or later
-            return False, f"Só é possível agendar para semana atual ou próxima. Data: {booking_date_obj.strftime('%d/%m/%Y')} fora do período permitido."
-
-@bookings_bp.route("/rooms", methods=["GET"])
-def get_rooms():
+@bookings_bp.route('/api/booking-status', methods=['GET'])
+def get_booking_status():
     try:
-        rooms = Room.query.all()
-        # Ordenar as salas usando a função de ordenação personalizada
-        rooms.sort(key=custom_room_sort_key)
-        room_list = [{"id": room.id, "name": room.name} for room in rooms]
-        return jsonify(room_list)
-    except Exception as e:
-        current_app.logger.error(f"Erro ao buscar salas: {str(e)}")
-        return jsonify({"error": "Erro ao buscar salas"}), 500
+        current_utc_dt = datetime.now(timezone.utc)
+        current_brazil_dt = get_brazilian_time(current_utc_dt)
 
-@bookings_bp.route("/bookings", methods=["POST"])
-def create_booking():
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "Invalid input"}), 400
+        current_week_monday = get_monday_of_week(current_brazil_dt.date())
+        next_week_monday = current_week_monday + timedelta(days=7)
 
-    user_name = data.get("user_name")
-    user_email = data.get("user_email")
-    coordinator_name = data.get("coordinator_name")
-    slots_data = data.get("slots")
-
-    if not all([user_name, user_email, slots_data]):
-        return jsonify({"error": "Campos obrigatórios: user_name, user_email, slots"}), 400
-    if not isinstance(slots_data, list) or not slots_data:
-        return jsonify({"error": "Slots deve ser uma lista não vazia"}), 400
-    if "@" not in user_email or "." not in user_email.split("@")[-1]:
-        return jsonify({"error": "Formato de email inválido"}), 400
-
-    processed_slots = []
-
-    for slot_input in slots_data:
-        room_id = slot_input.get("room_id")
-        booking_date_str = slot_input.get("booking_date")
-        period = slot_input.get("period")
-
-        if not all([room_id, booking_date_str, period]):
-            # Use single quotes for keys inside f-string
-            return jsonify({"error": f"Slot inválido: {slot_input}. Requer room_id, booking_date, period"}), 400
-        if period not in ["Manhã", "Tarde"]:
-            # Use single quotes for literals inside f-string
-            return jsonify({"error": f"Período inválido '{period}'. Use 'Manhã' ou 'Tarde'"}), 400
-        try:
-            booking_date_obj = datetime.strptime(booking_date_str, "%Y-%m-%d").date()
-        except ValueError:
-            # Use single quotes for literals inside f-string
-            return jsonify({"error": f"Formato de data inválido '{booking_date_str}'. Use YYYY-MM-DD"}), 400
+        # Determinar o status da semana atual
+        current_week_open = True
+        cutoff_dt_current_week = datetime.combine(current_week_monday + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME).replace(tzinfo=timezone.utc)
         
-        # Check booking window rules first (now includes weekend check)
-        allowed, message = is_booking_allowed(booking_date_obj)
-        if not allowed:
-            return jsonify({"error": message}), 400
+        if current_utc_dt >= cutoff_dt_current_week:
+            current_week_open = False
 
-        room = Room.query.get(room_id)
-        if not room:
-            return jsonify({"error": f"Sala ID {room_id} não encontrada"}), 404
+        # Determinar o status da próxima semana
+        next_week_open = False
+        release_dt_next_week = datetime.combine(next_week_monday + timedelta(days=RELEASE_WEEKDAY), RELEASE_TIME).replace(tzinfo=timezone.utc)
         
-        processed_slots.append({
-            "room_id": room_id, "room_name": room.name,
-            "booking_date_obj": booking_date_obj, "booking_date_str": booking_date_str,
-            "period": period
-        })
+        if current_utc_dt >= release_dt_next_week:
+            next_week_open = True
 
-    # Validation: Slot already taken (Keep this check)
-    for slot in processed_slots:
-        if check_booking_conflict(slot["room_id"], slot["booking_date_obj"], slot["period"]):
-            # Use single quotes for literals inside f-string
-            return jsonify({"error": f"Sala '{slot['room_name']}' já reservada para '{slot['period']}' em {slot['booking_date_str']}."}), 409
-    
-    newly_created_bookings_details_for_email = []
+        # Mensagens de status para o frontend
+        status_message = ""
+        if current_week_open and next_week_open:
+            status_message = "Escala aberta para a semana atual e próxima semana."
+        elif current_week_open and not next_week_open:
+            status_message = f"Escala aberta para a semana atual. A escala da próxima semana abre na {get_brazilian_time(release_dt_next_week).strftime('%A, %H:%M')}."
+        elif not current_week_open and next_week_open:
+            status_message = f"Escala da semana atual fechada (encerrou na {get_brazilian_time(cutoff_dt_current_week).strftime('%A, %H:%M')}). Escala da próxima semana aberta."
+        else: # not current_week_open and not next_week_open
+            status_message = f"Escala da semana atual fechada (encerrou na {get_brazilian_time(cutoff_dt_current_week).strftime('%A, %H:%M')}). A escala da próxima semana abre na {get_brazilian_time(release_dt_next_week).strftime('%A, %H:%M')}."
+
+        response_data = {
+            "current_week_open": current_week_open,
+            "next_week_open": next_week_open,
+            "status_message": status_message,
+            "current_time_utc": current_utc_dt.isoformat(),
+            "current_time_brazil": current_brazil_dt.isoformat(),
+            "cutoff_time_current_week_utc": cutoff_dt_current_week.isoformat(),
+            "release_time_next_week_utc": release_dt_next_week.isoformat()
+        }
+
+        # Verificar parâmetro de override para testes
+        override = request.args.get('admin_override')
+        if override == 'open_all' and request.args.get('password') == ADMIN_PASSWORD:
+            current_app.logger.info("Admin override: Forçando abertura de ambas as semanas")
+            response_data["current_week_open"] = True
+            response_data["next_week_open"] = True
+            response_data["status_message"] = "Admin override: Escala aberta para ambas as semanas (apenas para testes)."
+        elif override == 'open_current' and request.args.get('password') == ADMIN_PASSWORD:
+            current_app.logger.info("Admin override: Forçando abertura da semana atual")
+            response_data["current_week_open"] = True
+            response_data["status_message"] = "Admin override: Escala aberta para a semana atual (apenas para testes)."
+        elif override == 'open_next' and request.args.get('password') == ADMIN_PASSWORD:
+            current_app.logger.info("Admin override: Forçando abertura da próxima semana")
+            response_data["next_week_open"] = True
+            response_data["status_message"] = "Admin override: Escala aberta para a próxima semana (apenas para testes)."
+
+        return jsonify(response_data)
+
+    except Exception as e:
+        current_app.logger.error(f"Erro ao verificar status do agendamento: {e}", exc_info=True)
+        return jsonify({"error": "Não foi possível verificar o status do agendamento. Tente novamente mais tarde."}), 500
+
+@bookings_bp.route('/api/bookings', methods=['GET'])
+def get_bookings():
     try:
-        for slot in processed_slots:
-            new_booking = Booking(
-                user_name=user_name, user_email=user_email, coordinator_name=coordinator_name,
-                room_id=slot["room_id"], booking_date=slot["booking_date_obj"], period=slot["period"]
-            )
-            db.session.add(new_booking)
-            # Use single quotes for keys inside f-string
-            newly_created_bookings_details_for_email.append({
-                "room_name": slot["room_name"], "booking_date": slot["booking_date_str"], "period": slot["period"]
+        selected_date_str = request.args.get('date')
+        if not selected_date_str:
+            current_app.logger.warning("Data não fornecida na requisição de agendamentos.")
+            return jsonify({"error": "Data não fornecida."}), 400
+
+        selected_date = datetime.strptime(selected_date_str, '%Y-%m-%d').date()
+        
+        # Garante que a semana sempre comece na segunda-feira
+        monday_of_week = get_monday_of_week(selected_date)
+        
+        # Define o fim da semana (sexta-feira)
+        friday_of_week = monday_of_week + timedelta(days=4) # Monday (0) + 4 days = Friday (4)
+
+        current_app.logger.info(f"Buscando agendamentos para a semana de {monday_of_week} a {friday_of_week}")
+
+        bookings = db.session.query(Booking).options(joinedload(Booking.room), joinedload(Booking.user)).filter(
+            Booking.booking_date >= monday_of_week,
+            Booking.booking_date <= friday_of_week,
+            func.extract('dow', Booking.booking_date).notin_([0, 6]) # Exclui Sábado (6) e Domingo (0)
+        ).order_by(Booking.booking_date, Booking.period, Booking.room_id).all()
+
+        bookings_data = []
+        for booking in bookings:
+            bookings_data.append({
+                "id": booking.id,
+                "user_name": booking.user.name if booking.user else "Desconhecido",
+                "room_name": booking.room.name if booking.room else "Desconhecido",
+                "booking_date": booking.booking_date.strftime('%Y-%m-%d'),
+                "period": booking.period
             })
+        current_app.logger.info(f"Agendamentos encontrados: {len(bookings_data)}")
+        return jsonify(bookings_data)
+    except Exception as e:
+        current_app.logger.error(f"Erro ao buscar agendamentos: {e}", exc_info=True)
+        return jsonify({"error": "Erro ao buscar agendamentos."}), 500
+
+@bookings_bp.route('/api/bookings', methods=['POST'])
+def create_booking():
+    try:
+        data = request.get_json()
+        user_name = data.get('user_name')
+        slots = data.get('slots')
+
+        if not user_name or not slots:
+            current_app.logger.warning("Dados incompletos para criar agendamento.")
+            return jsonify({"error": "Nome de usuário e slots são obrigatórios."}), 400
+
+        user = User.query.filter_by(name=user_name).first()
+        if not user:
+            user = User(name=user_name)
+            db.session.add(user)
+            db.session.commit()
+            current_app.logger.info(f"Novo usuário criado: {user_name}")
+
+        new_bookings = []
+        for slot in slots:
+            room_name = slot.get('room_name')
+            booking_date_str = slot.get('booking_date')
+            period = slot.get('period')
+
+            if not room_name or not booking_date_str or not period:
+                current_app.logger.warning(f"Slot com dados incompletos: {slot}")
+                return jsonify({"error": "Dados do slot incompletos."}), 400
+
+            room = Room.query.filter_by(name=room_name).first()
+            if not room:
+                current_app.logger.warning(f"Sala não encontrada: {room_name}")
+                return jsonify({"error": f"Sala '{room_name}' não encontrada."}), 404
+
+            booking_date_obj = datetime.strptime(booking_date_str, '%Y-%m-%d').date()
+            
+            # Verificar se a data é sábado (6) ou domingo (0)
+            if booking_date_obj.weekday() == 5 or booking_date_obj.weekday() == 6: # 5=Saturday, 6=Sunday
+                current_app.logger.warning(f"Tentativa de agendar em fim de semana: {booking_date_obj}")
+                return jsonify({"error": "Não é possível agendar em sábados ou domingos."}), 400
+
+            # Verificar conflito de agendamento
+            existing_booking = Booking.query.filter_by(
+                room_id=room.id,
+                booking_date=booking_date_obj,
+                period=period
+            ).first()
+
+            if existing_booking:
+                current_app.logger.warning(f"Conflito de agendamento: Sala '{room_name}' já reservada para {booking_date_str} no período da {period}.")
+                return jsonify({"error": f"Sala '{room_name}' já reservada para {booking_date_str} no período da {period}."}), 409
+            
+            # Regra para salas "Geral": não permite agendar a mesma sala Geral no mesmo período
+            if "Geral" in room.name:
+                # Verifica se o usuário já tem outra sala "Geral" agendada no mesmo período do mesmo dia
+                # Esta validação foi removida conforme solicitado para permitir múltiplos agendamentos "Geral"
+                # A única restrição é que a mesma sala não pode ser agendada duas vezes no mesmo slot.
+                pass # A validação de conflito acima já cobre isso.
+
+            new_booking = Booking(
+                user_id=user.id,
+                room_id=room.id,
+                booking_date=booking_date_obj,
+                period=period
+            )
+            new_bookings.append(new_booking)
+
+        db.session.add_all(new_bookings)
         db.session.commit()
-        email_sent_successfully = send_booking_confirmation_email(user_email, user_name, coordinator_name, newly_created_bookings_details_for_email)
-        response_message = "Agendamento(s) criado(s) com sucesso!"
-        if not email_sent_successfully:
-            response_message += " (Falha ao enviar e-mail de confirmação.)"
-        return jsonify({"message": response_message, "bookings_created": newly_created_bookings_details_for_email}), 201
+        current_app.logger.info(f"{len(new_bookings)} agendamento(s) criado(s) com sucesso para {user_name}.")
+        return jsonify({"message": "Agendamento(s) criado(s) com sucesso!"}), 201
+
+    except IntegrityError as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erro de integridade ao criar agendamento: {e}", exc_info=True)
+        return jsonify({"error": "Erro de banco de dados. Verifique os dados e tente novamente."}), 500
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Falha ao criar agendamento(s): {str(e)}")
-        return jsonify({"error": "Falha ao criar agendamento(s) no servidor.", "details": str(e)}), 500
+        current_app.logger.error(f"Erro inesperado ao criar agendamento: {e}", exc_info=True)
+        return jsonify({"error": "Erro interno ao criar agendamento."}), 500
 
-@bookings_bp.route("/bookings", methods=["GET"])
-def get_bookings():
-    start_date_str = request.args.get("start_date")
-    end_date_str = request.args.get("end_date")
-    if not start_date_str or not end_date_str:
-         return jsonify({"error": "Parâmetros start_date e end_date são obrigatórios"}), 400
+@bookings_bp.route('/api/bookings/<int:booking_id>', methods=['DELETE'])
+def delete_booking(booking_id):
     try:
-        start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-        end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-        # Query only Mon-Fri
-        query = Booking.query.join(Room).filter(
-            Booking.booking_date.between(start_date, end_date),
-            Booking.booking_date.op("strftime")("%w").notin_(["0", "6"]) # Exclude Sunday (0) and Saturday (6)
-        ).order_by(Booking.booking_date, Room.id, Booking.period)
-    except ValueError:
-        return jsonify({"error": "Formato de data inválido para start_date ou end_date. Use YYYY-MM-DD"}), 400
-    
-    bookings = query.all()
-    result = []
-    for booking in bookings:
-        result.append({
-            "id": booking.id, "user_name": booking.user_name, "user_email": booking.user_email,
-            "coordinator_name": booking.coordinator_name, "room_id": booking.room_id,
-            "room_name": booking.room.name, "booking_date": booking.booking_date.isoformat(),
-            "period": booking.period, "created_at": booking.created_at.isoformat() if booking.created_at else None
-        })
-    return jsonify(result)
+        booking = Booking.query.get(booking_id)
+        if not booking:
+            current_app.logger.warning(f"Agendamento não encontrado para exclusão: ID {booking_id}")
+            return jsonify({"error": "Agendamento não encontrado."}), 404
 
-# Adjusted booking status endpoint (Reverted end dates to Friday)
-@bookings_bp.route("/booking-status", methods=["GET"])
-def get_booking_status():
-    now_utc = datetime.now(timezone.utc)
-    today_utc = now_utc.date()
-    start_of_current_week = today_utc - timedelta(days=today_utc.weekday())
-    start_of_next_week = start_of_current_week + timedelta(days=7)
-    end_of_current_week = start_of_current_week + timedelta(days=4) # Friday (Reverted)
-    end_of_next_week = start_of_next_week + timedelta(days=4) # Friday (Reverted)
-
-    cutoff_datetime_current_week = datetime.combine(start_of_current_week + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME)
-    
-    thursday_current_week = start_of_current_week + timedelta(days=RELEASE_WEEKDAY)
-    release_datetime_for_next_week = datetime.combine(thursday_current_week, RELEASE_TIME)
-    if RELEASE_TIME < time(0,0,0) or (RELEASE_TIME > time(0,0,0) and RELEASE_TIME < time(3,0,0)):
-         release_datetime_for_next_week += timedelta(days=1)
-    
-    cutoff_datetime_next_week = datetime.combine(start_of_next_week + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME)
-    
-    # Determine if current week is open for booking
-    current_week_open = now_utc < cutoff_datetime_current_week
-    
-    # Determine if next week is open for booking
-    next_week_open = now_utc >= release_datetime_for_next_week and now_utc < cutoff_datetime_next_week
-    
-    # Format dates for display
-    current_week_range = f"{start_of_current_week.strftime('%d/%m')} - {end_of_current_week.strftime('%d/%m')}"
-    next_week_range = f"{start_of_next_week.strftime('%d/%m')} - {end_of_next_week.strftime('%d/%m')}"
-    
-    # Hardcoded display times (local Brazil Time)
-    display_cutoff_time = "18:00"
-    display_release_time = "23:59"
-    cutoff_day_display = "Quarta-feira" # Display Wednesday for cutoff
-    release_day_display = "Quinta-feira" # Display Thursday for release
-    
-    response_data = {
-        "current_week_open": current_week_open,
-        "next_week_open": next_week_open,
-        "current_week_range": current_week_range,
-        "next_week_range": next_week_range,
-        "cutoff_day": cutoff_day_display,
-        "cutoff_time": display_cutoff_time,
-        "release_day": release_day_display,
-        "release_time": display_release_time
-    }
-    
-    # Verificar parâmetro de override para testes
-    override = request.args.get('admin_override')
-    if override == 'open_all' and request.args.get('password') == 'lab_scheduler_admin':
-        current_app.logger.info("Admin override: Forçando abertura de ambas as semanas")
-        response_data["current_week_open"] = True
-        response_data["next_week_open"] = True
-    elif override == 'open_current' and request.args.get('password') == 'lab_scheduler_admin':
-        current_app.logger.info("Admin override: Forçando abertura da semana atual")
-        response_data["current_week_open"] = True
-    elif override == 'open_next' and request.args.get('password') == 'lab_scheduler_admin':
-        current_app.logger.info("Admin override: Forçando abertura da próxima semana")
-        response_data["next_week_open"] = True
-    
-    return jsonify(response_data)
-
-# Rota administrativa para limpar agendamentos
-ADMIN_PASSWORD = "lab_scheduler_admin"
-
-@bookings_bp.route("/admin/clear-bookings", methods=["POST"])
-def clear_bookings():
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "Invalid input"}), 400
-    
-    password = data.get("password")
-    if password != ADMIN_PASSWORD:
-        return jsonify({"error": "Senha administrativa incorreta"}), 401
-    
-    # Parâmetros opcionais para filtragem
-    start_date_str = data.get("start_date")
-    end_date_str = data.get("end_date")
-    room_id = data.get("room_id")
-    period = data.get("period")
-    
-    # Construir a query base
-    query = Booking.query
-    
-    # Aplicar filtros se fornecidos
-    if start_date_str:
-        try:
-            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-            if end_date_str:
-                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-                query = query.filter(Booking.booking_date.between(start_date, end_date))
-            else:
-                query = query.filter(Booking.booking_date == start_date)
-        except ValueError:
-            return jsonify({"error": "Formato de data inválido. Use YYYY-MM-DD"}), 400
-    
-    if room_id:
-        query = query.filter(Booking.room_id == room_id)
-    
-    if period:
-        if period not in ["Manhã", "Tarde"]:
-            return jsonify({"error": "Período inválido. Use 'Manhã' ou 'Tarde'"}), 400
-        query = query.filter(Booking.period == period)
-    
-    # Obter os agendamentos a serem removidos para log
-    bookings_to_remove = query.all()
-    booking_details = []
-    
-    for booking in bookings_to_remove:
-        room = Room.query.get(booking.room_id)
-        booking_details.append({
-            "id": booking.id,
-            "user_name": booking.user_name,
-            "room_name": room.name if room else f"Sala ID {booking.room_id}",
-            "booking_date": booking.booking_date.strftime("%Y-%m-%d"),
-            "period": booking.period
-        })
-    
-    # Remover os agendamentos
-    count = query.delete()
-    db.session.commit()
-    
-    return jsonify({
-        "message": f"{count} agendamento(s) removido(s) com sucesso",
-        "count": count,
-        "details": booking_details
-    })
-
-# PDF Generation
-@bookings_bp.route("/generate-schedule-pdf", methods=["GET"])
-def generate_schedule_pdf():
-    start_date_str = request.args.get("start_date")
-    if not start_date_str:
-        return jsonify({"error": "Parâmetro start_date é obrigatório"}), 400
-    
-    try:
-        start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-        # Ensure start_date is a Monday
-        if start_date.weekday() != 0:
-            # Adjust to previous Monday
-            start_date = start_date - timedelta(days=start_date.weekday())
-        
-        # End date is Friday of the same week
-        end_date = start_date + timedelta(days=4)
-        
-        # Query only Mon-Fri
-        bookings = Booking.query.join(Room).filter(
-            Booking.booking_date.between(start_date, end_date),
-            Booking.booking_date.op("strftime")("%w").notin_(["0", "6"]) # Exclude Sunday (0) and Saturday (6)
-        ).order_by(Booking.booking_date, Room.name, Booking.period).all()
-        
-        # Get all rooms
-        rooms = Room.query.all()
-        # Ordenar as salas usando a função de ordenação personalizada
-        rooms.sort(key=custom_room_sort_key)
-        
-        # Organize bookings by date, room, and period
-        schedule_data = {}
-        for booking in bookings:
-            date_str = booking.booking_date.strftime("%Y-%m-%d")
-            if date_str not in schedule_data:
-                schedule_data[date_str] = {
-                    "date_display": booking.booking_date.strftime("%d/%m/%Y"),
-                    "weekday": ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"][booking.booking_date.weekday()],
-                    "rooms": {}
-                }
-            
-            if booking.room_id not in schedule_data[date_str]["rooms"]:
-                schedule_data[date_str]["rooms"][booking.room_id] = {
-                    "name": booking.room.name,
-                    "morning": None,
-                    "afternoon": None
-                }
-            
-            if booking.period == "Manhã":
-                schedule_data[date_str]["rooms"][booking.room_id]["morning"] = {
-                    "user": booking.user_name,
-                    "coordinator": booking.coordinator_name
-                }
-            else:  # "Tarde"
-                schedule_data[date_str]["rooms"][booking.room_id]["afternoon"] = {
-                    "user": booking.user_name,
-                    "coordinator": booking.coordinator_name
-                }
-        
-        # Sort dates
-        sorted_dates = sorted(schedule_data.keys())
-        
-        # Prepare data for template
-        template_data = {
-            "week_range": f"{start_date.strftime('%d/%m/%Y')} - {end_date.strftime('%d/%m/%Y')}",
-            "dates": [schedule_data[date] for date in sorted_dates],
-            "rooms": [{"id": room.id, "name": room.name} for room in rooms]
-        }
-        
-        # Load template
-        template_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates')
-        env = Environment(loader=FileSystemLoader(template_dir))
-        template = env.get_template('schedule_pdf_template.html')
-        
-        # Render HTML
-        html_content = template.render(**template_data)
-        
-        # Generate PDF
-        pdf = HTML(string=html_content).write_pdf()
-        
-        # Create response
-        response = make_response(pdf)
-        response.headers['Content-Type'] = 'application/pdf'
-        response.headers['Content-Disposition'] = f'inline; filename=escala_{start_date_str}_{end_date.strftime("%Y-%m-%d")}.pdf'
-        
-        return response
-        
-    except ValueError:
-        return jsonify({"error": "Formato de data inválido para start_date. Use YYYY-MM-DD"}), 400
+        db.session.delete(booking)
+        db.session.commit()
+        current_app.logger.info(f"Agendamento ID {booking_id} excluído com sucesso.")
+        return jsonify({"message": "Agendamento excluído com sucesso."}), 200
     except Exception as e:
-        current_app.logger.error(f"Erro ao gerar PDF: {str(e)}")
-        return jsonify({"error": "Erro ao gerar PDF", "details": str(e)}), 500
+        db.session.rollback()
+        current_app.logger.error(f"Erro ao excluir agendamento ID {booking_id}: {e}", exc_info=True)
+        return jsonify({"error": "Erro ao excluir agendamento."}), 500
 
-# Helper function to get Monday of a week
-def get_monday_of_week(date_obj):
-    """Return the Monday of the week for the given date."""
-    return date_obj - timedelta(days=date_obj.weekday())
+@bookings_bp.route('/api/admin/clear-bookings', methods=['POST'])
+def admin_clear_bookings():
+    try:
+        data = request.get_json()
+        password = data.get('password')
+        start_date_str = data.get('start_date')
+        end_date_str = data.get('end_date')
+        room_id = data.get('room_id')
+        period = data.get('period')
+
+        if password != ADMIN_PASSWORD:
+            current_app.logger.warning("Tentativa de acesso não autorizado à função de limpeza de agendamentos.")
+            return jsonify({"error": "Senha administrativa incorreta."}), 403
+
+        query = Booking.query
+
+        if start_date_str:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            query = query.filter(Booking.booking_date >= start_date)
+            current_app.logger.info(f"Filtro de data inicial: {start_date}")
+
+        if end_date_str:
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+            query = query.filter(Booking.booking_date <= end_date)
+            current_app.logger.info(f"Filtro de data final: {end_date}")
+
+        if room_id:
+            query = query.filter(Booking.room_id == room_id)
+            current_app.logger.info(f"Filtro de sala: ID {room_id}")
+
+        if period:
+            query = query.filter(Booking.period == period)
+            current_app.logger.info(f"Filtro de período: {period}")
+
+        bookings_to_delete = query.all()
+        count = len(bookings_to_delete)
+        details = []
+
+        for booking in bookings_to_delete:
+            details.append({
+                "id": booking.id,
+                "user_id": booking.user_id,
+                "room_id": booking.room_id,
+                "booking_date": booking.booking_date.strftime('%Y-%m-%d'),
+                "period": booking.period
+            })
+            db.session.delete(booking)
+
+        db.session.commit()
+        current_app.logger.info(f"{count} agendamento(s) removido(s) pela administração.")
+        return jsonify({
+            "message": f"{count} agendamento(s) removido(s) com sucesso",
+            "count": count,
+            "details": details
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erro ao limpar agendamentos: {e}", exc_info=True)
+        return jsonify({"error": "Erro ao limpar agendamentos."}), 500
+
+@bookings_bp.route('/api/rooms', methods=['GET'])
+def get_rooms():
+    try:
+        rooms = Room.query.order_by(Room.id).all() # Busca todas as salas
+        
+        # Função de chave de ordenação personalizada
+        def custom_room_sort_key(room):
+            name = room.name
+            if "Geral" in name:
+                try:
+                    # Extrai o número da sala Geral
+                    num = int("".join(filter(str.isdigit, name)))
+                    return (0, num) # Prioriza salas "Geral" e as ordena numericamente
+                except ValueError:
+                    return (0, float('inf')) # Para "Geral" sem número, coloca no final das Gerais
+            return (1, name) # Outras salas vêm depois, ordenadas alfabeticamente
+
+        # Aplica a ordenação personalizada
+        sorted_rooms = sorted(rooms, key=custom_room_sort_key)
+
+        rooms_data = [{"id": room.id, "name": room.name} for room in sorted_rooms]
+        current_app.logger.info(f"Salas encontradas: {len(rooms_data)}")
+        return jsonify(rooms_data)
+    except Exception as e:
+        current_app.logger.error(f"Erro ao buscar salas: {e}", exc_info=True)
+        return jsonify({"error": "Erro ao buscar salas."}), 500
+
+@bookings_bp.route('/api/generate-pdf', methods=['GET'])
+def generate_schedule_pdf():
+    try:
+        selected_date_str = request.args.get('date')
+        if not selected_date_str:
+            current_app.logger.warning("Data não fornecida para geração de PDF.")
+            return jsonify({"error": "Data não fornecida."}), 400
+
+        selected_date = datetime.strptime(selected_date_str, '%Y-%m-%d').date()
+        monday_of_week = get_monday_of_week(selected_date)
+        friday_of_week = monday_of_week + timedelta(days=4)
+
+        current_app.logger.info(f"Gerando PDF para a semana de {monday_of_week} a {friday_of_week}")
+
+        bookings = db.session.query(Booking).options(joinedload(Booking.room), joinedload(Booking.user)).filter(
+            Booking.booking_date >= monday_of_week,
+            Booking.booking_date <= friday_of_week,
+            func.extract('dow', Booking.booking_date).notin_([0, 6]) # Exclui Sábado (6) e Domingo (0)
+        ).order_by(Booking.booking_date, Booking.period, Booking.room_id).all()
+
+        rooms = Room.query.all()
+        
+        # Função de chave de ordenação personalizada (duplicada para consistência no PDF)
+        def custom_room_sort_key(room):
+            name = room.name
+            if "Geral" in name:
+                try:
+                    num = int("".join(filter(str.isdigit, name)))
+                    return (0, num)
+                except ValueError:
+                    return (0, float('inf'))
+            return (1, name)
+
+        sorted_rooms = sorted(rooms, key=custom_room_sort_key)
+        room_names = [room.name for room in sorted_rooms]
+
+        # Organizar dados para o PDF
+        schedule_data = {}
+        for i in range(5): # Segunda a Sexta
+            current_date = monday_of_week + timedelta(days=i)
+            schedule_data[current_date] = {
+                "Manhã": {room_name: "" for room_name in room_names},
+                "Tarde": {room_name: "" for room_name in room_names}
+            }
+
+        for booking in bookings:
+            date = booking.booking_date
+            period = booking.period
+            room_name = booking.room.name if booking.room else "Desconhecido"
+            user_name = booking.user.name if booking.user else "Desconhecido"
+            
+            if date in schedule_data and period in schedule_data[date] and room_name in schedule_data[date][period]:
+                schedule_data[date][period][room_name] = user_name
+
+        # Gerar PDF
+        buffer = io.BytesIO()
+        c = canvas.Canvas(buffer, pagesize=letter)
+        width, height = letter
+
+        # Título
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(inch, height - inch, f"Escala de Agendamentos - Semana de {monday_of_week.strftime('%d/%m/%Y')}")
+
+        # Cabeçalho da tabela
+        y_start = height - 1.5 * inch
+        x_start = inch
+        col_width = (width - 2 * inch) / (len(room_names) + 1) # +1 para a coluna de Período/Dia
+        row_height = 0.3 * inch
+
+        # Desenhar cabeçalho de salas
+        c.setFont("Helvetica-Bold", 8)
+        c.drawString(x_start + col_width, y_start, "Período/Dia")
+        for i, room_name in enumerate(room_names):
+            c.drawString(x_start + (i + 1) * col_width + col_width/2 - c.stringWidth(room_name, "Helvetica-Bold", 8)/2, y_start, room_name)
+
+        y_position = y_start - row_height
+
+        # Desenhar linhas da tabela
+        c.setFont("Helvetica", 7)
+        days_of_week_pt = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira"]
+
+        for i in range(5):
+            current_date = monday_of_week + timedelta(days=i)
+            day_name = days_of_week_pt[i]
+            
+            # Linha da Manhã
+            c.drawString(x_start + col_width, y_position, f"{day_name} - Manhã")
+            for j, room_name in enumerate(room_names):
+                text = schedule_data[current_date]["Manhã"][room_name]
+                c.drawString(x_start + (j + 1) * col_width + col_width/2 - c.stringWidth(text, "Helvetica", 7)/2, y_position, text)
+            y_position -= row_height
+
+            # Linha da Tarde
+            c.drawString(x_start + col_width, y_position, f"{day_name} - Tarde")
+            for j, room_name in enumerate(room_names):
+                text = schedule_data[current_date]["Tarde"][room_name]
+                c.drawString(x_start + (j + 1) * col_width + col_width/2 - c.stringWidth(text, "Helvetica", 7)/2, y_position, text)
+            y_position -= row_height
+
+        c.save()
+        buffer.seek(0)
+        current_app.logger.info("PDF gerado com sucesso.")
+        return send_file(buffer, as_attachment=True, download_name=f"escala_{monday_of_week.strftime('%Y-%m-%d')}.pdf", mimetype='application/pdf')
+
+    except Exception as e:
+        current_app.logger.error(f"Erro ao gerar PDF: {e}", exc_info=True)
+        return jsonify({"error": "Erro ao gerar PDF da escala."}), 500
+
+
