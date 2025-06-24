@@ -1,19 +1,3 @@
-Peço desculpas novamente! O erro `SyntaxError: unterminated string literal` ocorre porque o código que te enviei na última vez foi cortado e a string não foi fechada corretamente. Isso é um problema de formatação na minha resposta, não no código em si.
-
-Vou te enviar o **conteúdo completo e corrigido** do arquivo `booking_routes.py` mais uma vez. Por favor, copie todo o texto desde o início até o final e substitua o seu arquivo `src/routes/booking_routes.py` por ele.
-
-**Instruções:**
-
-1.  **Copie TODO o texto** do bloco de código abaixo, do `import os` até a última linha.
-2.  **Cole-o no seu arquivo** `src/routes/booking_routes.py`, substituindo todo o conteúdo existente.
-3.  **Salve o arquivo.**
-4.  **Faça commit e push** das alterações para o seu repositório GitHub.
-5.  O Render fará o deploy automaticamente.
-6.  Após o deploy ser concluído, **limpe o cache do seu navegador** (Ctrl+F5 ou Shift+F5) e acesse o aplicativo novamente.
-
-Este arquivo contém a correção para a ordenação das salas "Geral" e garante que todas as strings estejam corretamente terminadas.
-
-```python
 import os
 from datetime import datetime, timedelta, time, timezone
 from flask import Blueprint, request, jsonify, current_app, send_file, Response, make_response
