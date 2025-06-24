@@ -72,11 +72,11 @@ def is_booking_allowed(booking_date_obj):
     end_of_next_week = next_week_monday + timedelta(days=4) # Friday of next week
 
     # Cutoff for the *current* week is Wednesday 18:00 Brazil Time (21:00 UTC)
-    cutoff_datetime_current_week = datetime.combine(start_of_current_week + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME)
+    cutoff_datetime_current_week = datetime.combine(start_of_current_week + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME).replace(tzinfo=timezone.utc)
     
     # Release for the *next* week is Thursday 23:59 Brazil Time (Friday 02:59 UTC)
     thursday_current_week = start_of_current_week + timedelta(days=RELEASE_WEEKDAY)
-    release_datetime_next_week = datetime.combine(thursday_current_week, RELEASE_TIME)
+    release_datetime_next_week = datetime.combine(thursday_current_week, RELEASE_TIME).replace(tzinfo=timezone.utc)
     
     # Make time objects timezone-aware for comparison
     time_midnight_utc = time(0, 0, 0, tzinfo=timezone.utc)
@@ -86,7 +86,7 @@ def is_booking_allowed(booking_date_obj):
          release_datetime_next_week += timedelta(days=1)
 
     # Cutoff for the *next* week is Wednesday 18:00 Brazil Time (21:00 UTC) of that next week
-    cutoff_datetime_next_week = datetime.combine(next_week_monday + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME)
+    cutoff_datetime_next_week = datetime.combine(next_week_monday + timedelta(days=CUTOFF_WEEKDAY), CUTOFF_TIME).replace(tzinfo=timezone.utc)
 
     # Re-enable weekend check
     if booking_date_obj.weekday() >= 5:
@@ -517,3 +517,13 @@ def clear_bookings():
     data = request.get_json()
     if not data:
         current_app.logger.warning("Invalid input for clear bookings: No data")
+        return jsonify({"error": "Invalid input"}), 400
+        
+    password = data.get("password")
+    start_date_str = data.get("start_date")
+    end_date_str = data.get("end_date")
+    room_id = data.get("room_id")
+    period = data.get("period")
+    
+    # Verificar senha
+    correct_password = current_app.config.get("ADMIN_PASSWORD", ADMIN_PASSWORD) # Get from env or 
