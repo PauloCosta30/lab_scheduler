@@ -1,17 +1,34 @@
+Peço desculpas novamente! O erro `SyntaxError: unterminated string literal` ocorre porque o código que te enviei na última vez foi cortado e a string não foi fechada corretamente. Isso é um problema de formatação na minha resposta, não no código em si.
+
+Vou te enviar o **conteúdo completo e corrigido** do arquivo `booking_routes.py` mais uma vez. Por favor, copie todo o texto desde o início até o final e substitua o seu arquivo `src/routes/booking_routes.py` por ele.
+
+**Instruções:**
+
+1.  **Copie TODO o texto** do bloco de código abaixo, do `import os` até a última linha.
+2.  **Cole-o no seu arquivo** `src/routes/booking_routes.py`, substituindo todo o conteúdo existente.
+3.  **Salve o arquivo.**
+4.  **Faça commit e push** das alterações para o seu repositório GitHub.
+5.  O Render fará o deploy automaticamente.
+6.  Após o deploy ser concluído, **limpe o cache do seu navegador** (Ctrl+F5 ou Shift+F5) e acesse o aplicativo novamente.
+
+Este arquivo contém a correção para a ordenação das salas "Geral" e garante que todas as strings estejam corretamente terminadas.
+
+```python
 import os
 from datetime import datetime, timedelta, time, timezone
 from flask import Blueprint, request, jsonify, current_app, send_file, Response, make_response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, and_
 from sqlalchemy.orm import joinedload
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
-from reportlab.lib.units import inch
-import io
 
 # PDF Generation (from your provided file)
 from weasyprint import HTML, CSS
 from jinja2 import Environment, FileSystemLoader
+import io # Import io for BytesIO
+
+# Assuming these are in src.extensions and src.models.entities
+from src.extensions import db
+from src.models.entities import Booking, Room, User # Assuming User is also defined
 
 bookings_bp = Blueprint('bookings_bp', __name__)
 
@@ -402,4 +419,117 @@ def generate_schedule_pdf():
         monday_of_week = get_monday_of_week(selected_date)
         friday_of_week = monday_of_week + timedelta(days=4)
 
-        current_app.logger.info(f"Gerando PDF para a semana de {monday_of_week} a
+        current_app.logger.info(f"Gerando PDF para a semana de {monday_of_week} a {friday_of_week}")
+
+        # Fetch data for the specified week (Mon-Fri)
+        current_app.logger.debug("Fetching rooms and bookings for PDF")
+        rooms = Room.query.all() # Fetch all rooms
+        
+        # Apply custom sorting to rooms for PDF
+        sorted_rooms = sorted(rooms, key=custom_room_sort_key)
+        
+        bookings_query = db.session.query(Booking).options(joinedload(Booking.room), joinedload(Booking.user)).filter(
+            Booking.booking_date.between(monday_of_week, friday_of_week),
+            func.extract('dow', Booking.booking_date).notin_([0, 6]) # Exclude Sunday (0) and Saturday (6)
+        ).order_by(Booking.booking_date, Booking.room_id, Booking.period)
+        bookings = bookings_query.all()
+        current_app.logger.debug(f"Found {len(bookings)} bookings for PDF week")
+        
+        # Prepare data for template
+        schedule_data = {}
+        for i in range(5): # Monday to Friday
+            current_date = monday_of_week + timedelta(days=i)
+            schedule_data[current_date.isoformat()] = {
+                "Manhã": {room.name: "" for room in sorted_rooms},
+                "Tarde": {room.name: "" for room in sorted_rooms}
+            }
+
+        for booking in bookings:
+            room_name = booking.room.name if booking.room else "Sala Desconhecida"
+            user_name = booking.user.name if booking.user else "Desconhecido"
+            
+            date_iso = booking.booking_date.isoformat()
+            if date_iso in schedule_data and booking.period in schedule_data[date_iso] and room_name in schedule_data[date_iso][booking.period]:
+                schedule_data[date_iso][booking.period][room_name] = user_name
+            
+        dates_of_week = [(monday_of_week + timedelta(days=i)).isoformat() for i in range(5)] # Changed back to 5 days
+        days_locale = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"] # Reverted to 5 days
+        
+        # Setup Jinja2 environment
+        template_dir = os.path.join(current_app.root_path, current_app.template_folder or "templates")
+        env = Environment(loader=FileSystemLoader(template_dir), autoescape=True)
+        
+        # Add a date formatting filter
+        def format_date_filter(date_str, fmt="%d/%m"):
+            try:
+                return datetime.strptime(date_str, "%Y-%m-%d").strftime(fmt)
+            except:
+                return date_str
+        env.filters["format_date"] = format_date_filter
+        
+        # Render HTML template (Template itself needs update for 5 days)
+        current_app.logger.debug("Rendering PDF HTML template")
+        template = env.get_template("schedule_pdf_template.html") 
+        html_string = template.render(
+            rooms=sorted_rooms, # Use sorted rooms here
+            dates_of_week=dates_of_week,
+            days_locale=days_locale,
+            schedule_data=schedule_data,
+            week_start_date_formatted=monday_of_week.strftime("%d/%m/%Y"),
+            week_end_date_formatted=friday_of_week.strftime("%d/%m/%Y")
+        )
+        
+        # Generate PDF
+        current_app.logger.debug("Generating PDF bytes using WeasyPrint")
+        pdf_bytes = HTML(string=html_string).write_pdf() # Removed explicit CSS, assuming it's in template or default
+        current_app.logger.debug("PDF generated successfully")
+        
+        # Create response
+        response = make_response(pdf_bytes)
+        response.headers["Content-Type"] = "application/pdf"
+        response.headers["Content-Disposition"] = f"attachment; filename=escala_semana_{monday_of_week.strftime('%Y-%m-%d')}.pdf"
+        
+        return response
+
+    except Exception as e:
+        current_app.logger.error(f"Erro ao gerar PDF para semana {monday_of_week.strftime('%Y-%m-%d')}: {e}", exc_info=True)
+        return jsonify({"error": "Falha ao gerar PDF no servidor", "details": str(e)}), 500
+
+# --- Admin Route to Download Database --- 
+@bookings_bp.route("/admin/download-database", methods=["GET"])
+def download_database():
+    password = request.args.get("password")
+    correct_password = current_app.config.get("ADMIN_PASSWORD", ADMIN_PASSWORD) # Get from env or use default
+    
+    if password != correct_password:
+        current_app.logger.warning("Unauthorized attempt to download database")
+        return jsonify({"error": "Unauthorized"}), 401
+        
+    db_uri = current_app.config.get("SQLALCHEMY_DATABASE_URI")
+    if not db_uri or not db_uri.startswith("sqlite:///"):
+        current_app.logger.error("Database download requested, but not using SQLite")
+        return jsonify({"error": "Database download only supported for SQLite"}), 400
+        
+    db_path = db_uri.replace("sqlite:///", "")
+    
+    if not os.path.exists(db_path):
+        current_app.logger.error(f"SQLite database file not found at: {db_path}")
+        return jsonify({"error": "Database file not found"}), 404
+        
+    try:
+        current_app.logger.info(f"Admin download of database file: {db_path}")
+        return Response(
+            open(db_path, "rb"),
+            mimetype="application/vnd.sqlite3",
+            headers={"Content-Disposition": "attachment;filename=lab_scheduler.db"}
+        )
+    except Exception as e:
+        current_app.logger.error(f"Error serving database file: {str(e)}", exc_info=True)
+        return jsonify({"error": "Error serving database file"}), 500
+
+# --- NOVA ROTA: Admin Route to Clear Bookings ---
+@bookings_bp.route("/admin/clear-bookings", methods=["POST"])
+def clear_bookings():
+    data = request.get_json()
+    if not data:
+        current_app.logger.warning("Invalid input for clear bookings: No data")
