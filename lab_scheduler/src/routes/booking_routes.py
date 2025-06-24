@@ -172,7 +172,6 @@ def create_booking():
         return jsonify({"error": "Formato de email inválido"}), 400
 
     processed_slots = []
-    daily_new_bookings_count = defaultdict(int)
 
     for slot_input in slots_data:
         room_id = slot_input.get("room_id")
@@ -205,52 +204,6 @@ def create_booking():
             "booking_date_obj": booking_date_obj, "booking_date_str": booking_date_str,
             "period": period
         })
-        daily_new_bookings_count[booking_date_obj] += 1
-
-    # --- Validation: Limit "Geral" room bookings per day per user based on periods --- 
-    geral_slots_in_request_by_day = defaultdict(list)
-    for slot in processed_slots:
-        if slot["room_name"].startswith("Geral "):
-            geral_slots_in_request_by_day[slot["booking_date_obj"]].append(
-                {"room_id": slot["room_id"], "period": slot["period"]}
-            )
-
-    for booking_date_obj, requested_geral_slots in geral_slots_in_request_by_day.items():
-        # Fetch existing Geral bookings for this user on this day
-        existing_geral_bookings = Booking.query.join(Room).filter(
-            Booking.user_name == user_name,
-            Booking.booking_date == booking_date_obj,
-            Room.name.startswith("Geral ")
-        ).all()
-
-        combined_geral_slots = []
-        # Add existing bookings
-        for booking in existing_geral_bookings:
-            combined_geral_slots.append({"room_id": booking.room_id, "period": booking.period})
-        # Add requested slots (avoiding duplicates if re-requesting same slot)
-        existing_tuples = {(b.room_id, b.period) for b in existing_geral_bookings}
-        for req_slot in requested_geral_slots:
-             if (req_slot["room_id"], req_slot["period"]) not in existing_tuples:
-                 combined_geral_slots.append(req_slot)
-
-        geral_periods_booked = {slot["period"] for slot in combined_geral_slots}
-        geral_rooms_booked_ids = {slot["room_id"] for slot in combined_geral_slots}
-
-        num_geral_periods = len(geral_periods_booked)
-        num_geral_rooms = len(geral_rooms_booked_ids)
-
-        if num_geral_periods > 2:
-            return jsonify({"error": f"Não é possível agendar mais de dois períodos (\"Manhã\" e \"Tarde\") em salas \"Geral\" no mesmo dia ({booking_date_obj.strftime(\"%Y-%m-%d\")})."}), 409
-
-        if num_geral_periods == 2 and num_geral_rooms > 2:
-             # This case implies booking 2 periods across 3+ different Geral rooms
-             return jsonify({"error": f"Não é possível agendar mais de duas salas \"Geral\" diferentes no mesmo dia ({booking_date_obj.strftime(\"%Y-%m-%d\")})."}), 409
-        
-        # Also check if trying to book a third Geral room even if only one period is used so far
-        if num_geral_periods == 1 and num_geral_rooms > 2:
-             return jsonify({"error": f"Não é possível agendar mais de duas salas \"Geral\" diferentes no mesmo dia ({booking_date_obj.strftime(\"%Y-%m-%d\")})."}), 409
-
-    # --- End of Geral Validation ---
 
     # Validation: Slot already taken (Keep this check)
     for slot in processed_slots:
