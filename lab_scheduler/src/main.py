@@ -36,7 +36,7 @@ app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'true').lower() in ['true', '1', 't']
 app.config['MAIL_USE_SSL'] = os.getenv('MAIL_USE_SSL', 'false').lower() in ['true', '1', 't']
 app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', 'itvdslab@gmail.com')
-app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'uzwq hnnd bbye dkik')
+app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'dsfv gkwr qcal fqev')
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', ('LAB.ITV', 'noreply@gmail.com'))
 
 # For local testing without a real SMTP server, you can suppress sending or use a console mail server.
@@ -46,49 +46,21 @@ app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', ('LAB.ITV',
 mail = Mail(app) # Initialize Flask-Mail
 db.init_app(app)
 
-# Inicialização do banco de dados e criação automática de salas
+# Exemplo de modificação em src/main.py
+# ... (outras importações e configurações) ...
+from src.models.entities import Room, Booking # Certifique-se que Room está importado
+# ...
 with app.app_context():
     db.create_all()
-    
-    # Verificar e criar salas iniciais se o banco estiver vazio
     if not Room.query.first():
-        room_names = [
-            # Salas Geral em ordem numérica
-            "Geral 1", "Geral 2", "Geral 3", "Geral 4", "Geral 5", "Geral 6", "Geral 7", "Geral 8", 
-            "Geral 9", "Geral 10", "Geral 11", "Geral 12",
-            # Outras salas em ordem alfabética
-            "Citometria - Bancada", "Cultivo A1", "Cultivo A2", "Cultivo B1", "Cultivo B2",
-            "Geologia 1", "Geologia Micrótomo", 
-            "Microbiologia - Capela de Fluxo Laminar", "Microbiologia - Equipamento", "Microbiologia - Lupa",
-            "Sala Clara - Lupa com Câmera", "Sala Clara - Lupa direita", "Sala Clara - Lupa esquerda", 
-            "Sala Clara - Microscópio", "Sala Escura - Axio Imager.M2", "Sala Escura - Axio Scope.A1", 
-            "Sala Escura - Microscópio CONFOCAL-LMSN"
-        ]
-        
-        for name in room_names:
+        room_names = ["Geral 1", "Geral 2", "Geral 3", "Geral 4", "Geral 5","Geral 6","Geral 7","Geral 8","Citometria - Bancada", "Sala Clara - Lupa esquerda", "Sala Clara - Lupa direita","Sala Clara - Lupa com Câmera","Sala Clara - Microscópio","Sala Escura - Axio Imager.M2", "Sala Escura - Axio Scope.A1","Sala Escura - Microscópio CONFOCAL-LMSN","Microbiologia - Capela de Fluxo Laminar","Microbiologia - Lupa", "Microbiologia - Equipamento","Geologia 1", "Geologia Micrótomo", "Cultivo A1","Cultivo A2","Cultivo B1","Cultivo B2"]
+        # Certifique-se de ter 10 nomes se o range(1,11) for mantido, ou ajuste o loop
+        for name in room_names: # Ou use um loop com índice se preferir
             room = Room(name=name)
             db.session.add(room)
         db.session.commit()
-        print("Database initialized with all rooms created in correct order.")
-    else:
-        # Verificar e adicionar as novas salas Gerais mesmo se o banco já tiver outras salas
-        new_geral_rooms = ["Geral 9", "Geral 10", "Geral 11", "Geral 12"]
-        rooms_added = False
-        
-        for room_name in new_geral_rooms:
-            if not Room.query.filter_by(name=room_name).first():
-                new_room = Room(name=room_name)
-                db.session.add(new_room)
-                rooms_added = True
-                print(f"Sala '{room_name}' adicionada ao banco de dados.")
-        
-        if rooms_added:
-            db.session.commit()
-            print("Novas salas Gerais adicionadas ao banco de dados.")
-        else:
-            print("Todas as salas Gerais já existem no banco de dados.")
+        print("Database initialized and custom rooms created.")
 
-# Não sobrescrever a função get_rooms aqui, pois isso causaria conflito com o blueprint
 
 app.register_blueprint(bookings_bp, url_prefix='/api')
 
