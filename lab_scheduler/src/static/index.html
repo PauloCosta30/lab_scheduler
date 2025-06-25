@@ -16,18 +16,19 @@
         <div class="schedule-container">
             <h2>Escala Semanal</h2>
             <p>Clique nos horários disponíveis na tabela para selecioná-los. Após selecionar, clique em "Prosseguir com Agendamento".</p>
-            <div class="controls-container">
+            <div>
                 <label for="weekSelector">Selecionar Semana (qualquer dia da semana):</label>
                 <input type="date" id="weekSelector">
                 <button id="loadScheduleButton">Carregar Escala</button>
-                <button id="savePdfButton" style="margin-left: 10px;">Salvar como PDF</button> <!-- Botão PDF adicionado -->
             </div>
-            <div id="bookingStatusMessage" class="message info"></div> <!-- Mensagem de status do agendamento -->
             <div id="scheduleTableContainer">
                 <!-- Tabela da escala será gerada aqui -->
             </div>
             <div id="scheduleMessage" class="message"></div>
-            <button id="proceedToBookingButton" disabled>Prosseguir com Agendamento</button>
+            <div class="action-buttons">
+                <button id="proceedToBookingButton" disabled>Prosseguir com Agendamento</button>
+                <button id="generatePdfButton" disabled>Gerar PDF da Escala</button>
+            </div>
         </div>
 
         <!-- Modal de Agendamento -->
@@ -54,6 +55,10 @@
                         <label for="modalCoordinatorName">Nome do Coordenador:</label>
                         <input type="text" id="modalCoordinatorName" name="coordinatorName" required>
                     </div>
+                    <div>
+                        <label for="modalObservation">Observação do Agendamento:</label>
+                        <textarea id="modalObservation" name="observation" rows="3" placeholder="Digite aqui qualquer observação sobre o agendamento (opcional)"></textarea>
+                    </div>
                     <button type="submit">Confirmar e Agendar</button>
                 </form>
                 <div id="modalFormMessage" class="message"></div>
@@ -64,3 +69,4 @@
     <script src="script.js"></script>
 </body>
 </html>
+
