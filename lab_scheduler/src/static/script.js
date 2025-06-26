@@ -1,14 +1,13 @@
 // /home/ubuntu/lab_scheduler/src/static/script.js
 
 document.addEventListener("DOMContentLoaded", () => {
-    // DOM Elements
+    // DOM Elements for Modal and New Flow
     const weekSelector = document.getElementById("weekSelector");
     const loadScheduleButton = document.getElementById("loadScheduleButton");
     const scheduleTableContainer = document.getElementById("scheduleTableContainer");
     const scheduleMessage = document.getElementById("scheduleMessage");
     const proceedToBookingButton = document.getElementById("proceedToBookingButton");
-    const savePdfButton = document.getElementById("savePdfButton"); // PDF Button
-    const bookingStatusMessage = document.getElementById("bookingStatusMessage"); // Booking Status Message Area
+    const generatePdfButton = document.getElementById("generatePdfButton");
 
     const bookingModal = document.getElementById("bookingModal");
     const closeModalButton = document.querySelector(".close-button");
@@ -20,8 +19,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let allRooms = [];
     let selectedSlots = []; // Stores { roomId, roomName, date, period, cellRef }
     let currentFetchedBookings = [];
-    let currentWeekStartDate; // Monday of the currently displayed week
-    let currentBookingStatus = {}; // Store booking window status
+    let currentWeekStartDate;
 
     // --- Helper Functions for Date Handling (UTC) ---
     function getTodayUTC() {
@@ -30,16 +28,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function parseDateStrToUTC(dateStr) {
-        if (!dateStr) return null;
         const [year, month, day] = dateStr.split("-").map(Number);
-        // Month is 0-indexed in JS Date
         return new Date(Date.UTC(year, month - 1, day));
-    }
-
-    function formatUTCDate(dateObj, options = { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }) {
-        if (!dateObj) return "";
-        // Use toLocaleDateString for formatting
-        return dateObj.toLocaleDateString("pt-BR", options);
     }
 
     // --- Helper Functions for Messages ---
@@ -57,38 +47,12 @@ document.addEventListener("DOMContentLoaded", () => {
     function showScheduleMessage(message, type) {
         scheduleMessage.textContent = message;
         scheduleMessage.className = `message ${type}`;
-        if (type !== "error" && type !== "info") {
+        if (type !== "error" && type !== "info") { // Keep error and info messages longer or until next action
              setTimeout(() => {
                 scheduleMessage.textContent = "";
                 scheduleMessage.className = "message";
             }, 3000);
         }
-    }
-
-    // Function to display booking status with local time hints - CORRIGIDO
-    function showBookingStatusMessage(status) {
-        let message = "Status do Agendamento: ";
-        const now = new Date(status.server_time_utc);
-        const cutoff = new Date(status.current_week_cutoff); // Wednesday 21:00 UTC
-        const release = new Date(status.next_week_release); // Thursday 02:59 UTC
-
-        // Hardcoded display times (local Brazil Time)
-        const displayCutoffTime = "18:00";
-        const displayReleaseTime = "23:59";
-
-        // Simplificado para mostrar apenas o status atual sem informações confusas
-        if (status.current_week_open) {
-            message += `Aberto para a semana atual (até quarta-feira, ${displayCutoffTime}).`;
-        } else if (status.next_week_open) {
-            message += `Aberto para a próxima semana (até quarta-feira, ${displayCutoffTime}).`;
-        } else if (now < release) {
-            message += `Fechado para a semana atual. Aguardando abertura para a próxima semana (abre quinta-feira, ${displayReleaseTime}).`;
-        } else {
-            message += `Fechado para agendamentos.`;
-        }
-        
-        bookingStatusMessage.textContent = message;
-        bookingStatusMessage.className = "message info";
     }
 
     // --- Room Data --- 
@@ -103,112 +67,49 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // --- Booking Status --- 
-    async function fetchBookingStatus() {
-        try {
-            const response = await fetch(`${API_BASE_URL}/booking-status`);
-            if (!response.ok) throw new Error(`Erro ao buscar status: ${response.statusText}`);
-            currentBookingStatus = await response.json();
-            showBookingStatusMessage(currentBookingStatus);
-            return currentBookingStatus; // Return status for default week logic
-        } catch (error) {
-            console.error("Falha ao buscar status do agendamento:", error);
-            bookingStatusMessage.textContent = "Não foi possível verificar o status do agendamento.";
-            bookingStatusMessage.className = "message error";
-            return null; // Return null on error
-        }
-    }
-
     // --- Schedule Logic (Loading and Rendering) ---
     async function loadScheduleData(selectedDateStr) {
         let startDate, endDate;
-        let fetchedStatus = currentBookingStatus; // Use cached status first
-
-        // Always fetch latest status before deciding which week to load by default
-        if (!selectedDateStr) {
-            fetchedStatus = await fetchBookingStatus();
-            if (!fetchedStatus) {
-                 showScheduleMessage("Erro ao obter status para carregar semana padrão.", "error");
-                 return;
-            }
-        }
+        const todayUTC = getTodayUTC();
 
         if (selectedDateStr) {
-            // If a date is selected, load that specific week (Mon-Fri)
             const selectedDateObj = parseDateStrToUTC(selectedDateStr);
-            const dayOfWeek = selectedDateObj.getUTCDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+            // Ensure the selected week is not entirely in the past relative to server time (UTC)
+            // We check the start of the week for this.
+            const tempDate = new Date(selectedDateObj.valueOf()); // Clone to avoid modifying selectedDateObj
+            const dayOfWeek = tempDate.getUTCDay();
+            const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+            startDate = new Date(tempDate.setUTCDate(tempDate.getUTCDate() + diffToMonday));
             
-            // CORREÇÃO: Garantir que a semana sempre comece na segunda-feira
-            // Se for domingo (0), vá para a segunda-feira seguinte (+1)
-            // Se for outro dia, vá para a segunda-feira da mesma semana
-            let diffToMonday;
-            if (dayOfWeek === 0) {
-                diffToMonday = 1; // Domingo -> Segunda (próxima)
-            } else {
-                diffToMonday = 1 - dayOfWeek; // Outros dias -> Segunda (mesma semana)
+            // If the Friday of the selected week is in the past, show a message and don't load.
+            const endOfWeekForCheck = new Date(startDate.valueOf());
+            endOfWeekForCheck.setUTCDate(startDate.getUTCDate() + 4);
+            if (endOfWeekForCheck < todayUTC && endOfWeekForCheck.toISOString().split("T")[0] !== todayUTC.toISOString().split("T")[0]) {
+                showScheduleMessage("Não é possível carregar escalas de semanas completamente passadas.", "info");
+                scheduleTableContainer.innerHTML = "<p>Selecione uma semana atual ou futura.</p>";
+                return;
             }
-            
-            startDate = new Date(Date.UTC(selectedDateObj.getUTCFullYear(), selectedDateObj.getUTCMonth(), selectedDateObj.getUTCDate() + diffToMonday));
-        } else {
-            // Default week logic: Load current or next week based on release time
-            const now = new Date(fetchedStatus.server_time_utc);
-            const release = new Date(fetchedStatus.next_week_release); // Thursday 02:59 UTC
-            const todayForLogic = new Date(now); // Use server time for consistency
-            const dayOfWeek = todayForLogic.getUTCDay();
-            
-            // CORREÇÃO: Garantir que a semana sempre comece na segunda-feira
-            // Se for domingo (0), vá para a segunda-feira seguinte (+1)
-            // Se for outro dia, vá para a segunda-feira da mesma semana
-            let diffToMonday;
-            if (dayOfWeek === 0) {
-                diffToMonday = 1; // Domingo -> Segunda (próxima)
-            } else {
-                diffToMonday = 1 - dayOfWeek; // Outros dias -> Segunda (mesma semana)
-            }
-            
-            const currentMonday = new Date(Date.UTC(todayForLogic.getUTCFullYear(), todayForLogic.getUTCMonth(), todayForLogic.getUTCDate() + diffToMonday));
-
-            if (now >= release) {
-                // If past release time, default to NEXT week
-                startDate = new Date(Date.UTC(currentMonday.getUTCFullYear(), currentMonday.getUTCMonth(), currentMonday.getUTCDate() + 7));
-            } else {
-                // Otherwise, default to CURRENT week
-                startDate = currentMonday;
-            }
-            // Update the week selector to reflect the loaded week
-            weekSelector.value = startDate.toISOString().split("T")[0];
+            endDate = new Date(new Date(startDate).setUTCDate(startDate.getUTCDate() + 4));
+        } else { // Default to current week
+            const todayForLogic = new Date(); // Use local today to find current week's Monday
+            const dayOfWeek = todayForLogic.getDay();
+            const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+            startDate = new Date(todayForLogic.setDate(todayForLogic.getDate() + diffToMonday));
+            // Convert startDate to UTC for API call and logic
+            startDate = parseDateStrToUTC(startDate.toISOString().split("T")[0]);
+            endDate = new Date(new Date(startDate).setUTCDate(startDate.getUTCDate() + 4));
         }
-
-        // Calculate end date (Friday of the week)
-        endDate = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate() + 4)); // +4 para sexta-feira
-        currentWeekStartDate = startDate; // Store the Monday of the displayed week
+        currentWeekStartDate = startDate; 
 
         const startDateStrAPI = startDate.toISOString().split("T")[0];
         const endDateStrAPI = endDate.toISOString().split("T")[0];
         
         showScheduleMessage("Carregando escala...", "");
-        scheduleTableContainer.innerHTML = ""; // Clear previous table
-        proceedToBookingButton.disabled = true; // Disable button while loading
-
         try {
-            // Fetch bookings and ensure rooms are loaded
-            // Status might already be fetched if loading default week
-            const promises = [
-                (async () => {
-                    const response = await fetch(`${API_BASE_URL}/bookings?start_date=${startDateStrAPI}&end_date=${endDateStrAPI}`);
-                    if (!response.ok) throw new Error(`Erro ao buscar agendamentos: ${response.statusText}`);
-                    currentFetchedBookings = await response.json();
-                })(),
-                (async () => {
-                     if (allRooms.length === 0) await fetchAllRooms();
-                })()
-            ];
-            // Only fetch status again if it wasn't fetched for default week logic
-            if (selectedDateStr) {
-                 promises.push(fetchBookingStatus());
-            }
-            
-            await Promise.all(promises);
+            const response = await fetch(`${API_BASE_URL}/bookings?start_date=${startDateStrAPI}&end_date=${endDateStrAPI}`);
+            if (!response.ok) throw new Error(`Erro ao buscar agendamentos: ${response.statusText}`);
+            currentFetchedBookings = await response.json();
+            if (allRooms.length === 0) await fetchAllRooms();
             
             renderScheduleTable(currentFetchedBookings, allRooms, currentWeekStartDate);
             showScheduleMessage("Escala carregada.", "success");
@@ -219,15 +120,13 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // Renders the schedule table for 5 days (Mon-Fri)
-        function renderScheduleTable(bookings, roomsData, weekStartDateObj) {
+    function renderScheduleTable(bookings, roomsData, weekStartDateObj) {
         scheduleTableContainer.innerHTML = "";
         selectedSlots = [];
-        updateProceedButtonState();
+        updateButtonStates();
         const todayUTC = getTodayUTC();
 
         const table = document.createElement("table");
-        table.id = "scheduleTable"; // Add ID for PDF generation
         const thead = document.createElement("thead");
         const tbody = document.createElement("tbody");
 
@@ -243,7 +142,7 @@ document.addEventListener("DOMContentLoaded", () => {
             datesOfWeek.push(currentDate.toISOString().split("T")[0]);
             const th = document.createElement("th");
             th.colSpan = 2;
-            th.textContent = `${days[i]} (${formatUTCDate(currentDate)})`;
+            th.textContent = `${days[i]} (${currentDate.toLocaleDateString("pt-BR", {day:"2-digit", month:"2-digit", timeZone: "UTC"})})`;
             headerRow.appendChild(th);
         }
         thead.appendChild(headerRow);
@@ -269,7 +168,6 @@ document.addEventListener("DOMContentLoaded", () => {
             datesOfWeek.forEach(dateStr => {
                 const slotDateUTC = parseDateStrToUTC(dateStr);
                 const isPastDate = slotDateUTC < todayUTC;
-                const isBookingAllowedForSlot = checkBookingWindowFrontend(slotDateUTC);
 
                 periods.forEach(period => {
                     const cell = document.createElement("td");
@@ -281,9 +179,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (booking) {
                         cell.textContent = booking.user_name;
                         cell.classList.add("booked");
-                    } else if (!isBookingAllowedForSlot) {
-                        cell.textContent = "Bloqueado";
-                        cell.classList.add("locked"); // New class for slots outside booking window
+                    } else if (isPastDate) {
+                        cell.textContent = "Indisponível";
+                        cell.classList.add("past"); // Add a new class for past, unbookable slots
                     } else {
                         cell.textContent = "Disponível";
                         cell.classList.add("available");
@@ -302,63 +200,20 @@ document.addEventListener("DOMContentLoaded", () => {
         scheduleTableContainer.appendChild(table);
     }
 
-    // Frontend check based on fetched status (uses UTC dates)
-    function checkBookingWindowFrontend(slotDateUTC) {
-        if (!currentBookingStatus || !currentBookingStatus.current_week_start) {
-            console.warn("Booking status not available for frontend check.");
-            return false; // Default to not allowed if status unknown
-        }
-        const now = new Date(currentBookingStatus.server_time_utc);
-        const currentWeekStart = parseDateStrToUTC(currentBookingStatus.current_week_start);
-        const nextWeekStart = parseDateStrToUTC(currentBookingStatus.next_week_start);
-        const currentWeekEnd = parseDateStrToUTC(currentBookingStatus.current_week_end); // Friday
-        const nextWeekEnd = parseDateStrToUTC(currentBookingStatus.next_week_end); // Friday
-        
-        const cutoffCurrent = new Date(currentBookingStatus.current_week_cutoff);
-        const releaseNext = new Date(currentBookingStatus.next_week_release);
-        
-        // Calculate cutoff for the next week (Wednesday 21:00 UTC of next week)
-        const cutoffNext = new Date(nextWeekStart);
-        cutoffNext.setUTCDate(nextWeekStart.getUTCDate() + 2); // Go to Wednesday
-        cutoffNext.setUTCHours(21, 0, 0, 0); // Set time to 21:00 UTC
-
-        // Check if the slot date falls within the current week (Mon-Fri)
-        if (slotDateUTC >= currentWeekStart && slotDateUTC <= currentWeekEnd) {
-            // Also check if it's a weekend (shouldn't happen with backend block, but good practice)
-            if (slotDateUTC.getUTCDay() === 0 || slotDateUTC.getUTCDay() === 6) return false;
-            return now < cutoffCurrent; // Allowed only if before current week's cutoff
-        }
-        // Check if the slot date falls within the next week (Mon-Fri)
-        else if (slotDateUTC >= nextWeekStart && slotDateUTC <= nextWeekEnd) {
-            // Also check if it's a weekend
-            if (slotDateUTC.getUTCDay() === 0 || slotDateUTC.getUTCDay() === 6) return false;
-            // Allowed only if after release time AND before next week's cutoff
-            return now >= releaseNext && now < cutoffNext;
-        }
-        // Allow past dates based on backend logic (if user configured it)
-        else if (slotDateUTC < currentWeekStart) {
-            // Check if it's a weekend
-            if (slotDateUTC.getUTCDay() === 0 || slotDateUTC.getUTCDay() === 6) return false;
-            // Assume backend handles validation for past dates
-            return true; // Allow interaction, backend will validate
-        }
-        
-        return false; // Slot is too far in the future or invalid
-    }
-
     function handleSlotClick(event) {
         const cell = event.currentTarget;
-        if (!cell.classList.contains("available")) return;
+        if (cell.classList.contains("booked") || cell.classList.contains("past")) return;
 
         const slotDateStr = cell.dataset.date;
         const slotDateUTC = parseDateStrToUTC(slotDateStr);
+        const todayUTC = getTodayUTC();
 
-        // Re-check booking window just in case status changed since render
-        if (!checkBookingWindowFrontend(slotDateUTC)) {
-            showScheduleMessage("Este horário não está mais disponível para agendamento ou a janela de agendamento fechou.", "error");
-            cell.classList.remove("available");
-            cell.classList.add("locked");
-            cell.textContent = "Bloqueado";
+        if (slotDateUTC < todayUTC) {
+            showScheduleMessage("Não é possível selecionar datas/horários passados.", "error");
+            // Visually revert if it was somehow selected or state changed, though 'past' class should prevent click.
+            cell.classList.remove("selected");
+            cell.classList.add("available"); // Or add 'past' if not already there
+            cell.textContent = "Disponível"; // Or "Passado"
             return;
         }
 
@@ -381,26 +236,59 @@ document.addEventListener("DOMContentLoaded", () => {
             cell.classList.remove("selected");
             cell.textContent = "Disponível";
         } else {
-            // Check max selection limit (e.g., 3 per request)
-            
             selectedSlots.push(slotData);
             cell.classList.add("selected");
             cell.textContent = "Selecionado";
         }
-        updateProceedButtonState();
+        updateButtonStates();
     }
 
-    function updateProceedButtonState() {
-        let bookingAllowed = selectedSlots.length > 0;
-        if (bookingAllowed) {
-            for (const slot of selectedSlots) {
-                if (!checkBookingWindowFrontend(parseDateStrToUTC(slot.date))) {
-                    bookingAllowed = false;
-                    break;
-                }
-            }
+    function updateButtonStates() {
+        proceedToBookingButton.disabled = selectedSlots.length === 0;
+        if (generatePdfButton) {
+            generatePdfButton.disabled = !currentWeekStartDate;
         }
-        proceedToBookingButton.disabled = !bookingAllowed;
+    }
+
+    // --- PDF Generation ---
+    async function generatePdf() {
+        if (!currentWeekStartDate) {
+            showScheduleMessage("Carregue uma escala primeiro antes de gerar o PDF.", "error");
+            return;
+        }
+
+        const startDate = currentWeekStartDate.toISOString().split("T")[0];
+        const endDate = new Date(currentWeekStartDate.valueOf());
+        endDate.setUTCDate(currentWeekStartDate.getUTCDate() + 4);
+        const endDateStr = endDate.toISOString().split("T")[0];
+
+        showScheduleMessage("Gerando PDF...", "");
+        
+        try {
+            const response = await fetch(`${API_BASE_URL}/generate-pdf?start_date=${startDate}&end_date=${endDateStr}`);
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || "Erro ao gerar PDF");
+            }
+
+            // Criar blob do PDF e fazer download
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `escala_agendamentos_${startDate}_a_${endDateStr}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            showScheduleMessage("PDF gerado e baixado com sucesso!", "success");
+        } catch (error) {
+            console.error("Erro ao gerar PDF:", error);
+            showScheduleMessage(`Erro ao gerar PDF: ${error.message}`, "error");
+        }
     }
 
     // --- Modal Logic ---
@@ -409,29 +297,20 @@ document.addEventListener("DOMContentLoaded", () => {
             showScheduleMessage("Nenhum horário selecionado.", "error");
             return;
         }
-        // Final check on booking window for all selected slots
-        let allSlotsAllowed = true;
+        // Double check for past dates before opening modal
+        const todayUTC = getTodayUTC();
         for (const slot of selectedSlots) {
-             if (!checkBookingWindowFrontend(parseDateStrToUTC(slot.date))) {
-                allSlotsAllowed = false;
-                slot.cellRef.classList.remove("selected");
-                slot.cellRef.classList.add("locked");
-                slot.cellRef.textContent = "Bloqueado";
+            if (parseDateStrToUTC(slot.date) < todayUTC) {
+                showScheduleMessage("Um ou mais horários selecionados estão no passado e não podem ser agendados. Por favor, desmarque-os.", "error");
+                // Optionally, could auto-deselect them here and update UI
+                return;
             }
-        }
-        // Remove disallowed slots from selection
-        selectedSlots = selectedSlots.filter(slot => checkBookingWindowFrontend(parseDateStrToUTC(slot.date)));
-        updateProceedButtonState();
-
-        if (!allSlotsAllowed || selectedSlots.length === 0) {
-             showScheduleMessage("Um ou mais horários selecionados não estão mais disponíveis devido ao fechamento da janela de agendamento. Verifique a seleção.", "error");
-             return;
         }
 
         selectedSlotsSummaryList.innerHTML = "";
         selectedSlots.forEach(slot => {
             const li = document.createElement("li");
-            li.textContent = `${slot.roomName} - ${formatUTCDate(parseDateStrToUTC(slot.date), {day: "2-digit", month: "2-digit"})} - ${slot.period}`;
+            li.textContent = `${slot.roomName} - ${new Date(slot.date + 'T00:00:00').toLocaleDateString('pt-BR', {timeZone: 'UTC'})} - ${slot.period}`;
             selectedSlotsSummaryList.appendChild(li);
         });
         modalBookingForm.reset();
@@ -450,6 +329,7 @@ document.addEventListener("DOMContentLoaded", () => {
             user_name: formData.get("userName"),
             user_email: formData.get("userEmail"),
             coordinator_name: formData.get("coordinatorName"),
+            observation: formData.get("observation") || "", // Novo campo de observação
             slots: selectedSlots.map(s => ({ 
                 room_id: s.roomId, 
                 booking_date: s.date, 
@@ -458,7 +338,7 @@ document.addEventListener("DOMContentLoaded", () => {
         };
 
         if (requestData.slots.length === 0) {
-            showModalMessage("Nenhum horário válido selecionado para agendar.", "error");
+            showModalMessage("Nenhum horário foi selecionado para agendar.", "error");
             return;
         }
 
@@ -470,28 +350,22 @@ document.addEventListener("DOMContentLoaded", () => {
                 body: JSON.stringify(requestData)
             });
             const result = await response.json();
-            if (response.ok) {
+            if (response.ok && response.status === 201) {
                 showModalMessage(result.message || "Agendamento(s) realizado(s) com sucesso!", "success");
-                // Clear selection and update UI immediately
                 selectedSlots.forEach(slot => {
-                    slot.cellRef.classList.remove("selected", "available");
-                    slot.cellRef.classList.add("booked");
+                    slot.cellRef.classList.remove('selected', 'available');
+                    slot.cellRef.classList.add('booked');
                     slot.cellRef.textContent = requestData.user_name;
-                    slot.cellRef.removeEventListener("click", handleSlotClick);
+                    slot.cellRef.removeEventListener('click', handleSlotClick);
                 });
                 selectedSlots = [];
-                updateProceedButtonState();
+                updateButtonStates();
                 setTimeout(() => {
                     closeBookingModal();
-                    // Reload schedule to reflect changes and potentially new status
-                    loadScheduleData(weekSelector.value || null); // Reload current or default week
+                    loadScheduleData(weekSelector.value || getTodayUTC().toISOString().split("T")[0]);
                 }, 2000);
             } else {
                 showModalMessage(result.error || "Erro ao realizar agendamento.", "error");
-                // If conflict or other error, reload schedule to show the current state
-                if (response.status === 409 || response.status === 400) { 
-                     loadScheduleData(weekSelector.value || null);
-                }
             }
         } catch (error) {
             console.error("Erro ao submeter agendamento do modal:", error);
@@ -499,45 +373,52 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // --- PDF Generation --- 
-    async function handleSavePdfClick() {
-        if (!currentWeekStartDate) {
-            showScheduleMessage("Carregue uma escala primeiro para salvar em PDF.", "error");
-            return;
-        }
-        const weekStartDateStr = currentWeekStartDate.toISOString().split("T")[0];
-        showScheduleMessage("Gerando PDF...", "info");
-        
-        // Construct URL for PDF generation endpoint
-        const pdfUrl = `${API_BASE_URL}/generate-pdf?week_start_date=${weekStartDateStr}`;
-        
-        try {
-            // Open the URL in a new tab/window, the browser will handle the download
-            window.open(pdfUrl, "_blank");
-            showScheduleMessage("O download do PDF deve iniciar em breve.", "success");
-        } catch (error) {
-            console.error("Erro ao tentar gerar PDF:", error);
-            showScheduleMessage("Falha ao iniciar geração do PDF.", "error");
-        }
-    }
-
-    // --- Initialization ---
-    function initialize() {
-        // Event Listeners
-        loadScheduleButton.addEventListener("click", () => loadScheduleData(weekSelector.value));
-        proceedToBookingButton.addEventListener("click", openBookingModal);
-        savePdfButton.addEventListener("click", handleSavePdfClick); // PDF button listener
-        closeModalButton.addEventListener("click", closeBookingModal);
-        modalBookingForm.addEventListener("submit", handleModalFormSubmit);
-        window.addEventListener("click", (event) => {
-            if (event.target === bookingModal) {
-                closeBookingModal();
+    // --- Event Listeners ---
+    if (loadScheduleButton) {
+        loadScheduleButton.addEventListener("click", () => {
+            const selectedDate = weekSelector.value;
+            if (!selectedDate) {
+                showScheduleMessage("Por favor, selecione uma data para carregar a semana.", "error");
+                return;
             }
+            loadScheduleData(selectedDate);
         });
-
-        // Initial Load (will now load current or next week based on status)
-        loadScheduleData(null);
     }
 
-    initialize();
+    if (proceedToBookingButton) {
+        proceedToBookingButton.addEventListener("click", openBookingModal);
+    }
+
+    if (generatePdfButton) {
+        generatePdfButton.addEventListener("click", generatePdf);
+    }
+
+    if (closeModalButton) {
+        closeModalButton.addEventListener("click", closeBookingModal);
+    }
+
+    window.addEventListener("click", (event) => {
+        if (event.target === bookingModal) {
+            closeBookingModal();
+        }
+    });
+
+    if (modalBookingForm) {
+        modalBookingForm.addEventListener("submit", handleModalFormSubmit);
+    }
+
+    // --- Initializations ---
+    async function initializeApp() {
+        const todayUTC = getTodayUTC();
+        const todayUTCStr = todayUTC.toISOString().split("T")[0];
+        if(weekSelector) {
+            weekSelector.value = todayUTCStr;
+            weekSelector.min = todayUTCStr; // Prevent selecting past dates in the date picker itself
+        }
+        await fetchAllRooms();
+        loadScheduleData(todayUTCStr);
+    }
+
+    initializeApp();
+
 });
