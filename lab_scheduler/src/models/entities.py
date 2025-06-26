@@ -23,8 +23,11 @@ class Booking(db.Model):
     room_id = db.Column(db.Integer, db.ForeignKey("rooms.id"), nullable=False)
     booking_date = db.Column(db.Date, nullable=False)
     period = db.Column(db.String(20), nullable=False)  # "Manhã" ou "Tarde"
+    observation = db.Column(db.Text, nullable=True) # Novo campo para observações
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
 
     def __repr__(self):
         return f"<Booking {self.user_name} ({self.user_email}) - Room: {self.room.name} on {self.booking_date} ({self.period}) - Coord: {self.coordinator_name}>"
+
+
 
