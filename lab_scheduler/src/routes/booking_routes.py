@@ -135,7 +135,7 @@ def get_booking_window_status():
         status["next_week"]["open"] = True
         status["next_week"]["message"] = "Aberto para a próxima semana"
     elif now_brasilia < next_week_open_datetime:
-        status["next_week"]["message"] = f"Abre na quinta-feira às 23:59 ({next_week_open_date.strftime("%d/%m")})"
+        status["next_week"]["message"] = f"Abre na quinta-feira às 23:59 ({next_week_open_date.strftime('%d/%m')})"
     else:
         status["next_week"]["message"] = "Fechado (após quarta-feira 18:00 da próxima semana)"
 
