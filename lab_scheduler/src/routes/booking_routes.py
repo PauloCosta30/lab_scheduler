@@ -47,7 +47,7 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, obs
             except ValueError:
                 pass
 
-        html_body += f"<li>Sala: {slot["room_name"]} - Data: {booking_date_formatted} - Período: {slot["period"]}</li>"
+        html_body += f"<li>Sala: {slot['room_name']} - Data: {booking_date_formatted} - Período: {slot['period']}</li>"
     
     html_body += "</ul>"
     if coordinator_name:
