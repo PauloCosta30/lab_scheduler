@@ -47,7 +47,7 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, obs
             except ValueError:
                 pass
 
-        html_body += f"<li>Sala: {slot["room_name"]} - Data: {booking_date_formatted} - Período: {slot["period"]}</li>"
+        html_body += f"<li>Sala: {slot['room_name']} - Data: {booking_date_formatted} - Período: {slot['period']}</li>"
     
     html_body += "</ul>"
     if coordinator_name:
@@ -208,11 +208,11 @@ def create_booking():
         if booking_date_obj >= current_week_monday and booking_date_obj < next_week_monday:
             # Agendamento para a semana atual
             if not booking_window["current_week"]["open"]:
-                return jsonify({"error": f"Agendamentos para a semana atual estão fechados. {booking_window["current_week"]["message"]}"}), 403
+                return jsonify({"error": f"Agendamentos para a semana atual estão fechados. {booking_window['current_week']['message']}"}), 403
         elif booking_date_obj >= next_week_monday and booking_date_obj < (next_week_monday + timedelta(weeks=1)):
             # Agendamento para a próxima semana
             if not booking_window["next_week"]["open"]:
-                return jsonify({"error": f"Agendamentos para a próxima semana estão fechados. {booking_window["next_week"]["message"]}"}), 403
+                return jsonify({"error": f"Agendamentos para a próxima semana estão fechados. {booking_window['next_week']['message']}"}), 403
         else:
             return jsonify({"error": f"Agendamentos só são permitidos para a semana atual ou próxima semana."}), 403
 
