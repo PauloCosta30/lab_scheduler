@@ -1,13 +1,13 @@
 # /home/ubuntu/lab_scheduler/src/routes/booking_routes.py
 
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, render_template, make_response
 from src.extensions import db
 from src.models.entities import Room, Booking
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from collections import defaultdict
-from flask_mail import Message # Import Message for Flask-Mail
-# It's better to get mail instance from current_app or pass it if not using current_app context directly in functions
-# from src.main import mail # Avoid direct import from main if possible to prevent circular dependencies
+from flask_mail import Message
+from weasyprint import HTML
+import re
 
 bookings_bp = Blueprint("bookings_bp", __name__)
 
@@ -15,7 +15,7 @@ MAX_BOOKINGS_PER_DAY = 3
 
 # Helper function to send confirmation email
 def send_booking_confirmation_email(user_email, user_name, coordinator_name, observation, booked_slots_details):
-    mail = current_app.extensions.get("mail") # Get Mail instance from app context
+    mail = current_app.extensions.get("mail")
     if not mail:
         current_app.logger.error("Flask-Mail (mail object) not found in current_app.extensions. Email not sent.")
         return False
@@ -34,16 +34,14 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, obs
     <ul>
     """
     for slot in booked_slots_details:
-        # Ensure date is formatted nicely if it's an object
         booking_date_formatted = slot["booking_date"]
         if isinstance(slot["booking_date"], date):
             booking_date_formatted = slot["booking_date"].strftime("%d/%m/%Y")
         elif isinstance(slot["booking_date"], str):
-             # Assuming it's already YYYY-MM-DD, convert to DD/MM/YYYY
             try:
                 booking_date_formatted = datetime.strptime(slot["booking_date"], "%Y-%m-%d").strftime("%d/%m/%Y")
             except ValueError:
-                pass # Keep original string if parsing fails
+                pass
 
         html_body += f"<li>Sala: {slot['room_name']} - Data: {booking_date_formatted} - Período: {slot['period']}</li>"
     
@@ -65,7 +63,7 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, obs
         current_app.logger.error(f"Falha ao enviar email para {user_email}: {str(e)}")
         return False
 
-# Helper function to check for conflicts (remains the same)
+# Helper function to check for conflicts
 def check_booking_conflict(room_id, booking_date_obj, period):
     existing_booking = Booking.query.filter_by(
         room_id=room_id,
@@ -74,10 +72,29 @@ def check_booking_conflict(room_id, booking_date_obj, period):
     ).first()
     return existing_booking is not None
 
+# Helper function to sort rooms with custom logic for "Geral" rooms
+def sort_rooms_custom(rooms):
+    """Ordena salas colocando as 'Geral' em ordem numérica correta"""
+    def room_sort_key(room):
+        name = room.name
+        # Se é uma sala "Geral", extrair o número para ordenação correta
+        if name.startswith("Geral "):
+            try:
+                number = int(re.findall(r'\d+', name)[0])
+                return (0, number)  # Prioridade 0 para salas Geral, ordenadas por número
+            except (IndexError, ValueError):
+                return (0, 999)  # Se não conseguir extrair número, coloca no final das Geral
+        else:
+            # Para outras salas, usar o ID original
+            return (1, room.id)
+    
+    return sorted(rooms, key=room_sort_key)
+
 @bookings_bp.route("/rooms", methods=["GET"])
 def get_rooms():
     rooms = Room.query.all()
-    return jsonify([{"id": room.id, "name": room.name} for room in rooms])
+    sorted_rooms = sort_rooms_custom(rooms)
+    return jsonify([{"id": room.id, "name": room.name} for room in sorted_rooms])
 
 @bookings_bp.route("/bookings", methods=["POST"])
 def create_booking():
@@ -88,7 +105,7 @@ def create_booking():
     user_name = data.get("user_name")
     user_email = data.get("user_email")
     coordinator_name = data.get("coordinator_name")
-    observation = data.get("observation", "")  # Novo campo de observação
+    observation = data.get("observation", "")
     slots_data = data.get("slots")
 
     if not all([user_name, user_email, slots_data]):
@@ -116,7 +133,7 @@ def create_booking():
             booking_date_obj = datetime.strptime(booking_date_str, "%Y-%m-%d").date()
         except ValueError:
             return jsonify({"error": f"Invalid date format '{booking_date_str}' in slot: {slot_input}. Use YYYY-MM-DD"}), 400
-        if booking_date_obj < date.today(): # Check against server's current date (UTC)
+        if booking_date_obj < date.today():
             return jsonify({"error": f"Booking date {booking_date_str} in slot: {slot_input} cannot be in the past"}), 400
         if booking_date_obj.weekday() >= 5:
             return jsonify({"error": f"Bookings for date {booking_date_str} in slot: {slot_input} are only allowed on weekdays (Mon-Fri)"}), 400
@@ -139,30 +156,33 @@ def create_booking():
                 "error": f"Limite de {MAX_BOOKINGS_PER_DAY} agendamentos por dia para o usuário '{user_name}' seria excedido no dia {booking_date_obj.strftime('%Y-%m-%d')}."
             }), 409
 
-    # NEW VALIDATION: Limit of one "Geral" room category per day per user
-    geral_rooms_requested_this_request_by_day = defaultdict(set)
-    for slot in processed_slots:
-        if slot['room_name'].startswith("Geral "):
-            geral_rooms_requested_this_request_by_day[slot['booking_date_obj']].add(slot['room_id'])
-
-    for booking_date_obj, geral_room_ids_in_request in geral_rooms_requested_this_request_by_day.items():
-        # 1. Check if in the SAME REQUEST the user asked for more than one different "Geral" room for the same day
-        if len(geral_room_ids_in_request) > 1:
-            return jsonify({
-                "error": f"Você só pode agendar uma sala da categoria 'Geral' por dia. Tentativa de agendar múltiplas salas 'Geral' diferentes no dia {booking_date_obj.strftime('%Y-%m-%d')}."
-            }), 409
-
-        # 2. For the "Geral" room(s) in this request, check if another "Geral" room is already booked in the DB for this user on this day
-        for room_id_in_request in geral_room_ids_in_request: # Usually only one ID here due to the validation above
-            existing_geral_booking_other_room = Booking.query.join(Room).filter(
+    # Validation for "Geral" rooms - only one per period per day per user
+    for booking_date_obj, _ in daily_new_bookings_count.items():
+        geral_periods_in_request = defaultdict(list)
+        
+        # Agrupar salas "Geral" por período neste request
+        for slot in processed_slots:
+            if slot['booking_date_obj'] == booking_date_obj and slot['room_name'].startswith("Geral "):
+                geral_periods_in_request[slot['period']].append(slot['room_name'])
+        
+        # Verificar se há mais de uma sala "Geral" no mesmo período
+        for period, geral_rooms in geral_periods_in_request.items():
+            if len(geral_rooms) > 1:
+                return jsonify({
+                    "error": f"Você só pode agendar uma sala da categoria 'Geral' por período. Tentativa de agendar múltiplas salas 'Geral' no período '{period}' do dia {booking_date_obj.strftime('%Y-%m-%d')}."
+                }), 409
+            
+            # Verificar se já existe agendamento de sala "Geral" para este usuário neste período
+            existing_geral_booking = Booking.query.join(Room).filter(
                 Booking.user_name == user_name,
                 Booking.booking_date == booking_date_obj,
-                Room.name.startswith("Geral "),
-                Room.id != room_id_in_request # Checks for a DIFFERENT "Geral" room
+                Booking.period == period,
+                Room.name.startswith("Geral ")
             ).first()
-            if existing_geral_booking_other_room:
+            
+            if existing_geral_booking:
                 return jsonify({
-                    "error": f"Você já possui um agendamento para outra sala da categoria 'Geral' ({existing_geral_booking_other_room.room.name}) no dia {booking_date_obj.strftime('%Y-%m-%d')}. Só é permitida uma sala 'Geral' por dia."
+                    "error": f"Você já possui um agendamento para uma sala da categoria 'Geral' ({existing_geral_booking.room.name}) no período '{period}' do dia {booking_date_obj.strftime('%Y-%m-%d')}."
                 }), 409
 
     # Validation for booking conflicts (slot already taken)
@@ -179,7 +199,7 @@ def create_booking():
                 user_name=user_name, 
                 user_email=user_email, 
                 coordinator_name=coordinator_name,
-                observation=observation,  # Novo campo de observação
+                observation=observation,
                 room_id=slot["room_id"], 
                 booking_date=slot["booking_date_obj"], 
                 period=slot["period"]
@@ -187,7 +207,7 @@ def create_booking():
             db.session.add(new_booking)
             newly_created_bookings_details_for_email.append({
                 "room_name": slot["room_name"],
-                "booking_date": slot["booking_date_str"], # Use string for consistency in email
+                "booking_date": slot["booking_date_str"],
                 "period": slot["period"]
             })
         db.session.commit()
@@ -210,13 +230,15 @@ def create_booking():
         current_app.logger.error(f"Falha ao criar agendamento(s) no servidor: {str(e)}")
         return jsonify({"error": "Falha ao criar agendamento(s) no servidor.", "details": str(e)}), 500
 
-
 @bookings_bp.route("/bookings", methods=["GET"])
 def get_bookings():
     target_date_str = request.args.get("date")
     start_date_str = request.args.get("start_date")
     end_date_str = request.args.get("end_date")
-    query = Booking.query.join(Room).order_by(Booking.booking_date, Booking.period, Room.id)
+    
+    # Usar join com Room e aplicar ordenação customizada
+    query = Booking.query.join(Room).order_by(Booking.booking_date, Booking.period)
+    
     if target_date_str:
         try:
             target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
@@ -230,7 +252,23 @@ def get_bookings():
             query = query.filter(Booking.booking_date.between(start_date, end_date))
         except ValueError:
             return jsonify({"error": "Invalid date format for 'start_date' or 'end_date'. Use YYYY-MM-DD"}), 400
+    
     bookings = query.all()
+    
+    # Aplicar ordenação customizada aos resultados
+    def booking_sort_key(booking):
+        room_name = booking.room.name
+        if room_name.startswith("Geral "):
+            try:
+                number = int(re.findall(r'\d+', room_name)[0])
+                return (0, number)
+            except (IndexError, ValueError):
+                return (0, 999)
+        else:
+            return (1, booking.room.id)
+    
+    bookings.sort(key=booking_sort_key)
+    
     result = []
     for booking in bookings:
         result.append({
@@ -238,7 +276,7 @@ def get_bookings():
             "user_name": booking.user_name, 
             "user_email": booking.user_email,
             "coordinator_name": booking.coordinator_name, 
-            "observation": booking.observation,  # Incluindo observação na resposta
+            "observation": booking.observation,
             "room_id": booking.room_id,
             "room_name": booking.room.name, 
             "booking_date": booking.booking_date.isoformat(),
@@ -246,14 +284,6 @@ def get_bookings():
             "created_at": booking.created_at.isoformat() if booking.created_at else None
         })
     return jsonify(result)
-
-
-
-
-# Importações adicionais para geração de PDF
-from flask import render_template, make_response
-from weasyprint import HTML
-from collections import defaultdict
 
 @bookings_bp.route("/generate-pdf", methods=["GET"])
 def generate_schedule_pdf():
@@ -274,10 +304,11 @@ def generate_schedule_pdf():
         # Buscar agendamentos do período
         bookings = Booking.query.join(Room).filter(
             Booking.booking_date.between(start_date, end_date)
-        ).order_by(Booking.booking_date, Booking.period, Room.id).all()
+        ).order_by(Booking.booking_date, Booking.period).all()
         
-        # Buscar todas as salas
-        rooms = Room.query.order_by(Room.id).all()
+        # Buscar todas as salas e aplicar ordenação customizada
+        rooms = Room.query.all()
+        sorted_rooms = sort_rooms_custom(rooms)
         
         # Preparar dados da escala
         schedule_data = {}
@@ -288,10 +319,10 @@ def generate_schedule_pdf():
                 date_str = current_date.isoformat()
                 dates_of_week.append(date_str)
                 schedule_data[date_str] = {
-                    "Manhã": {room.name: "" for room in rooms},
-                    "Tarde": {room.name: "" for room in rooms}
+                    "Manhã": {room.name: "" for room in sorted_rooms},
+                    "Tarde": {room.name: "" for room in sorted_rooms}
                 }
-            current_date += datetime.timedelta(days=1)
+            current_date += timedelta(days=1)
         
         # Preencher dados da escala
         for booking in bookings:
@@ -326,7 +357,7 @@ def generate_schedule_pdf():
         # Renderizar HTML
         html_content = render_template(
             'schedule_pdf_template.html',
-            rooms=rooms,
+            rooms=sorted_rooms,
             dates_of_week=dates_of_week,
             days_locale=days_locale,
             schedule_data=schedule_data,
