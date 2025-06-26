@@ -47,7 +47,7 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, obs
             except ValueError:
                 pass
 
-        html_body += f"<li>Sala: {slot["room_name"]} - Data: {booking_date_formatted} - Período: {slot["period"]}</li>"
+        html_body += f"<li>Sala: {slot['room_name']} - Data: {booking_date_formatted} - Período: {slot['period']}</li>"
     
     html_body += "</ul>"
     if coordinator_name:
@@ -78,7 +78,7 @@ def check_booking_conflict(room_id, booking_date_obj, period):
 
 # Helper function to sort rooms with custom logic for "Geral" rooms
 def sort_rooms_custom(rooms):
-    """Ordena salas colocando as 'Geral' em ordem numérica correta"""
+    """Ordena salas colocando as \'Geral\' em ordem numérica correta"""
     def room_sort_key(room):
         name = room.name
         if name.startswith("Geral "):
@@ -135,7 +135,7 @@ def get_booking_window_status():
         status["next_week"]["open"] = True
         status["next_week"]["message"] = "Aberto para a próxima semana"
     elif now_brasilia < next_week_open_datetime:
-        status["next_week"]["message"] = f"Abre na quinta-feira às 23:59 ({next_week_open_date.strftime('%d/%m')})"
+        status["next_week"]["message"] = f"Abre na quinta-feira às 23:59 ({next_week_open_date.strftime("%d/%m")})"
     else:
         status["next_week"]["message"] = "Fechado (após quarta-feira 18:00 da próxima semana)"
 
@@ -360,99 +360,5 @@ def get_bookings():
     return jsonify(result)
 
 @bookings_bp.route("/generate-pdf", methods=["GET"])
-def generate_schedule_pdf():
-    """Gera PDF da escala semanal com observações organizadas por usuário"""
-    try:
-        start_date_str = request.args.get("start_date")
-        end_date_str = request.args.get("end_date")
-        
-        if not start_date_str or not end_date_str:
-            return jsonify({"error": "Parâmetros start_date e end_date são obrigatórios"}), 400
-        
-        try:
-            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-            end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-        except ValueError:
-            return jsonify({"error": "Formato de data inválido. Use YYYY-MM-DD"}), 400
-        
-        bookings = Booking.query.join(Room).filter(
-            Booking.booking_date.between(start_date, end_date)
-        ).order_by(Booking.booking_date, Booking.period).all()
-        
-        rooms = Room.query.all()
-        sorted_rooms = sort_rooms_custom(rooms)
-        
-        schedule_data = {}
-        dates_of_week = []
-        current_date = start_date
-        while current_date <= end_date:
-            if current_date.weekday() < 5:
-                date_str = current_date.isoformat()
-                dates_of_week.append(date_str)
-                schedule_data[date_str] = {
-                    "Manhã": {room.name: "" for room in sorted_rooms},
-                    "Tarde": {room.name: "" for room in sorted_rooms}
-                }
-            current_date += timedelta(days=1)
-        
-        for booking in bookings:
-            date_str = booking.booking_date.isoformat()
-            if date_str in schedule_data:
-                room_name = booking.room.name
-                if room_name in schedule_data[date_str][booking.period]:
-                    schedule_data[date_str][booking.period][room_name] = booking.user_name
-        
-        user_observations = defaultdict(lambda: {
-            'email': '',
-            'coordinator': '',
-            'bookings': []
-        })
-        
-        for booking in bookings:
-            user_name = booking.user_name
-            user_observations[user_name]['email'] = booking.user_email
-            user_observations[user_name]['coordinator'] = booking.coordinator_name or ''
-            user_observations[user_name]['bookings'].append({
-                'room_name': booking.room.name,
-                'date': booking.booking_date,
-                'period': booking.period,
-                'observation': booking.observation or ''
-            })
-        
-        days_locale = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"]
-        generation_date = datetime.now().strftime("%d/%m/%Y às %H:%M")
-        
-        html_content = render_template(
-            'schedule_pdf_template.html',
-            rooms=sorted_rooms,
-            dates_of_week=dates_of_week,
-            days_locale=days_locale,
-            schedule_data=schedule_data,
-            user_observations=dict(user_observations),
-            week_start_date_formatted=start_date.strftime("%d/%m/%Y"),
-            week_end_date_formatted=end_date.strftime("%d/%m/%Y"),
-            generation_date=generation_date,
-            zip=zip
-        )
-        
-        pdf_bytes = HTML(string=html_content).write_pdf()
-        
-        response = make_response(pdf_bytes)
-        response.headers['Content-Type'] = 'application/pdf'
-        response.headers['Content-Disposition'] = f'attachment; filename=escala_agendamentos_{start_date_str}_a_{end_date_str}.pdf'
-        
-        return response
-        
-    except Exception as e:
-        current_app.logger.error(f"Erro ao gerar PDF: {str(e)}")
-        return jsonify({"error": "Erro interno ao gerar PDF", "details": str(e)}), 500
-
-
-# Rota para verificar o status do agendamento (para o frontend)
-@bookings_bp.route("/get-booking-status", methods=["GET"])
-def get_booking_status():
-    status = get_booking_window_status()
-    return jsonify(status)
-
-
-
+def 
+(Content truncated due to size limit. Use line ranges to read in chunks)
