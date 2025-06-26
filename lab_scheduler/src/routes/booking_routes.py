@@ -33,9 +33,9 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, obs
     recipients = [user_email]
 
     html_body = f"""\
-    <p>Olá {user_name},</p>
-    <p>Seu agendamento de laboratório foi confirmado com sucesso. Detalhes abaixo:</p>
-    <ul>
+    Olá {user_name},
+    Seu agendamento de laboratório foi confirmado com sucesso. Detalhes abaixo:
+    
     """
     for slot in booked_slots_details:
         booking_date_formatted = slot["booking_date"]
@@ -47,14 +47,15 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, obs
             except ValueError:
                 pass
 
-        html_body += f"<li>Sala: {slot['room_name']} - Data: {booking_date_formatted} - Período: {slot['period']}</li>"
+        # CORREÇÃO: Usar aspas simples para acessar as chaves do dicionário dentro da f-string
+        html_body += f"Sala: {slot['room_name']} - Data: {booking_date_formatted} - Período: {slot['period']}"
     
-    html_body += "</ul>"
+    html_body += ""
     if coordinator_name:
-        html_body += f"<p>Coordenador: {coordinator_name}</p>"
+        html_body += f"Coordenador: {coordinator_name}"
     if observation:
-        html_body += f"<p>Observação: {observation}</p>"
-    html_body += "<p>Obrigado!</p>"
+        html_body += f"Observação: {observation}"
+    html_body += "Obrigado!"
 
     msg = Message(subject, sender=sender, recipients=recipients)
     msg.html = html_body
@@ -78,12 +79,12 @@ def check_booking_conflict(room_id, booking_date_obj, period):
 
 # Helper function to sort rooms with custom logic for "Geral" rooms
 def sort_rooms_custom(rooms):
-    """Ordena salas colocando as \'Geral\' em ordem numérica correta"""
+    """Ordena salas colocando as 'Geral' em ordem numérica correta"""
     def room_sort_key(room):
         name = room.name
         if name.startswith("Geral "):
             try:
-                number = int(re.findall(r'\\d+', name)[0])
+                number = int(re.findall(r'\d+', name)[0])
                 return (0, number)
             except (IndexError, ValueError):
                 return (0, 999)
@@ -135,7 +136,7 @@ def get_booking_window_status():
         status["next_week"]["open"] = True
         status["next_week"]["message"] = "Aberto para a próxima semana"
     elif now_brasilia < next_week_open_datetime:
-        status["next_week"]["message"] = f"Abre na quinta-feira às 23:59 ({next_week_open_date.strftime("%d/%m")})"
+        status["next_week"]["message"] = f"Abre na quinta-feira às 23:59 ({next_week_open_date.strftime('%d/%m')})"
     else:
         status["next_week"]["message"] = "Fechado (após quarta-feira 18:00 da próxima semana)"
 
@@ -186,11 +187,11 @@ def create_booking():
         if not all([room_id, booking_date_str, period]):
             return jsonify({"error": f"Invalid slot data: {slot_input}. Each slot needs room_id, booking_date, period"}), 400
         if period not in ["Manhã", "Tarde"]:
-            return jsonify({"error": f"Invalid period \'{period}\' in slot: {slot_input}. Must be \'Manhã\' or \'Tarde\''"}), 400
+            return jsonify({"error": f"Invalid period '{period}' in slot: {slot_input}. Must be 'Manhã' or 'Tarde'"}), 400
         try:
             booking_date_obj = datetime.strptime(booking_date_str, "%Y-%m-%d").date()
         except ValueError:
-            return jsonify({"error": f"Invalid date format \'{booking_date_str}\' in slot: {slot_input}. Use YYYY-MM-DD"}), 400
+            return jsonify({"error": f"Invalid date format '{booking_date_str}' in slot: {slot_input}. Use YYYY-MM-DD"}), 400
         
         # Validação da janela de agendamento
         now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
@@ -208,10 +209,12 @@ def create_booking():
         if booking_date_obj >= current_week_monday and booking_date_obj < next_week_monday:
             # Agendamento para a semana atual
             if not booking_window["current_week"]["open"]:
+                # CORREÇÃO: Usar aspas simples dentro da f-string
                 return jsonify({"error": f"Agendamentos para a semana atual estão fechados. {booking_window['current_week']['message']}"}), 403
         elif booking_date_obj >= next_week_monday and booking_date_obj < (next_week_monday + timedelta(weeks=1)):
             # Agendamento para a próxima semana
             if not booking_window["next_week"]["open"]:
+                # CORREÇÃO: Usar aspas simples dentro da f-string
                 return jsonify({"error": f"Agendamentos para a próxima semana estão fechados. {booking_window['next_week']['message']}"}), 403
         else:
             return jsonify({"error": f"Agendamentos só são permitidos para a semana atual ou próxima semana."}), 403
@@ -232,7 +235,7 @@ def create_booking():
         existing_bookings_on_day = Booking.query.filter_by(user_name=user_name, booking_date=booking_date_obj).count()
         if (existing_bookings_on_day + count_for_this_request) > MAX_BOOKINGS_PER_DAY:
             return jsonify({
-                "error": f"Limite de {MAX_BOOKINGS_PER_DAY} agendamentos por dia para o usuário \'{user_name}\' seria excedido no dia {booking_date_obj.strftime("%Y-%m-%d")}."
+                "error": f"Limite de {MAX_BOOKINGS_PER_DAY} agendamentos por dia para o usuário '{user_name}' seria excedido no dia {booking_date_obj.strftime('%Y-%m-%d')}."
             }), 409
 
     # Validation for "Geral" rooms - only one per period per day per user
@@ -246,7 +249,7 @@ def create_booking():
         for period, geral_rooms in geral_periods_in_request.items():
             if len(geral_rooms) > 1:
                 return jsonify({
-                    "error": f"Você só pode agendar uma sala da categoria \'Geral\' por período. Tentativa de agendar múltiplas salas \'Geral\' no período \'{period}\' do dia {booking_date_obj.strftime("%Y-%m-%d")}."
+                    "error": f"Você só pode agendar uma sala da categoria 'Geral' por período. Tentativa de agendar múltiplas salas 'Geral' no período '{period}' do dia {booking_date_obj.strftime('%Y-%m-%d')}."
                 }), 409
             
             existing_geral_booking = Booking.query.join(Room).filter(
@@ -258,14 +261,15 @@ def create_booking():
             
             if existing_geral_booking:
                 return jsonify({
-                    "error": f"Você já possui um agendamento para uma sala da categoria \'Geral\' ({existing_geral_booking.room.name}) no período \'{period}\' do dia {booking_date_obj.strftime("%Y-%m-%d")}."
+                    "error": f"Você já possui um agendamento para uma sala da categoria 'Geral' ({existing_geral_booking.room.name}) no período '{period}' do dia {booking_date_obj.strftime('%Y-%m-%d')}."
                 }), 409
 
     # Validation for booking conflicts (slot already taken)
     for slot in processed_slots:
         if check_booking_conflict(slot["room_id"], slot["booking_date_obj"], slot["period"]):
+            # CORREÇÃO: Usar aspas simples dentro da f-string
             return jsonify({
-                "error": f"A sala \'{slot["room_name"]}\' já está reservada para o período \'{slot["period"]}\' no dia {slot["booking_date_str"]}."
+                "error": f"A sala '{slot['room_name']}' já está reservada para o período '{slot['period']}' no dia {slot['booking_date_str']}."
             }), 409
     
     newly_created_bookings_details_for_email = []
@@ -319,14 +323,14 @@ def get_bookings():
             target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
             query = query.filter(Booking.booking_date == target_date)
         except ValueError:
-            return jsonify({"error": "Invalid date format for \'date\'. Use YYYY-MM-DD"}), 400
+            return jsonify({"error": "Invalid date format for 'date'. Use YYYY-MM-DD"}), 400
     elif start_date_str and end_date_str:
         try:
             start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
             end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
             query = query.filter(Booking.booking_date.between(start_date, end_date))
         except ValueError:
-            return jsonify({"error": "Invalid date format for \'start_date\' or \'end_date\'. Use YYYY-MM-DD"}), 400
+            return jsonify({"error": "Invalid date format for 'start_date' or 'end_date'. Use YYYY-MM-DD"}), 400
     
     bookings = query.all()
     
@@ -334,7 +338,7 @@ def get_bookings():
         room_name = booking.room.name
         if room_name.startswith("Geral "):
             try:
-                number = int(re.findall(r'\\d+', room_name)[0])
+                number = int(re.findall(r'\d+', room_name)[0])
                 return (0, number)
             except (IndexError, ValueError):
                 return (0, 999)
@@ -453,4 +457,3 @@ def generate_schedule_pdf():
 def get_booking_status():
     status = get_booking_window_status()
     return jsonify(status)
-
