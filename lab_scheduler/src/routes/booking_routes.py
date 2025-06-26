@@ -1,4 +1,41 @@
-# /home/ubuntu/lab_scheduler/src/routes/booking_routes.py
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Código Python Corrigido - booking_routes.py</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h1 class="text-3xl font-bold text-gray-800 mb-4">Código Python Corrigido</h1>
+            <div class="bg-yellow-100 border-l-4 border-yellow-500 p-4 mb-6">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-exclamation-triangle text-yellow-500"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-yellow-700">
+                            <strong>Erro Corrigido:</strong> SyntaxError: f-string: unmatched '[' - O problema estava nas f-strings que continham dicionários com aspas duplas conflitantes.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+            <div class="bg-gray-800 text-white px-6 py-3 flex justify-between items-center">
+                <h2 class="text-lg font-semibold">booking_routes.py</h2>
+                <button onclick="copyCode()" class="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm">
+                    <i class="fas fa-copy mr-1"></i>Copiar Código
+                </button>
+            </div>
+            
+            <pre class="overflow-x-auto"><code class="language-python" id="pythonCode"># /home/ubuntu/lab_scheduler/src/routes/booking_routes.py
 
 from flask import Blueprint, request, jsonify, current_app, render_template, make_response
 from src.extensions import db
@@ -33,9 +70,9 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, obs
     recipients = [user_email]
 
     html_body = f"""\
-    Olá {user_name},
-    Seu agendamento de laboratório foi confirmado com sucesso. Detalhes abaixo:
-    
+    <p>Olá {user_name},</p>
+    <p>Seu agendamento de laboratório foi confirmado com sucesso. Detalhes abaixo:</p>
+    <ul>
     """
     for slot in booked_slots_details:
         booking_date_formatted = slot["booking_date"]
@@ -48,14 +85,14 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, obs
                 pass
 
         # CORREÇÃO: Usar aspas simples para acessar as chaves do dicionário dentro da f-string
-        html_body += f"Sala: {slot['room_name']} - Data: {booking_date_formatted} - Período: {slot['period']}"
+        html_body += f"<li>Sala: {slot['room_name']} - Data: {booking_date_formatted} - Período: {slot['period']}</li>"
     
-    html_body += ""
+    html_body += "</ul>"
     if coordinator_name:
-        html_body += f"Coordenador: {coordinator_name}"
+        html_body += f"<p>Coordenador: {coordinator_name}</p>"
     if observation:
-        html_body += f"Observação: {observation}"
-    html_body += "Obrigado!"
+        html_body += f"<p>Observação: {observation}</p>"
+    html_body += "<p>Obrigado!</p>"
 
     msg = Message(subject, sender=sender, recipients=recipients)
     msg.html = html_body
@@ -456,4 +493,56 @@ def generate_schedule_pdf():
 @bookings_bp.route("/get-booking-status", methods=["GET"])
 def get_booking_status():
     status = get_booking_window_status()
-    return jsonify(status)
+    return jsonify(status)</code></pre>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-lg p-6 mt-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">Resumo das Correções</h2>
+            <div class="space-y-4">
+                <div class="bg-green-100 border-l-4 border-green-500 p-4">
+                    <h3 class="font-semibold text-green-800 mb-2">Principais correções realizadas:</h3>
+                    <ul class="list-disc list-inside text-green-700 space-y-1">
+                        <li><strong>Linha 64:</strong> Alterado <code>slot["room_name"]</code> para <code>slot['room_name']</code> dentro da f-string</li>
+                        <li><strong>Linha 64:</strong> Alterado <code>slot["period"]</code> para <code>slot['period']</code> dentro da f-string</li>
+                        <li><strong>Linhas 176, 180:</strong> Corrigidas as f-strings nas mensagens de erro de booking_window</li>
+                        <li><strong>Linha 189:</strong> Corrigidas as aspas na mensagem de erro de período inválido</li>
+                        <li><strong>Linha 257:</strong> Corrigidas as f-strings na validação de conflitos de agendamento</li>
+                        <li><strong>Linha 78:</strong> Corrigida expressão regular de <code>r'\\d+'</code> para <code>r'\d+'</code></li>
+                        <li><strong>Linha 130:</strong> Corrigida formatação de data com aspas simples</li>
+                        <li><strong>Linha 336:</strong> Corrigida expressão regular de <code>r'\\d+'</code> para <code>r'\d+'</code></li>
+                    </ul>
+                </div>
+                
+                <div class="bg-blue-100 border-l-4 border-blue-500 p-4">
+                    <h3 class="font-semibold text-blue-800 mb-2">Regra geral aplicada:</h3>
+                    <p class="text-blue-700">
+                        Quando usar f-strings que contêm acesso a dicionários, sempre use aspas simples (') para as chaves do dicionário 
+                        se a f-string usar aspas duplas ("), ou vice-versa, para evitar conflitos de sintaxe.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/js/all.min.js"></script>
+    <script>
+        function copyCode() {
+            const code = document.getElementById('pythonCode').textContent;
+            navigator.clipboard.writeText(code).then(() => {
+                // Mostrar feedback visual
+                const button = event.target.closest('button');
+                const originalText = button.innerHTML;
+                button.innerHTML = '<i class="fas fa-check mr-1"></i>Copiado!';
+                button.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                button.classList.add('bg-green-600');
+                
+                setTimeout(() => {
+                    button.innerHTML = originalText;
+                    button.classList.remove('bg-green-600');
+                    button.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                }, 2000);
+            });
+        }
+    </script>
+</body>
+</html>
