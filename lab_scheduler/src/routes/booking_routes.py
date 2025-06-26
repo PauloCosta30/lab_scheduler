@@ -47,7 +47,7 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, obs
             except ValueError:
                 pass
 
-        html_body += f"<li>Sala: {slot['room_name']} - Data: {booking_date_formatted} - Período: {slot['period']}</li>"
+        html_body += f"<li>Sala: {slot["room_name"]} - Data: {booking_date_formatted} - Período: {slot["period"]}</li>"
     
     html_body += "</ul>"
     if coordinator_name:
@@ -240,8 +240,8 @@ def create_booking():
         geral_periods_in_request = defaultdict(list)
         
         for slot in processed_slots:
-            if slot["booking_date_obj"] == booking_date_obj and slot["room_name"].startswith("Geral "):
-                geral_periods_in_request[slot["period"]].append(slot["room_name"])
+            if slot['booking_date_obj'] == booking_date_obj and slot['room_name'].startswith("Geral "):
+                geral_periods_in_request[slot['period']].append(slot['room_name'])
         
         for period, geral_rooms in geral_periods_in_request.items():
             if len(geral_rooms) > 1:
@@ -453,3 +453,6 @@ def generate_schedule_pdf():
 def get_booking_status():
     status = get_booking_window_status()
     return jsonify(status)
+
+
+
