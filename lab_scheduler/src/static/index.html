@@ -1,259 +1,90 @@
-// Função corrigida para gerar PDF sem cortar os últimos dias
-async function generateSchedulePDF() {
-    const scheduleTable = document.getElementById('scheduleTable');
-    if (!scheduleTable) {
-        alert('Nenhuma escala carregada para gerar PDF.');
-        return;
-    }
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agendamento de Laboratório v2</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header-container">
+            <img src="/static/images/itv_logo.jfif" alt="Logo ITV" id="appLogo">
+            <h1>Escala para uso dos laboratórios - ITV</h1>
+        </div>
 
-    try {
-        // Criar um container temporário para o PDF
-        const pdfContainer = document.createElement('div');
-        pdfContainer.style.position = 'absolute';
-        pdfContainer.style.left = '-9999px';
-        pdfContainer.style.top = '0';
-        pdfContainer.style.width = 'auto';
-        pdfContainer.style.minWidth = 'max-content';
-        pdfContainer.style.backgroundColor = 'white';
-        pdfContainer.style.padding = '20px';
-        
-        // Criar uma cópia da tabela
-        const tableClone = scheduleTable.cloneNode(true);
-        
-        // Aplicar estilos específicos para PDF na tabela clonada
-        tableClone.style.width = 'auto';
-        tableClone.style.minWidth = 'max-content';
-        tableClone.style.tableLayout = 'auto';
-        tableClone.style.whiteSpace = 'nowrap';
-        tableClone.style.fontSize = '12px';
-        tableClone.style.fontFamily = 'Arial, sans-serif';
-        
-        // Ajustar células da tabela
-        const cells = tableClone.querySelectorAll('th, td');
-        cells.forEach(cell => {
-            cell.style.padding = '8px';
-            cell.style.border = '1px solid #333';
-            cell.style.whiteSpace = 'nowrap';
-            cell.style.overflow = 'visible';
-            cell.style.minWidth = 'auto';
-            cell.style.maxWidth = 'none';
-        });
+        <!-- Status da Janela de Agendamento -->
+        <div class="booking-status-container">
+            <h3>Status do Agendamento</h3>
+            <div id="bookingStatusMessage" class="status-message">
+                Carregando status...
+            </div>
+            <div class="status-details">
+                <div class="status-item">
+                    <span class="status-label">Semana Atual:</span>
+                    <span id="currentWeekStatus" class="status-value">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Próxima Semana:</span>
+                    <span id="nextWeekStatus" class="status-value">-</span>
+                </div>
+            </div>
+        </div>
 
-        // Adicionar título ao container
-        const title = document.createElement('h2');
-        title.textContent = 'Escala Semanal - Laboratórios ITV';
-        title.style.textAlign = 'center';
-        title.style.marginBottom = '20px';
-        title.style.fontSize = '18px';
-        title.style.fontFamily = 'Arial, sans-serif';
-        
-        pdfContainer.appendChild(title);
-        pdfContainer.appendChild(tableClone);
-        
-        // Adicionar ao DOM temporariamente
-        document.body.appendChild(pdfContainer);
-        
-        // Aguardar um momento para renderização
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // Calcular dimensões necessárias
-        const containerRect = pdfContainer.getBoundingClientRect();
-        const tableRect = tableClone.getBoundingClientRect();
-        
-        // Definir configurações do html2canvas
-        const canvasOptions = {
-            allowTaint: true,
-            useCORS: true,
-            scale: 1,
-            width: Math.max(containerRect.width, tableRect.width) + 40,
-            height: containerRect.height + 40,
-            scrollX: 0,
-            scrollY: 0,
-            backgroundColor: 'white'
-        };
-        
-        // Gerar canvas
-        const canvas = await html2canvas(pdfContainer, canvasOptions);
-        
-        // Calcular orientação e tamanho do PDF
-        const imgWidth = canvas.width;
-        const imgHeight = canvas.height;
-        const isLandscape = imgWidth > imgHeight;
-        
-        // Configurar jsPDF
-        const orientation = isLandscape ? 'landscape' : 'portrait';
-        const unit = 'mm';
-        const format = 'a4';
-        
-        const pdf = new jsPDF(orientation, unit, format);
-        
-        // Obter dimensões da página
-        const pageWidth = pdf.internal.pageSize.getWidth();
-        const pageHeight = pdf.internal.pageSize.getHeight();
-        
-        // Calcular escala para caber na página
-        const scaleX = pageWidth / (imgWidth * 0.264583); // Converter px para mm
-        const scaleY = pageHeight / (imgHeight * 0.264583);
-        const scale = Math.min(scaleX, scaleY, 1); // Não aumentar, apenas diminuir se necessário
-        
-        const finalWidth = imgWidth * 0.264583 * scale;
-        const finalHeight = imgHeight * 0.264583 * scale;
-        
-        // Centralizar na página
-        const x = (pageWidth - finalWidth) / 2;
-        const y = (pageHeight - finalHeight) / 2;
-        
-        // Converter canvas para imagem
-        const imgData = canvas.toDataURL('image/png', 1.0);
-        
-        // Adicionar imagem ao PDF
-        pdf.addImage(imgData, 'PNG', x, y, finalWidth, finalHeight);
-        
-        // Gerar nome do arquivo com data atual
-        const currentDate = new Date();
-        const dateString = currentDate.toLocaleDateString('pt-BR').replace(/\//g, '-');
-        const weekSelector = document.getElementById('weekSelector');
-        const selectedWeek = weekSelector.value ? 
-            new Date(weekSelector.value + 'T00:00:00').toLocaleDateString('pt-BR').replace(/\//g, '-') : 
-            dateString;
-        
-        const fileName = `escala-laboratorios-${selectedWeek}.pdf`;
-        
-        // Salvar PDF
-        pdf.save(fileName);
-        
-        // Remover container temporário
-        document.body.removeChild(pdfContainer);
-        
-        console.log('PDF gerado com sucesso!');
-        
-    } catch (error) {
-        console.error('Erro ao gerar PDF:', error);
-        alert('Erro ao gerar PDF. Verifique o console para mais detalhes.');
-        
-        // Limpar container temporário se houver erro
-        const tempContainer = document.querySelector('div[style*="position: absolute"][style*="left: -9999px"]');
-        if (tempContainer) {
-            document.body.removeChild(tempContainer);
-        }
-    }
-}
+        <div class="schedule-container">
+            <h2>Escala Semanal</h2>
+            <p>Clique nos horários disponíveis na tabela para selecioná-los. Após selecionar, clique em "Prosseguir com Agendamento".</p>
+            <div>
+                <label for="weekSelector">Selecionar Semana (qualquer dia da semana):</label>
+                <input type="date" id="weekSelector">
+                <button id="loadScheduleButton">Carregar Escala</button>
+            </div>
+            <div id="scheduleTableContainer">
+                <!-- Tabela da escala será gerada aqui -->
+            </div>
+            <div id="scheduleMessage" class="message"></div>
+            <div class="action-buttons">
+                <button id="proceedToBookingButton" disabled>Prosseguir com Agendamento</button>
+                <button id="generatePdfButton" disabled>Gerar PDF da Escala</button>
+            </div>
+        </div>
 
-// Função auxiliar para garantir que as bibliotecas estão carregadas
-function ensureLibrariesLoaded() {
-    return new Promise((resolve, reject) => {
-        let attempts = 0;
-        const maxAttempts = 50;
-        
-        const checkLibraries = () => {
-            attempts++;
-            
-            if (typeof html2canvas !== 'undefined' && typeof jsPDF !== 'undefined') {
-                resolve();
-            } else if (attempts >= maxAttempts) {
-                reject(new Error('Bibliotecas html2canvas ou jsPDF não carregadas'));
-            } else {
-                setTimeout(checkLibraries, 100);
-            }
-        };
-        
-        checkLibraries();
-    });
-}
+        <!-- Modal de Agendamento -->
+        <div id="bookingModal" class="modal">
+            <div class="modal-content">
+                <span class="close-button">&times;</span>
+                <h2>Confirmar Agendamento</h2>
+                <div id="selectedSlotsSummary">
+                    <p><strong>Horários Selecionados:</strong></p>
+                    <ul>
+                        <!-- Lista de horários selecionados será populada aqui -->
+                    </ul>
+                </div>
+                <form id="modalBookingForm">
+                    <div>
+                        <label for="modalUserName">Nome do Usuário:</label>
+                        <input type="text" id="modalUserName" name="userName" required>
+                    </div>
+                    <div>
+                        <label for="modalUserEmail">E-mail do Usuário:</label>
+                        <input type="email" id="modalUserEmail" name="userEmail" required>
+                    </div>
+                    <div>
+                        <label for="modalCoordinatorName">Nome do Coordenador:</label>
+                        <input type="text" id="modalCoordinatorName" name="coordinatorName" required>
+                    </div>
+                    <div>
+                        <label for="modalObservation">Observação do Agendamento:</label>
+                        <textarea id="modalObservation" name="observation" rows="3" placeholder="Digite aqui qualquer observação sobre o agendamento (opcional)"></textarea>
+                    </div>
+                    <button type="submit">Confirmar e Agendar</button>
+                </form>
+                <div id="modalFormMessage" class="message"></div>
+            </div>
+        </div>
+    </div>
 
-// Event listener para o botão de gerar PDF
-document.addEventListener('DOMContentLoaded', function() {
-    const generatePdfButton = document.getElementById('generatePdfButton');
-    
-    if (generatePdfButton) {
-        generatePdfButton.addEventListener('click', async function() {
-            try {
-                // Verificar se as bibliotecas estão carregadas
-                await ensureLibrariesLoaded();
-                
-                // Desabilitar botão durante geração
-                this.disabled = true;
-                this.textContent = 'Gerando PDF...';
-                
-                // Gerar PDF
-                await generateSchedulePDF();
-                
-                // Reabilitar botão
-                this.disabled = false;
-                this.textContent = 'Gerar PDF da Escala';
-                
-            } catch (error) {
-                console.error('Erro:', error);
-                alert('Erro ao gerar PDF: ' + error.message);
-                
-                // Reabilitar botão
-                this.disabled = false;
-                this.textContent = 'Gerar PDF da Escala';
-            }
-        });
-    }
-});
+    <script src="/static/script.js"></script>
+</body>
+</html>
 
-// CSS adicional para garantir que a tabela seja renderizada corretamente
-const additionalStyles = `
-<style>
-@media print {
-    .schedule-table-pdf {
-        width: auto !important;
-        min-width: max-content !important;
-        table-layout: auto !important;
-        font-size: 12px !important;
-    }
-    
-    .schedule-table-pdf th,
-    .schedule-table-pdf td {
-        white-space: nowrap !important;
-        overflow: visible !important;
-        padding: 6px 8px !important;
-        border: 1px solid #333 !important;
-    }
-}
-
-/* Estilos para melhorar a renderização da tabela */
-#scheduleTable {
-    border-collapse: collapse;
-    width: 100%;
-    min-width: max-content;
-}
-
-#scheduleTable th,
-#scheduleTable td {
-    border: 1px solid #ddd;
-    padding: 8px;
-    text-align: center;
-    white-space: nowrap;
-    overflow: visible;
-}
-
-#scheduleTable th {
-    background-color: #f5f5f5;
-    font-weight: bold;
-}
-
-/* Responsividade da tabela */
-.schedule-container {
-    overflow-x: auto;
-    max-width: 100%;
-}
-
-#scheduleTableContainer {
-    overflow-x: auto;
-    max-width: 100%;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-}
-</style>
-`;
-
-// Adicionar os estilos ao head se ainda não existirem
-if (!document.querySelector('#pdf-fix-styles')) {
-    const styleElement = document.createElement('style');
-    styleElement.id = 'pdf-fix-styles';
-    styleElement.innerHTML = additionalStyles.replace(/<\/?style>/g, '');
-    document.head.appendChild(styleElement);
-}
