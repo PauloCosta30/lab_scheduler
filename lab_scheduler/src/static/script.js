@@ -1,3 +1,5 @@
+// /home/ubuntu/lab_scheduler/src/static/script.js
+
 document.addEventListener("DOMContentLoaded", () => {
     // DOM Elements for Modal and New Flow
     const weekSelector = document.getElementById("weekSelector");
@@ -57,10 +59,7 @@ document.addEventListener("DOMContentLoaded", () => {
     async function fetchAllRooms() {
         try {
             const response = await fetch(`${API_BASE_URL}/rooms`);
-            if (!response.ok) {
-                const errorBody = await response.text(); // Tenta ler o corpo da resposta
-                throw new Error(`Erro ao buscar salas: ${response.status} ${response.statusText} - Detalhes: ${errorBody}`);
-            }
+            if (!response.ok) throw new Error(`Erro ao buscar salas: ${response.statusText}`);
             allRooms = await response.json();
         } catch (error) {
             console.error("Falha ao buscar salas:", error);
@@ -108,10 +107,7 @@ document.addEventListener("DOMContentLoaded", () => {
         showScheduleMessage("Carregando escala...", "");
         try {
             const response = await fetch(`${API_BASE_URL}/bookings?start_date=${startDateStrAPI}&end_date=${endDateStrAPI}`);
-            if (!response.ok) {
-                const errorBody = await response.text(); // Tenta ler o corpo da resposta
-                throw new Error(`Erro ao buscar agendamentos: ${response.status} ${response.statusText} - Detalhes: ${errorBody}`);
-            }
+            if (!response.ok) throw new Error(`Erro ao buscar agendamentos: ${response.statusText}`);
             currentFetchedBookings = await response.json();
             if (allRooms.length === 0) await fetchAllRooms();
             
@@ -426,3 +422,4 @@ document.addEventListener("DOMContentLoaded", () => {
     initializeApp();
 
 });
+
