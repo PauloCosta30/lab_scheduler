@@ -1,307 +1,259 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Escala de Agendamentos</title>
-    <style>
-        @page {
-            size: A4 landscape;
-            margin: 0.4cm;
-        }
-        
-        body {
-            font-family: Arial, sans-serif;
-            font-size: 9px;
-            margin: 0;
-            padding: 0;
-            color: #333;
-        }
-        
-        .header {
-            text-align: center;
-            margin-bottom: 12px;
-            page-break-inside: avoid;
-        }
-        
-        .header h1 {
-            font-size: 14px;
-            margin: 0 0 4px 0;
-            color: #2c3e50;
-        }
-        
-        .header p {
-            margin: 1px 0;
-            font-size: 9px;
-            color: #666;
-        }
-        
-        .schedule-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 15px;
-            font-size: 8px;
-            table-layout: fixed;
-        }
-        
-        .schedule-table th,
-        .schedule-table td {
-            border: 1px solid #ccc;
-            padding: 2px 1px;
-            text-align: center;
-            vertical-align: middle;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-            hyphens: auto;
-            line-height: 1.1;
-        }
-        
-        .schedule-table th {
-            background-color: #34495e;
-            color: white;
-            font-weight: bold;
-            font-size: 7px;
-        }
-        
-        /* Larguras otimizadas para caber tudo na página */
-        .room-column {
-            width: 15%;
-            background-color: #ecf0f1;
-            font-weight: bold;
-            text-align: left;
-            padding-left: 3px;
-            font-size: 7px;
-        }
-        
-        .day-column {
-            width: 17%; /* 85% dividido por 5 dias = 17% cada */
-        }
-        
-        .period-header {
-            background-color: #2c3e50 !important;
-            color: white !important;
-            font-weight: bold;
-            font-size: 8px;
-        }
-        
-        .morning-row {
-            background-color: #fff8dc;
-        }
-        
-        .afternoon-row {
-            background-color: #e6f3ff;
-        }
-        
-        .user-name {
-            font-size: 7px;
-            font-weight: bold;
-            color: #2c3e50;
-            line-height: 1.0;
-            max-width: 100%;
-            overflow-wrap: break-word;
-            word-break: break-word;
-            hyphens: auto;
-            padding: 1px;
-        }
-        
-        /* Cabeçalho das datas mais compacto */
-        .date-header {
-            font-size: 6px;
-            line-height: 1.0;
-        }
-        
-        .day-name {
-            font-weight: bold;
-            display: block;
-        }
-        
-        .date-number {
-            font-size: 5px;
-            color: #666;
-        }
-        
-        .observations-section {
-            page-break-inside: avoid;
-            margin-top: 15px;
-            font-size: 8px;
-        }
-        
-        .observations-title {
-            font-size: 11px;
-            font-weight: bold;
-            color: #2c3e50;
-            margin-bottom: 8px;
-            border-bottom: 1px solid #3498db;
-            padding-bottom: 3px;
-        }
-        
-        .user-observation {
-            margin-bottom: 8px;
-            padding: 5px;
-            background-color: #f8f9fa;
-            border-left: 2px solid #3498db;
-            border-radius: 2px;
-            page-break-inside: avoid;
-        }
-        
-        .user-observation h4 {
-            margin: 0 0 3px 0;
-            font-size: 9px;
-            color: #2c3e50;
-        }
-        
-        .user-observation p {
-            margin: 1px 0;
-            font-size: 8px;
-            color: #666;
-        }
-        
-        .booking-detail {
-            font-size: 7px;
-            color: #555;
-            margin: 1px 0;
-        }
-        
-        .footer {
-            position: fixed;
-            bottom: 0.3cm;
-            left: 0.4cm;
-            right: 0.4cm;
-            text-align: center;
-            font-size: 7px;
-            color: #666;
-            border-top: 1px solid #ddd;
-            padding-top: 3px;
-        }
-        
-        /* Ajustes específicos para impressão */
-        @media print {
-            body {
-                font-size: 8px;
-            }
-            
-            .schedule-table {
-                font-size: 7px;
-            }
-            
-            .user-name {
-                font-size: 6px;
-            }
-            
-            .schedule-table th,
-            .schedule-table td {
-                padding: 1px;
-            }
-            
-            .room-column {
-                font-size: 6px;
-            }
-        }
-        
-        /* Para nomes muito longos, forçar quebra */
-        .long-name {
-            font-size: 6px !important;
-            word-break: break-all;
-            line-height: 0.9;
-        }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>Escala de Agendamentos dos Laboratórios</h1>
-        <p>Período: {{ week_start_date_formatted }} a {{ week_end_date_formatted }}</p>
-        <p>Gerado em: {{ generation_date }}</p>
-    </div>
+// Função corrigida para gerar PDF sem cortar os últimos dias
+async function generateSchedulePDF() {
+    const scheduleTable = document.getElementById('scheduleTable');
+    if (!scheduleTable) {
+        alert('Nenhuma escala carregada para gerar PDF.');
+        return;
+    }
 
-    <table class="schedule-table">
-        <thead>
-            <tr>
-                <th class="room-column">Salas</th>
-                {% for date_str, day_name in zip(dates_of_week, days_locale) %}
-                <th class="day-column date-header">
-                    <span class="day-name">{{ day_name }}</span>
-                    <span class="date-number">{{ date_str.split('-')[2] }}/{{ date_str.split('-')[1] }}</span>
-                </th>
-                {% endfor %}
-            </tr>
-        </thead>
-        <tbody>
-            <!-- Período da Manhã -->
-            <tr class="period-header">
-                <td class="period-header">MANHÃ</td>
-                <td class="period-header" colspan="5">Período Matutino</td>
-            </tr>
-            {% for room in rooms %}
-            <tr class="morning-row">
-                <td class="room-column">{{ room.name }}</td>
-                {% for date_str in dates_of_week %}
-                <td class="day-column">
-                    {% if schedule_data[date_str]['Manhã'][room.name] %}
-                        {% set user_name = schedule_data[date_str]['Manhã'][room.name] %}
-                        <div class="user-name{% if user_name|length > 8 %} long-name{% endif %}">
-                            {{ user_name }}
-                        </div>
-                    {% endif %}
-                </td>
-                {% endfor %}
-            </tr>
-            {% endfor %}
+    try {
+        // Criar um container temporário para o PDF
+        const pdfContainer = document.createElement('div');
+        pdfContainer.style.position = 'absolute';
+        pdfContainer.style.left = '-9999px';
+        pdfContainer.style.top = '0';
+        pdfContainer.style.width = 'auto';
+        pdfContainer.style.minWidth = 'max-content';
+        pdfContainer.style.backgroundColor = 'white';
+        pdfContainer.style.padding = '20px';
+        
+        // Criar uma cópia da tabela
+        const tableClone = scheduleTable.cloneNode(true);
+        
+        // Aplicar estilos específicos para PDF na tabela clonada
+        tableClone.style.width = 'auto';
+        tableClone.style.minWidth = 'max-content';
+        tableClone.style.tableLayout = 'auto';
+        tableClone.style.whiteSpace = 'nowrap';
+        tableClone.style.fontSize = '12px';
+        tableClone.style.fontFamily = 'Arial, sans-serif';
+        
+        // Ajustar células da tabela
+        const cells = tableClone.querySelectorAll('th, td');
+        cells.forEach(cell => {
+            cell.style.padding = '8px';
+            cell.style.border = '1px solid #333';
+            cell.style.whiteSpace = 'nowrap';
+            cell.style.overflow = 'visible';
+            cell.style.minWidth = 'auto';
+            cell.style.maxWidth = 'none';
+        });
 
-            <!-- Período da Tarde -->
-            <tr class="period-header">
-                <td class="period-header">TARDE</td>
-                <td class="period-header" colspan="5">Período Vespertino</td>
-            </tr>
-            {% for room in rooms %}
-            <tr class="afternoon-row">
-                <td class="room-column">{{ room.name }}</td>
-                {% for date_str in dates_of_week %}
-                <td class="day-column">
-                    {% if schedule_data[date_str]['Tarde'][room.name] %}
-                        {% set user_name = schedule_data[date_str]['Tarde'][room.name] %}
-                        <div class="user-name{% if user_name|length > 8 %} long-name{% endif %}">
-                            {{ user_name }}
-                        </div>
-                    {% endif %}
-                </td>
-                {% endfor %}
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+        // Adicionar título ao container
+        const title = document.createElement('h2');
+        title.textContent = 'Escala Semanal - Laboratórios ITV';
+        title.style.textAlign = 'center';
+        title.style.marginBottom = '20px';
+        title.style.fontSize = '18px';
+        title.style.fontFamily = 'Arial, sans-serif';
+        
+        pdfContainer.appendChild(title);
+        pdfContainer.appendChild(tableClone);
+        
+        // Adicionar ao DOM temporariamente
+        document.body.appendChild(pdfContainer);
+        
+        // Aguardar um momento para renderização
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Calcular dimensões necessárias
+        const containerRect = pdfContainer.getBoundingClientRect();
+        const tableRect = tableClone.getBoundingClientRect();
+        
+        // Definir configurações do html2canvas
+        const canvasOptions = {
+            allowTaint: true,
+            useCORS: true,
+            scale: 1,
+            width: Math.max(containerRect.width, tableRect.width) + 40,
+            height: containerRect.height + 40,
+            scrollX: 0,
+            scrollY: 0,
+            backgroundColor: 'white'
+        };
+        
+        // Gerar canvas
+        const canvas = await html2canvas(pdfContainer, canvasOptions);
+        
+        // Calcular orientação e tamanho do PDF
+        const imgWidth = canvas.width;
+        const imgHeight = canvas.height;
+        const isLandscape = imgWidth > imgHeight;
+        
+        // Configurar jsPDF
+        const orientation = isLandscape ? 'landscape' : 'portrait';
+        const unit = 'mm';
+        const format = 'a4';
+        
+        const pdf = new jsPDF(orientation, unit, format);
+        
+        // Obter dimensões da página
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        
+        // Calcular escala para caber na página
+        const scaleX = pageWidth / (imgWidth * 0.264583); // Converter px para mm
+        const scaleY = pageHeight / (imgHeight * 0.264583);
+        const scale = Math.min(scaleX, scaleY, 1); // Não aumentar, apenas diminuir se necessário
+        
+        const finalWidth = imgWidth * 0.264583 * scale;
+        const finalHeight = imgHeight * 0.264583 * scale;
+        
+        // Centralizar na página
+        const x = (pageWidth - finalWidth) / 2;
+        const y = (pageHeight - finalHeight) / 2;
+        
+        // Converter canvas para imagem
+        const imgData = canvas.toDataURL('image/png', 1.0);
+        
+        // Adicionar imagem ao PDF
+        pdf.addImage(imgData, 'PNG', x, y, finalWidth, finalHeight);
+        
+        // Gerar nome do arquivo com data atual
+        const currentDate = new Date();
+        const dateString = currentDate.toLocaleDateString('pt-BR').replace(/\//g, '-');
+        const weekSelector = document.getElementById('weekSelector');
+        const selectedWeek = weekSelector.value ? 
+            new Date(weekSelector.value + 'T00:00:00').toLocaleDateString('pt-BR').replace(/\//g, '-') : 
+            dateString;
+        
+        const fileName = `escala-laboratorios-${selectedWeek}.pdf`;
+        
+        // Salvar PDF
+        pdf.save(fileName);
+        
+        // Remover container temporário
+        document.body.removeChild(pdfContainer);
+        
+        console.log('PDF gerado com sucesso!');
+        
+    } catch (error) {
+        console.error('Erro ao gerar PDF:', error);
+        alert('Erro ao gerar PDF. Verifique o console para mais detalhes.');
+        
+        // Limpar container temporário se houver erro
+        const tempContainer = document.querySelector('div[style*="position: absolute"][style*="left: -9999px"]');
+        if (tempContainer) {
+            document.body.removeChild(tempContainer);
+        }
+    }
+}
 
-    <!-- Seção de Observações -->
-    {% if user_observations %}
-    <div class="observations-section">
-        <div class="observations-title">Observações dos Agendamentos</div>
-        {% for user_name, user_data in user_observations.items() %}
-        {% if user_data.bookings %}
-        {% set has_observations = user_data.bookings | selectattr('observation') | list | length > 0 %}
-        {% if has_observations %}
-        <div class="user-observation">
-            <h4>{{ user_name }}</h4>
-            <p><strong>E-mail:</strong> {{ user_data.email }}</p>
-            {% if user_data.coordinator %}
-            <p><strong>Coordenador:</strong> {{ user_data.coordinator }}</p>
-            {% endif %}
-            <p><strong>Agendamentos com observações:</strong></p>
-            {% for booking in user_data.bookings %}
-            {% if booking.observation %}
-            <div class="booking-detail">
-                • {{ booking.room_name }} - {{ booking.date.strftime('%d/%m') }} ({{ booking.period }}): {{ booking.observation }}
-            </div>
-            {% endif %}
-            {% endfor %}
-        </div>
-        {% endif %}
-        {% endif %}
-        {% endfor %}
-    </div>
-    {% endif %}
+// Função auxiliar para garantir que as bibliotecas estão carregadas
+function ensureLibrariesLoaded() {
+    return new Promise((resolve, reject) => {
+        let attempts = 0;
+        const maxAttempts = 50;
+        
+        const checkLibraries = () => {
+            attempts++;
+            
+            if (typeof html2canvas !== 'undefined' && typeof jsPDF !== 'undefined') {
+                resolve();
+            } else if (attempts >= maxAttempts) {
+                reject(new Error('Bibliotecas html2canvas ou jsPDF não carregadas'));
+            } else {
+                setTimeout(checkLibraries, 100);
+            }
+        };
+        
+        checkLibraries();
+    });
+}
 
-    <div class="footer">
-        <p>Escala gerada automaticamente pelo Sistema de Agendamento de Laboratórios - ITV</p>
-        <p>Em caso de dúvidas sobre a escala, entre em contato com Ana Correa pelo e-mail: ana.correa@itv.org</p>
-    </div>
-</body>
-</html>
+// Event listener para o botão de gerar PDF
+document.addEventListener('DOMContentLoaded', function() {
+    const generatePdfButton = document.getElementById('generatePdfButton');
+    
+    if (generatePdfButton) {
+        generatePdfButton.addEventListener('click', async function() {
+            try {
+                // Verificar se as bibliotecas estão carregadas
+                await ensureLibrariesLoaded();
+                
+                // Desabilitar botão durante geração
+                this.disabled = true;
+                this.textContent = 'Gerando PDF...';
+                
+                // Gerar PDF
+                await generateSchedulePDF();
+                
+                // Reabilitar botão
+                this.disabled = false;
+                this.textContent = 'Gerar PDF da Escala';
+                
+            } catch (error) {
+                console.error('Erro:', error);
+                alert('Erro ao gerar PDF: ' + error.message);
+                
+                // Reabilitar botão
+                this.disabled = false;
+                this.textContent = 'Gerar PDF da Escala';
+            }
+        });
+    }
+});
+
+// CSS adicional para garantir que a tabela seja renderizada corretamente
+const additionalStyles = `
+<style>
+@media print {
+    .schedule-table-pdf {
+        width: auto !important;
+        min-width: max-content !important;
+        table-layout: auto !important;
+        font-size: 12px !important;
+    }
+    
+    .schedule-table-pdf th,
+    .schedule-table-pdf td {
+        white-space: nowrap !important;
+        overflow: visible !important;
+        padding: 6px 8px !important;
+        border: 1px solid #333 !important;
+    }
+}
+
+/* Estilos para melhorar a renderização da tabela */
+#scheduleTable {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: max-content;
+}
+
+#scheduleTable th,
+#scheduleTable td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: visible;
+}
+
+#scheduleTable th {
+    background-color: #f5f5f5;
+    font-weight: bold;
+}
+
+/* Responsividade da tabela */
+.schedule-container {
+    overflow-x: auto;
+    max-width: 100%;
+}
+
+#scheduleTableContainer {
+    overflow-x: auto;
+    max-width: 100%;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+</style>
+`;
+
+// Adicionar os estilos ao head se ainda não existirem
+if (!document.querySelector('#pdf-fix-styles')) {
+    const styleElement = document.createElement('style');
+    styleElement.id = 'pdf-fix-styles';
+    styleElement.innerHTML = additionalStyles.replace(/<\/?style>/g, '');
+    document.head.appendChild(styleElement);
+}
