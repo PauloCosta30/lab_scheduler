@@ -8,6 +8,7 @@ from collections import defaultdict
 from flask_mail import Message
 import re
 import pytz # Importar pytz para lidar com fusos horários
+from functools import wraps
 
 # Importação condicional do weasyprint
 try:
@@ -23,6 +24,22 @@ MAX_BOOKINGS_PER_DAY = 3
 
 # Definir o fuso horário de Brasília
 BRASILIA_TZ = pytz.timezone("America/Sao_Paulo")
+
+# Decorator para verificar chave administrativa
+def require_admin_key(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        admin_key = request.headers.get('X-Admin-Key') or request.args.get('admin_key')
+        expected_key = current_app.config.get('ADMIN_KEY')
+        
+        if not expected_key:
+            return jsonify({"error": "Configuração administrativa não encontrada"}), 500
+        
+        if not admin_key or admin_key != expected_key:
+            return jsonify({"error": "Chave administrativa inválida ou ausente"}), 401
+        
+        return f(*args, **kwargs)
+    return decorated_function
 
 # Helper function to send confirmation email
 def send_booking_confirmation_email(user_email, user_name, coordinator_name, observation, booked_slots_details):
@@ -498,3 +515,409 @@ def get_booking_status():
     except Exception as e:
         current_app.logger.error(f"Erro na rota get-booking-status: {str(e)}")
         return jsonify({"error": "Erro interno do servidor"}), 500
+
+# ===============================
+# ROTAS ADMINISTRATIVAS
+# ===============================
+
+@bookings_bp.route("/admin/database/status", methods=["GET"])
+@require_admin_key
+def admin_database_status():
+    """Retorna estatísticas do banco de dados"""
+    try:
+        bookings_count = Booking.query.count()
+        rooms_count = Room.query.count()
+        
+        # Estatísticas por período
+        bookings_by_period = db.session.query(
+            Booking.period, 
+            db.func.count(Booking.id)
+        ).group_by(Booking.period).all()
+        
+        # Agendamentos por mês
+        bookings_by_month = db.session.query(
+            db.func.strftime('%Y-%m', Booking.booking_date),
+            db.func.count(Booking.id)
+        ).group_by(db.func.strftime('%Y-%m', Booking.booking_date)).all()
+        
+        # Usuários únicos
+        unique_users = db.session.query(Booking.user_name).distinct().count()
+        
+        # Agendamentos futuros
+        today = datetime.now().date()
+        future_bookings = Booking.query.filter(Booking.booking_date >= today).count()
+        
+        return jsonify({
+            "total_bookings": bookings_count,
+            "total_rooms": rooms_count,
+            "unique_users": unique_users,
+            "future_bookings": future_bookings,
+            "bookings_by_period": dict(bookings_by_period),
+            "bookings_by_month": dict(bookings_by_month)
+        })
+    except Exception as e:
+        current_app.logger.error(f"Erro ao obter status do banco: {str(e)}")
+        return jsonify({"error": "Erro ao obter estatísticas do banco de dados"}), 500
+
+@bookings_bp.route("/admin/bookings/delete", methods=["DELETE"])
+@require_admin_key
+def admin_delete_bookings():
+    """
+    Apaga agendamentos com filtros opcionais:
+    - date: data específica (YYYY-MM-DD)
+    - start_date/end_date: intervalo de datas
+    - user_name: agendamentos de usuário específico
+    - room_id: agendamentos de sala específica
+    - before_date: agendamentos antes de uma data
+    - all: apagar todos os agendamentos (requer confirmação)
+    """
+    try:
+        # Parâmetros de filtro
+        target_date_str = request.args.get("date")
+        start_date_str = request.args.get("start_date")
+        end_date_str = request.args.get("end_date")
+        user_name = request.args.get("user_name")
+        room_id = request.args.get("room_id")
+        before_date_str = request.args.get("before_date")
+        delete_all = request.args.get("all", "").lower() == "true"
+        confirm = request.args.get("confirm", "").lower() == "true"
+        
+        query = Booking.query
+        
+        # Aplicar filtros
+        if delete_all:
+            if not confirm:
+                return jsonify({
+                    "error": "Para apagar todos os agendamentos, adicione '&confirm=true' à URL"
+                }), 400
+        else:
+            filters_applied = False
+            
+            if target_date_str:
+                try:
+                    target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
+                    query = query.filter(Booking.booking_date == target_date)
+                    filters_applied = True
+                except ValueError:
+                    return jsonify({"error": "Formato de data inválido para 'date'. Use YYYY-MM-DD"}), 400
+            
+            if start_date_str and end_date_str:
+                try:
+                    start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                    end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                    query = query.filter(Booking.booking_date.between(start_date, end_date))
+                    filters_applied = True
+                except ValueError:
+                    return jsonify({"error": "Formato de data inválido para 'start_date' ou 'end_date'. Use YYYY-MM-DD"}), 400
+            
+            if before_date_str:
+                try:
+                    before_date = datetime.strptime(before_date_str, "%Y-%m-%d").date()
+                    query = query.filter(Booking.booking_date < before_date)
+                    filters_applied = True
+                except ValueError:
+                    return jsonify({"error": "Formato de data inválido para 'before_date'. Use YYYY-MM-DD"}), 400
+            
+            if user_name:
+                query = query.filter(Booking.user_name == user_name)
+                filters_applied = True
+            
+            if room_id:
+                try:
+                    room_id_int = int(room_id)
+                    query = query.filter(Booking.room_id == room_id_int)
+                    filters_applied = True
+                except ValueError:
+                    return jsonify({"error": "room_id deve ser um número inteiro"}), 400
+            
+            if not filters_applied:
+                return jsonify({
+                    "error": "Pelo menos um filtro deve ser especificado (date, start_date/end_date, user_name, room_id, before_date, ou all=true)"
+                }), 400
+        
+        # Contar agendamentos que serão deletados
+        bookings_to_delete = query.all()
+        count_to_delete = len(bookings_to_delete)
+        
+        if count_to_delete == 0:
+            return jsonify({
+                "message": "Nenhum agendamento encontrado com os filtros especificados",
+                "deleted_count": 0
+            })
+        
+        # Criar log dos agendamentos que serão deletados
+        deleted_bookings_log = []
+        for booking in bookings_to_delete:
+            deleted_bookings_log.append({
+                "id": booking.id,
+                "user_name": booking.user_name,
+                "user_email": booking.user_email,
+                "room_name": booking.room.name,
+                "booking_date": booking.booking_date.isoformat(),
+                "period": booking.period,
+                "created_at": booking.created_at.isoformat() if booking.created_at else None
+            })
+        
+        # Deletar agendamentos
+        for booking in bookings_to_delete:
+            db.session.delete(booking)
+        
+        db.session.commit()
+        
+        current_app.logger.warning(f"ADMIN: {count_to_delete} agendamentos deletados. Filtros utilizados: "
+                                 f"date={target_date_str}, start_date={start_date_str}, end_date={end_date_str}, "
+                                 f"user_name={user_name}, room_id={room_id}, before_date={before_date_str}, all={delete_all}")
+        
+        return jsonify({
+            "message": f"{count_to_delete} agendamento(s) deletado(s) com sucesso",
+            "deleted_count": count_to_delete,
+            "deleted_bookings": deleted_bookings_log
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erro ao deletar agendamentos: {str(e)}")
+        return jsonify({"error": "Erro ao deletar agendamentos", "details": str(e)}), 500
+
+@bookings_bp.route("/admin/bookings/delete/<int:booking_id>", methods=["DELETE"])
+@require_admin_key
+def admin_delete_booking_by_id(booking_id):
+    """Apaga um agendamento específico pelo ID"""
+    try:
+        booking = Booking.query.get(booking_id)
+        if not booking:
+            return jsonify({"error": f"Agendamento com ID {booking_id} não encontrado"}), 404
+        
+        booking_info = {
+            "id": booking.id,
+            "user_name": booking.user_name,
+            "user_email": booking.user_email,
+            "room_name": booking.room.name,
+            "booking_date": booking.booking_date.isoformat(),
+            "period": booking.period
+        }
+        
+        db.session.delete(booking)
+        db.session.commit()
+        
+        current_app.logger.warning(f"ADMIN: Agendamento ID {booking_id} deletado: {booking_info}")
+        
+        return jsonify({
+            "message": f"Agendamento ID {booking_id} deletado com sucesso",
+            "deleted_booking": booking_info
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erro ao deletar agendamento ID {booking_id}: {str(e)}")
+        return jsonify({"error": "Erro ao deletar agendamento", "details": str(e)}), 500
+
+@bookings_bp.route("/admin/database/clear", methods=["DELETE"])
+@require_admin_key
+def admin_clear_database():
+    """Limpa completamente o banco de dados (apenas agendamentos, mantém salas)"""
+    try:
+        confirm = request.args.get("confirm", "").lower() == "true"
+        
+        if not confirm:
+            return jsonify({
+                "error": "Esta operação apagará TODOS os agendamentos do banco de dados. "
+                        "Para confirmar, adicione '&confirm=true' à URL"
+            }), 400
+        
+        # Contar agendamentos antes de deletar
+        total_bookings = Booking.query.count()
+        
+        # Deletar todos os agendamentos
+        Booking.query.delete()
+        db.session.commit()
+        
+        current_app.logger.warning(f"ADMIN: Banco de dados limpo. {total_bookings} agendamentos deletados.")
+        
+        return jsonify({
+            "message": "Banco de dados limpo com sucesso",
+            "deleted_bookings_count": total_bookings,
+            "remaining_rooms": Room.query.count()
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erro ao limpar banco de dados: {str(e)}")
+        return jsonify({"error": "Erro ao limpar banco de dados", "details": str(e)}), 500
+
+@bookings_bp.route("/admin/bookings/cleanup", methods=["DELETE"])
+@require_admin_key
+def admin_cleanup_old_bookings():
+    """Remove agendamentos antigos (por padrão, mais de 30 dias)"""
+    try:
+        days_ago = request.args.get("days", "30")
+        confirm = request.args.get("confirm", "").lower() == "true"
+        
+        try:
+            days_int = int(days_ago)
+        except ValueError:
+            return jsonify({"error": "Parâmetro 'days' deve ser um número inteiro"}), 400
+        
+        if not confirm:
+            return jsonify({
+                "error": f"Esta operação apagará agendamentos com mais de {days_int} dias. "
+                        "Para confirmar, adicione '&confirm=true' à URL"
+            }), 400
+        
+        cutoff_date = datetime.now().date() - timedelta(days=days_int)
+        
+        old_bookings = Booking.query.filter(Booking.booking_date < cutoff_date).all()
+        count_to_delete = len(old_bookings)
+        
+        if count_to_delete == 0:
+            return jsonify({
+                "message": f"Nenhum agendamento encontrado com mais de {days_int} dias",
+                "deleted_count": 0
+            })
+        
+        # Log dos agendamentos que serão deletados
+        deleted_bookings_log = []
+        for booking in old_bookings:
+            deleted_bookings_log.append({
+                "id": booking.id,
+                "user_name": booking.user_name,
+                "room_name": booking.room.name,
+                "booking_date": booking.booking_date.isoformat(),
+                "period": booking.period
+            })
+            db.session.delete(booking)
+        
+        db.session.commit()
+        
+        current_app.logger.info(f"ADMIN: Limpeza automática executada. {count_to_delete} agendamentos "
+                               f"com mais de {days_int} dias foram deletados.")
+        
+        return jsonify({
+            "message": f"{count_to_delete} agendamento(s) antigo(s) deletado(s) com sucesso",
+            "deleted_count": count_to_delete,
+            "cutoff_date": cutoff_date.isoformat(),
+            "deleted_bookings": deleted_bookings_log
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erro na limpeza de agendamentos antigos: {str(e)}")
+        return jsonify({"error": "Erro na limpeza de agendamentos antigos", "details": str(e)}), 500
+
+@bookings_bp.route("/admin/rooms", methods=["POST"])
+@require_admin_key
+def admin_create_room():
+    """Cria uma nova sala"""
+    try:
+        data = request.get_json()
+        if not data or not data.get("name"):
+            return jsonify({"error": "Nome da sala é obrigatório"}), 400
+        
+        room_name = data["name"].strip()
+        
+        # Verificar se a sala já existe
+        existing_room = Room.query.filter_by(name=room_name).first()
+        if existing_room:
+            return jsonify({"error": f"Sala '{room_name}' já existe"}), 409
+        
+        new_room = Room(name=room_name)
+        db.session.add(new_room)
+        db.session.commit()
+        
+        current_app.logger.info(f"ADMIN: Nova sala criada: {room_name} (ID: {new_room.id})")
+        
+        return jsonify({
+            "message": f"Sala '{room_name}' criada com sucesso",
+            "room": {"id": new_room.id, "name": new_room.name}
+        }), 201
+    
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erro ao criar sala: {str(e)}")
+        return jsonify({"error": "Erro ao criar sala", "details": str(e)}), 500
+
+@bookings_bp.route("/admin/rooms/<int:room_id>", methods=["DELETE"])
+@require_admin_key
+def admin_delete_room(room_id):
+    """Deleta uma sala (e todos os seus agendamentos)"""
+    try:
+        room = Room.query.get(room_id)
+        if not room:
+            return jsonify({"error": f"Sala com ID {room_id} não encontrada"}), 404
+        
+        # Contar agendamentos associados
+        bookings_count = Booking.query.filter_by(room_id=room_id).count()
+        
+        # Deletar agendamentos associados
+        Booking.query.filter_by(room_id=room_id).delete()
+        
+        room_name = room.name
+        db.session.delete(room)
+        db.session.commit()
+        
+        current_app.logger.warning(f"ADMIN: Sala '{room_name}' (ID: {room_id}) deletada junto com "
+                                 f"{bookings_count} agendamento(s) associado(s)")
+        
+        return jsonify({
+            "message": f"Sala '{room_name}' deletada com sucesso",
+            "deleted_bookings_count": bookings_count
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erro ao deletar sala ID {room_id}: {str(e)}")
+        return jsonify({"error": "Erro ao deletar sala", "details": str(e)}), 500
+
+@bookings_bp.route("/admin/export/bookings", methods=["GET"])
+@require_admin_key
+def admin_export_bookings():
+    """Exporta todos os agendamentos em formato JSON"""
+    try:
+        start_date_str = request.args.get("start_date")
+        end_date_str = request.args.get("end_date")
+        
+        query = Booking.query.join(Room).order_by(Booking.booking_date, Booking.period)
+        
+        if start_date_str and end_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                query = query.filter(Booking.booking_date.between(start_date, end_date))
+            except ValueError:
+                return jsonify({"error": "Formato de data inválido. Use YYYY-MM-DD"}), 400
+        
+        bookings = query.all()
+        
+        export_data = {
+            "export_timestamp": datetime.now().isoformat(),
+            "total_bookings": len(bookings),
+            "date_range": {
+                "start": start_date_str,
+                "end": end_date_str
+            } if start_date_str and end_date_str else None,
+            "bookings": []
+        }
+        
+        for booking in bookings:
+            export_data["bookings"].append({
+                "id": booking.id,
+                "user_name": booking.user_name,
+                "user_email": booking.user_email,
+                "coordinator_name": booking.coordinator_name,
+                "observation": booking.observation,
+                "room_id": booking.room_id,
+                "room_name": booking.room.name,
+                "booking_date": booking.booking_date.isoformat(),
+                "period": booking.period,
+                "created_at": booking.created_at.isoformat() if booking.created_at else None
+            })
+        
+        response = make_response(jsonify(export_data))
+        filename = f"bookings_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+        
+        return response
+    
+    except Exception as e:
+        current_app.logger.error(f"Erro ao exportar agendamentos: {str(e)}")
+        return jsonify({"error": "Erro ao exportar agendamentos", "details": str(e)}), 500
