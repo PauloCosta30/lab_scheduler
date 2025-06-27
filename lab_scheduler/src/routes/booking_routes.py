@@ -1,3 +1,5 @@
+# /home/ubuntu/lab_scheduler/src/routes/booking_routes.py
+
 from flask import Blueprint, request, jsonify, current_app, render_template, make_response
 from src.extensions import db
 from src.models.entities import Room, Booking
@@ -98,7 +100,6 @@ def get_rooms():
 def create_booking():
     data = request.get_json()
     if not data:
-        current_app.logger.debug("create_booking: No JSON data received.")
         return jsonify({"error": "Invalid input"}), 400
 
     user_name = data.get("user_name")
@@ -107,18 +108,13 @@ def create_booking():
     observation = data.get("observation", "")
     slots_data = data.get("slots")
 
-    current_app.logger.debug(f"create_booking: Received data for user {user_name}, email {user_email}, slots: {slots_data}")
-
     if not all([user_name, user_email, slots_data]):
-        current_app.logger.debug("create_booking: Missing required fields.")
         return jsonify({"error": "Missing fields. Required: user_name, user_email, slots"}), 400
     
     if not isinstance(slots_data, list) or not slots_data:
-        current_app.logger.debug("create_booking: Slots must be a non-empty list.")
         return jsonify({"error": "Slots must be a non-empty list"}), 400
 
     if "@" not in user_email or "." not in user_email.split("@")[-1]:
-        current_app.logger.debug(f"create_booking: Invalid email format for {user_email}.")
         return jsonify({"error": "Invalid email format"}), 400
 
     processed_slots = []
@@ -130,29 +126,19 @@ def create_booking():
         period = slot_input.get("period")
 
         if not all([room_id, booking_date_str, period]):
-            current_app.logger.debug(f"create_booking: Invalid slot data: {slot_input}. Missing room_id, booking_date, or period.")
             return jsonify({"error": f"Invalid slot data: {slot_input}. Each slot needs room_id, booking_date, period"}), 400
         if period not in ["Manhã", "Tarde"]:
-            current_app.logger.debug(f"create_booking: Invalid period '{period}' in slot: {slot_input}.")
             return jsonify({"error": f"Invalid period '{period}' in slot: {slot_input}. Must be 'Manhã' or 'Tarde'"}), 400
         try:
             booking_date_obj = datetime.strptime(booking_date_str, "%Y-%m-%d").date()
         except ValueError:
-            current_app.logger.debug(f"create_booking: Invalid date format '{booking_date_str}' in slot: {slot_input}.")
             return jsonify({"error": f"Invalid date format '{booking_date_str}' in slot: {slot_input}. Use YYYY-MM-DD"}), 400
-        
-        # Use datetime.utcnow().date() for consistency with frontend UTC logic
-        if booking_date_obj < datetime.utcnow().date():
-            current_app.logger.debug(f"create_booking: Booking date {booking_date_str} in slot: {slot_input} is in the past (UTC: {datetime.utcnow().date()}).")
+        if booking_date_obj < date.today():
             return jsonify({"error": f"Booking date {booking_date_str} in slot: {slot_input} cannot be in the past"}), 400
-        
-        if booking_date_obj.weekday() >= 5: # 5 is Saturday, 6 is Sunday
-            current_app.logger.debug(f"create_booking: Booking date {booking_date_str} in slot: {slot_input} is not a weekday.")
+        if booking_date_obj.weekday() >= 5:
             return jsonify({"error": f"Bookings for date {booking_date_str} in slot: {slot_input} are only allowed on weekdays (Mon-Fri)"}), 400
-        
         room = Room.query.get(room_id)
         if not room:
-            current_app.logger.debug(f"create_booking: Room ID {room_id} in slot: {slot_input} not found.")
             return jsonify({"error": f"Room ID {room_id} in slot: {slot_input} not found"}), 404
         
         processed_slots.append({
@@ -165,9 +151,7 @@ def create_booking():
     # Validation for max 3 bookings per day per user
     for booking_date_obj, count_for_this_request in daily_new_bookings_count.items():
         existing_bookings_on_day = Booking.query.filter_by(user_name=user_name, booking_date=booking_date_obj).count()
-        current_app.logger.debug(f"create_booking: User {user_name} has {existing_bookings_on_day} existing bookings on {booking_date_obj}. Request adds {count_for_this_request}.")
         if (existing_bookings_on_day + count_for_this_request) > MAX_BOOKINGS_PER_DAY:
-            current_app.logger.debug(f"create_booking: Max bookings per day exceeded for user {user_name} on {booking_date_obj}.")
             return jsonify({
                 "error": f"Limite de {MAX_BOOKINGS_PER_DAY} agendamentos por dia para o usuário '{user_name}' seria excedido no dia {booking_date_obj.strftime('%Y-%m-%d')}."
             }), 409
@@ -184,7 +168,6 @@ def create_booking():
         # Verificar se há mais de uma sala "Geral" no mesmo período
         for period, geral_rooms in geral_periods_in_request.items():
             if len(geral_rooms) > 1:
-                current_app.logger.debug(f"create_booking: Multiple 'Geral' rooms requested for period '{period}' on {booking_date_obj}.")
                 return jsonify({
                     "error": f"Você só pode agendar uma sala da categoria 'Geral' por período. Tentativa de agendar múltiplas salas 'Geral' no período '{period}' do dia {booking_date_obj.strftime('%Y-%m-%d')}."
                 }), 409
@@ -198,7 +181,6 @@ def create_booking():
             ).first()
             
             if existing_geral_booking:
-                current_app.logger.debug(f"create_booking: Existing 'Geral' room booking for user {user_name} in period '{period}' on {booking_date_obj}.")
                 return jsonify({
                     "error": f"Você já possui um agendamento para uma sala da categoria 'Geral' ({existing_geral_booking.room.name}) no período '{period}' do dia {booking_date_obj.strftime('%Y-%m-%d')}."
                 }), 409
@@ -206,7 +188,6 @@ def create_booking():
     # Validation for booking conflicts (slot already taken)
     for slot in processed_slots:
         if check_booking_conflict(slot["room_id"], slot["booking_date_obj"], slot["period"]):
-            current_app.logger.debug(f"create_booking: Conflict detected for room {slot['room_name']} on {slot['booking_date_str']} in period {slot['period']}.")
             return jsonify({
                 "error": f"A sala '{slot['room_name']}' já está reservada para o período '{slot['period']}' no dia {slot['booking_date_str']}."
             }), 409
@@ -230,7 +211,6 @@ def create_booking():
                 "period": slot["period"]
             })
         db.session.commit()
-        current_app.logger.info(f"create_booking: Successfully created {len(processed_slots)} booking(s) for user {user_name}.")
         
         email_sent_successfully = send_booking_confirmation_email(
             user_email, user_name, coordinator_name, observation, newly_created_bookings_details_for_email
@@ -247,7 +227,7 @@ def create_booking():
 
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Falha ao criar agendamento(s) no servidor: {str(e)}", exc_info=True)
+        current_app.logger.error(f"Falha ao criar agendamento(s) no servidor: {str(e)}")
         return jsonify({"error": "Falha ao criar agendamento(s) no servidor.", "details": str(e)}), 500
 
 @bookings_bp.route("/bookings", methods=["GET"])
@@ -256,8 +236,6 @@ def get_bookings():
     start_date_str = request.args.get("start_date")
     end_date_str = request.args.get("end_date")
     
-    current_app.logger.debug(f"get_bookings: Received request with date={target_date_str}, start_date={start_date_str}, end_date={end_date_str}")
-
     # Usar join com Room e aplicar ordenação customizada
     query = Booking.query.join(Room).order_by(Booking.booking_date, Booking.period)
     
@@ -265,18 +243,14 @@ def get_bookings():
         try:
             target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
             query = query.filter(Booking.booking_date == target_date)
-            current_app.logger.debug(f"get_bookings: Filtering by single date: {target_date}")
         except ValueError:
-            current_app.logger.debug(f"get_bookings: Invalid date format for 'date': {target_date_str}")
             return jsonify({"error": "Invalid date format for 'date'. Use YYYY-MM-DD"}), 400
     elif start_date_str and end_date_str:
         try:
             start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
             end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
             query = query.filter(Booking.booking_date.between(start_date, end_date))
-            current_app.logger.debug(f"get_bookings: Filtering by date range: {start_date} to {end_date}")
         except ValueError:
-            current_app.logger.debug(f"get_bookings: Invalid date format for 'start_date' or 'end_date': {start_date_str}, {end_date_str}")
             return jsonify({"error": "Invalid date format for 'start_date' or 'end_date'. Use YYYY-MM-DD"}), 400
     
     bookings = query.all()
@@ -309,7 +283,6 @@ def get_bookings():
             "period": booking.period, 
             "created_at": booking.created_at.isoformat() if booking.created_at else None
         })
-    current_app.logger.debug(f"get_bookings: Returning {len(result)} bookings.")
     return jsonify(result)
 
 @bookings_bp.route("/generate-pdf", methods=["GET"])
@@ -319,30 +292,23 @@ def generate_schedule_pdf():
         start_date_str = request.args.get("start_date")
         end_date_str = request.args.get("end_date")
         
-        current_app.logger.debug(f"generate_schedule_pdf: Received request for start_date={start_date_str}, end_date={end_date_str}")
-
         if not start_date_str or not end_date_str:
-            current_app.logger.debug("generate_schedule_pdf: Missing start_date or end_date parameters.")
             return jsonify({"error": "Parâmetros start_date e end_date são obrigatórios"}), 400
         
         try:
             start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
             end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-            current_app.logger.debug(f"generate_schedule_pdf: Parsed dates: {start_date} to {end_date}")
         except ValueError:
-            current_app.logger.debug(f"generate_schedule_pdf: Invalid date format for start_date or end_date: {start_date_str}, {end_date_str}")
             return jsonify({"error": "Formato de data inválido. Use YYYY-MM-DD"}), 400
         
         # Buscar agendamentos do período
         bookings = Booking.query.join(Room).filter(
             Booking.booking_date.between(start_date, end_date)
         ).order_by(Booking.booking_date, Booking.period).all()
-        current_app.logger.debug(f"generate_schedule_pdf: Found {len(bookings)} bookings for the period.")
         
         # Buscar todas as salas e aplicar ordenação customizada
         rooms = Room.query.all()
         sorted_rooms = sort_rooms_custom(rooms)
-        current_app.logger.debug(f"generate_schedule_pdf: Found {len(sorted_rooms)} rooms.")
         
         # Preparar dados da escala
         schedule_data = {}
@@ -401,11 +367,9 @@ def generate_schedule_pdf():
             generation_date=generation_date,
             zip=zip
         )
-        current_app.logger.debug("generate_schedule_pdf: HTML content rendered.")
         
         # Gerar PDF
         pdf_bytes = HTML(string=html_content).write_pdf()
-        current_app.logger.debug("generate_schedule_pdf: PDF generated.")
         
         # Criar resposta
         response = make_response(pdf_bytes)
@@ -415,6 +379,6 @@ def generate_schedule_pdf():
         return response
         
     except Exception as e:
-        current_app.logger.error(f"Erro ao gerar PDF: {str(e)}", exc_info=True)
+        current_app.logger.error(f"Erro ao gerar PDF: {str(e)}")
         return jsonify({"error": "Erro interno ao gerar PDF", "details": str(e)}), 500
 
