@@ -40,47 +40,57 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- Helper Functions for Messages ---
     function showModalMessage(message, type) {
-        modalFormMessage.textContent = message;
-        modalFormMessage.className = `message ${type}`;
-        if (type === "success") {
-            setTimeout(() => {
-                modalFormMessage.textContent = "";
-                modalFormMessage.className = "message";
-            }, 4000);
+        if (modalFormMessage) {
+            modalFormMessage.textContent = message;
+            modalFormMessage.className = `message ${type}`;
+            if (type === "success") {
+                setTimeout(() => {
+                    modalFormMessage.textContent = "";
+                    modalFormMessage.className = "message";
+                }, 4000);
+            }
         }
     }
 
     function showScheduleMessage(message, type) {
-        scheduleMessage.textContent = message;
-        scheduleMessage.className = `message ${type}`;
-        if (type !== "error" && type !== "info") {
-             setTimeout(() => {
-                scheduleMessage.textContent = "";
-                scheduleMessage.className = "message";
-            }, 3000);
+        if (scheduleMessage) {
+            scheduleMessage.textContent = message;
+            scheduleMessage.className = `message ${type}`;
+            if (type !== "error" && type !== "info") {
+                setTimeout(() => {
+                    scheduleMessage.textContent = "";
+                    scheduleMessage.className = "message";
+                }, 3000);
+            }
         }
     }
 
     function showBookingStatusMessage(message, type) {
-        bookingStatusMessage.textContent = message;
-        bookingStatusMessage.className = `status-message ${type}`;
+        if (bookingStatusMessage) {
+            bookingStatusMessage.textContent = message;
+            bookingStatusMessage.className = `status-message ${type}`;
+        }
     }
 
     // --- Booking Window Status Functions ---
     async function fetchBookingWindowStatus() {
         try {
             const response = await fetch(`${API_BASE_URL}/booking-window-status`);
-            if (!response.ok) throw new Error(`Erro ao buscar status: ${response.statusText}`);
+            if (!response.ok) {
+                throw new Error(`Erro ao buscar status: ${response.statusText}`);
+            }
             bookingWindowStatus = await response.json();
             updateBookingStatusDisplay();
+            return true;
         } catch (error) {
             console.error("Falha ao buscar status da janela de agendamento:", error);
             showBookingStatusMessage("Não foi possível verificar o status do agendamento", "error");
+            return false;
         }
     }
 
     function updateBookingStatusDisplay() {
-        if (!bookingWindowStatus) return;
+        if (!bookingWindowStatus || !currentWeekStatus || !nextWeekStatus) return;
 
         const currentWeek = bookingWindowStatus.current_week;
         const nextWeek = bookingWindowStatus.next_week;
@@ -105,11 +115,16 @@ document.addEventListener("DOMContentLoaded", () => {
     async function fetchAllRooms() {
         try {
             const response = await fetch(`${API_BASE_URL}/rooms`);
-            if (!response.ok) throw new Error(`Erro ao buscar salas: ${response.statusText}`);
+            if (!response.ok) {
+                throw new Error(`Erro ao buscar salas: ${response.statusText}`);
+            }
             allRooms = await response.json();
+            console.log(`Carregadas ${allRooms.length} salas`);
+            return true;
         } catch (error) {
             console.error("Falha ao buscar salas:", error);
             showScheduleMessage("Não foi possível carregar dados das salas. Tente recarregar.", "error");
+            return false;
         }
     }
 
@@ -118,51 +133,75 @@ document.addEventListener("DOMContentLoaded", () => {
         let startDate, endDate;
         const todayUTC = getTodayUTC();
 
-        if (selectedDateStr) {
-            const selectedDateObj = parseDateStrToUTC(selectedDateStr);
-            const tempDate = new Date(selectedDateObj.valueOf());
-            const dayOfWeek = tempDate.getUTCDay();
-            const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-            startDate = new Date(tempDate.setUTCDate(tempDate.getUTCDate() + diffToMonday));
-            
-            const endOfWeekForCheck = new Date(startDate.valueOf());
-            endOfWeekForCheck.setUTCDate(startDate.getUTCDate() + 4);
-            if (endOfWeekForCheck < todayUTC && endOfWeekForCheck.toISOString().split("T")[0] !== todayUTC.toISOString().split("T")[0]) {
-                showScheduleMessage("Não é possível carregar escalas de semanas completamente passadas.", "info");
-                scheduleTableContainer.innerHTML = "<p>Selecione uma semana atual ou futura.</p>";
-                return;
-            }
-            endDate = new Date(new Date(startDate).setUTCDate(startDate.getUTCDate() + 4));
-        } else {
-            const todayForLogic = new Date();
-            const dayOfWeek = todayForLogic.getDay();
-            const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-            startDate = new Date(todayForLogic.setDate(todayForLogic.getDate() + diffToMonday));
-            startDate = parseDateStrToUTC(startDate.toISOString().split("T")[0]);
-            endDate = new Date(new Date(startDate).setUTCDate(startDate.getUTCDate() + 4));
-        }
-        currentWeekStartDate = startDate; 
-
-        const startDateStrAPI = startDate.toISOString().split("T")[0];
-        const endDateStrAPI = endDate.toISOString().split("T")[0];
-        
-        showScheduleMessage("Carregando escala...", "");
         try {
+            if (selectedDateStr) {
+                const selectedDateObj = parseDateStrToUTC(selectedDateStr);
+                const tempDate = new Date(selectedDateObj.valueOf());
+                const dayOfWeek = tempDate.getUTCDay();
+                const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+                startDate = new Date(tempDate.setUTCDate(tempDate.getUTCDate() + diffToMonday));
+                
+                const endOfWeekForCheck = new Date(startDate.valueOf());
+                endOfWeekForCheck.setUTCDate(startDate.getUTCDate() + 4);
+                if (endOfWeekForCheck < todayUTC && endOfWeekForCheck.toISOString().split("T")[0] !== todayUTC.toISOString().split("T")[0]) {
+                    showScheduleMessage("Não é possível carregar escalas de semanas completamente passadas.", "info");
+                    if (scheduleTableContainer) {
+                        scheduleTableContainer.innerHTML = "<p>Selecione uma semana atual ou futura.</p>";
+                    }
+                    return;
+                }
+                endDate = new Date(new Date(startDate).setUTCDate(startDate.getUTCDate() + 4));
+            } else {
+                const todayForLogic = new Date();
+                const dayOfWeek = todayForLogic.getDay();
+                const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+                startDate = new Date(todayForLogic.setDate(todayForLogic.getDate() + diffToMonday));
+                startDate = parseDateStrToUTC(startDate.toISOString().split("T")[0]);
+                endDate = new Date(new Date(startDate).setUTCDate(startDate.getUTCDate() + 4));
+            }
+            
+            currentWeekStartDate = startDate; 
+
+            const startDateStrAPI = startDate.toISOString().split("T")[0];
+            const endDateStrAPI = endDate.toISOString().split("T")[0];
+            
+            showScheduleMessage("Carregando escala...", "");
+            
+            console.log(`Carregando agendamentos de ${startDateStrAPI} até ${endDateStrAPI}`);
+            
             const response = await fetch(`${API_BASE_URL}/bookings?start_date=${startDateStrAPI}&end_date=${endDateStrAPI}`);
-            if (!response.ok) throw new Error(`Erro ao buscar agendamentos: ${response.statusText}`);
+            if (!response.ok) {
+                throw new Error(`Erro ao buscar agendamentos: ${response.statusText}`);
+            }
             currentFetchedBookings = await response.json();
-            if (allRooms.length === 0) await fetchAllRooms();
+            console.log(`Carregados ${currentFetchedBookings.length} agendamentos`);
+            
+            // Verificar se temos as salas carregadas
+            if (allRooms.length === 0) {
+                const roomsLoaded = await fetchAllRooms();
+                if (!roomsLoaded) {
+                    throw new Error("Não foi possível carregar as salas");
+                }
+            }
             
             renderScheduleTable(currentFetchedBookings, allRooms, currentWeekStartDate);
             showScheduleMessage("Escala carregada.", "success");
+            
         } catch (error) {
             console.error("Falha ao carregar escala:", error);
-            showScheduleMessage("Não foi possível carregar a escala.", "error");
-            scheduleTableContainer.innerHTML = "<p>Erro ao carregar escala.</p>";
+            showScheduleMessage(`Não foi possível carregar a escala: ${error.message}`, "error");
+            if (scheduleTableContainer) {
+                scheduleTableContainer.innerHTML = "<p>Erro ao carregar escala.</p>";
+            }
         }
     }
 
     function renderScheduleTable(bookings, roomsData, weekStartDateObj) {
+        if (!scheduleTableContainer) {
+            console.error("scheduleTableContainer não encontrado");
+            return;
+        }
+
         scheduleTableContainer.innerHTML = "";
         selectedSlots = [];
         updateButtonStates();
@@ -252,18 +291,28 @@ document.addEventListener("DOMContentLoaded", () => {
     function checkIfBookingAllowed(dateStr) {
         if (!bookingWindowStatus) return false;
 
-        const slotDate = parseDateStrToUTC(dateStr);
-        const today = getTodayUTC();
-        const currentWeekMonday = today - new Date(today.getTime() - (today.getUTCDay() === 0 ? 6 : today.getUTCDay() - 1) * 24 * 60 * 60 * 1000);
-        const nextWeekMonday = new Date(currentWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000);
+        try {
+            const slotDate = parseDateStrToUTC(dateStr);
+            const today = getTodayUTC();
+            
+            // Calcular segunda-feira da semana atual
+            const currentWeekMonday = new Date(today.valueOf());
+            const dayOffset = today.getUTCDay() === 0 ? 6 : today.getUTCDay() - 1;
+            currentWeekMonday.setUTCDate(today.getUTCDate() - dayOffset);
+            
+            const nextWeekMonday = new Date(currentWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-        if (slotDate >= currentWeekMonday && slotDate < nextWeekMonday) {
-            return bookingWindowStatus.current_week.open;
-        } else if (slotDate >= nextWeekMonday && slotDate < new Date(nextWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000)) {
-            return bookingWindowStatus.next_week.open;
+            if (slotDate >= currentWeekMonday && slotDate < nextWeekMonday) {
+                return bookingWindowStatus.current_week.open;
+            } else if (slotDate >= nextWeekMonday && slotDate < new Date(nextWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000)) {
+                return bookingWindowStatus.next_week.open;
+            }
+
+            return false;
+        } catch (error) {
+            console.error("Erro ao verificar se agendamento é permitido:", error);
+            return false;
         }
-
-        return false;
     }
 
     function handleSlotClick(event) {
@@ -311,7 +360,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function updateButtonStates() {
-        proceedToBookingButton.disabled = selectedSlots.length === 0;
+        if (proceedToBookingButton) {
+            proceedToBookingButton.disabled = selectedSlots.length === 0;
+        }
         if (generatePdfButton) {
             generatePdfButton.disabled = !currentWeekStartDate;
         }
@@ -376,23 +427,34 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
 
-        selectedSlotsSummaryList.innerHTML = "";
-        selectedSlots.forEach(slot => {
-            const li = document.createElement("li");
-            li.textContent = `${slot.roomName} - ${new Date(slot.date + 'T00:00:00').toLocaleDateString('pt-BR', {timeZone: 'UTC'})} - ${slot.period}`;
-            selectedSlotsSummaryList.appendChild(li);
-        });
-        modalBookingForm.reset();
+        if (selectedSlotsSummaryList) {
+            selectedSlotsSummaryList.innerHTML = "";
+            selectedSlots.forEach(slot => {
+                const li = document.createElement("li");
+                li.textContent = `${slot.roomName} - ${new Date(slot.date + 'T00:00:00').toLocaleDateString('pt-BR', {timeZone: 'UTC'})} - ${slot.period}`;
+                selectedSlotsSummaryList.appendChild(li);
+            });
+        }
+        
+        if (modalBookingForm) {
+            modalBookingForm.reset();
+        }
         showModalMessage("", "");
-        bookingModal.style.display = "block";
+        if (bookingModal) {
+            bookingModal.style.display = "block";
+        }
     }
 
     function closeBookingModal() {
-        bookingModal.style.display = "none";
+        if (bookingModal) {
+            bookingModal.style.display = "none";
+        }
     }
 
     async function handleModalFormSubmit(event) {
         event.preventDefault();
+        if (!modalBookingForm) return;
+
         const formData = new FormData(modalBookingForm);
         const requestData = {
             user_name: formData.get("userName"),
@@ -422,16 +484,18 @@ document.addEventListener("DOMContentLoaded", () => {
             if (response.ok && response.status === 201) {
                 showModalMessage(result.message || "Agendamento(s) realizado(s) com sucesso!", "success");
                 selectedSlots.forEach(slot => {
-                    slot.cellRef.classList.remove('selected', 'available');
-                    slot.cellRef.classList.add('booked');
-                    slot.cellRef.textContent = requestData.user_name;
-                    slot.cellRef.removeEventListener('click', handleSlotClick);
+                    if (slot.cellRef) {
+                        slot.cellRef.classList.remove('selected', 'available');
+                        slot.cellRef.classList.add('booked');
+                        slot.cellRef.textContent = requestData.user_name;
+                        slot.cellRef.removeEventListener('click', handleSlotClick);
+                    }
                 });
                 selectedSlots = [];
                 updateButtonStates();
                 setTimeout(() => {
                     closeBookingModal();
-                    loadScheduleData(weekSelector.value || getTodayUTC().toISOString().split("T")[0]);
+                    loadScheduleData(weekSelector ? weekSelector.value : getTodayUTC().toISOString().split("T")[0]);
                 }, 2000);
             } else {
                 showModalMessage(result.error || "Erro ao realizar agendamento.", "error");
@@ -445,7 +509,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // --- Event Listeners ---
     if (loadScheduleButton) {
         loadScheduleButton.addEventListener("click", () => {
-            const selectedDate = weekSelector.value;
+            const selectedDate = weekSelector ? weekSelector.value : null;
             if (!selectedDate) {
                 showScheduleMessage("Por favor, selecione uma data para carregar a semana.", "error");
                 return;
@@ -478,24 +542,40 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- Initializations ---
     async function initializeApp() {
-        const todayUTC = getTodayUTC();
-        const todayUTCStr = todayUTC.toISOString().split("T")[0];
-        if(weekSelector) {
-            weekSelector.value = todayUTCStr;
-            weekSelector.min = todayUTCStr;
+        try {
+            const todayUTC = getTodayUTC();
+            const todayUTCStr = todayUTC.toISOString().split("T")[0];
+            
+            if (weekSelector) {
+                weekSelector.value = todayUTCStr;
+                weekSelector.min = todayUTCStr;
+            }
+            
+            console.log("Inicializando aplicação...");
+            
+            // Carregar status da janela de agendamento
+            console.log("Carregando status da janela de agendamento...");
+            await fetchBookingWindowStatus();
+            
+            // Carregar salas
+            console.log("Carregando salas...");
+            await fetchAllRooms();
+            
+            // Carregar escala inicial
+            console.log("Carregando escala inicial...");
+            await loadScheduleData(todayUTCStr);
+            
+            // Atualizar status a cada 5 minutos
+            setInterval(fetchBookingWindowStatus, 5 * 60 * 1000);
+            
+            console.log("Aplicação inicializada com sucesso!");
+            
+        } catch (error) {
+            console.error("Erro durante a inicialização:", error);
+            showScheduleMessage("Erro durante a inicialização da aplicação", "error");
         }
-        
-        // Carregar status da janela de agendamento
-        await fetchBookingWindowStatus();
-        
-        await fetchAllRooms();
-        loadScheduleData(todayUTCStr);
-        
-        // Atualizar status a cada 5 minutos
-        setInterval(fetchBookingWindowStatus, 5 * 60 * 1000);
     }
 
     initializeApp();
 
 });
-
