@@ -26,6 +26,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentFetchedBookings = [];
     let currentWeekStartDate;
     let bookingWindowStatus = null;
+    let previousBookingWindowStatus = null; // Para comparar mudanças de status
 
     // --- Helper Functions for Date Handling (UTC) ---
     function getTodayUTC() {
@@ -79,13 +80,51 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!response.ok) {
                 throw new Error(`Erro ao buscar status: ${response.statusText}`);
             }
+            
+            // Salvar status anterior para comparação
+            previousBookingWindowStatus = bookingWindowStatus ? JSON.parse(JSON.stringify(bookingWindowStatus)) : null;
             bookingWindowStatus = await response.json();
+            
             updateBookingStatusDisplay();
+            
+            // Verificar se houve mudança no status e atualizar escala se necessário
+            checkForBookingStatusChanges();
+            
             return true;
         } catch (error) {
             console.error("Falha ao buscar status da janela de agendamento:", error);
             showBookingStatusMessage("Não foi possível verificar o status do agendamento", "error");
             return false;
+        }
+    }
+
+    function checkForBookingStatusChanges() {
+        if (!previousBookingWindowStatus || !bookingWindowStatus) return;
+        
+        const currentWeekChanged = previousBookingWindowStatus.current_week.open !== bookingWindowStatus.current_week.open;
+        const nextWeekChanged = previousBookingWindowStatus.next_week.open !== bookingWindowStatus.next_week.open;
+        
+        // Se alguma janela foi aberta (de fechada para aberta)
+        const currentWeekOpened = !previousBookingWindowStatus.current_week.open && bookingWindowStatus.current_week.open;
+        const nextWeekOpened = !previousBookingWindowStatus.next_week.open && bookingWindowStatus.next_week.open;
+        
+        if (currentWeekChanged || nextWeekChanged) {
+            console.log("Status da janela de agendamento mudou, atualizando escala...");
+            
+            if (currentWeekOpened) {
+                showScheduleMessage("Agendamentos da semana atual foram abertos! Atualizando escala...", "success");
+            }
+            if (nextWeekOpened) {
+                showScheduleMessage("Agendamentos da próxima semana foram abertos! Atualizando escala...", "success");
+            }
+            
+            // Atualizar a escala se já existe uma carregada
+            if (currentWeekStartDate) {
+                const currentDateStr = weekSelector ? weekSelector.value : getTodayUTC().toISOString().split("T")[0];
+                setTimeout(() => {
+                    loadScheduleData(currentDateStr);
+                }, 1000); // Pequeno delay para mostrar a mensagem
+            }
         }
     }
 
@@ -565,8 +604,8 @@ document.addEventListener("DOMContentLoaded", () => {
             console.log("Carregando escala inicial...");
             await loadScheduleData(todayUTCStr);
             
-            // Atualizar status a cada 5 minutos
-            setInterval(fetchBookingWindowStatus, 5 * 60 * 1000);
+            // Atualizar status a cada 1 minuto (reduzido de 5 para ser mais responsivo)
+            setInterval(fetchBookingWindowStatus, 1 * 60 * 1000);
             
             console.log("Aplicação inicializada com sucesso!");
             
