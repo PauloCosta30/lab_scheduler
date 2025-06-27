@@ -79,7 +79,7 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, obs
             html_body += f"<p>Coordenador: {coordinator_name}</p>"
         if observation:
             html_body += f"<p>Observação: {observation}</p>"
-        html_body += "<p>Obrigado!</p>"
+        html_body += "<p>Obrigado! Observação: Em caso de dúvidas sobre a escala, entre em contato com Ana Correa pelo e-mail: ana.correa@itv.org</p>"
 
         msg = Message(subject, sender=sender, recipients=recipients)
         msg.html = html_body
