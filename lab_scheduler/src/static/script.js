@@ -400,7 +400,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function updateButtonStates() {
         if (proceedToBookingButton) {
-            proceedToBookingButton.disabled = selectedSlots.length === 0;
+            proceedToBookingButton.disabled = false;
         }
         if (generatePdfButton) {
             generatePdfButton.disabled = !currentWeekStartDate;
