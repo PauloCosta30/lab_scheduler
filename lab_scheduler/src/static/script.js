@@ -2,8 +2,6 @@
 
 document.addEventListener("DOMContentLoaded", () => {
     // DOM Elements for Modal and New Flow
-    const weekSelector = document.getElementById("weekSelector");
-    const loadScheduleButton = document.getElementById("loadScheduleButton");
     const scheduleTableContainer = document.getElementById("scheduleTableContainer");
     const scheduleMessage = document.getElementById("scheduleMessage");
     const proceedToBookingButton = document.getElementById("proceedToBookingButton");
@@ -92,23 +90,11 @@ document.addEventListener("DOMContentLoaded", () => {
     function updateBookingStatusDisplay() {
         if (!bookingWindowStatus || !currentWeekStatus || !nextWeekStatus) return;
 
-        const currentWeek = bookingWindowStatus.current_week;
-        const nextWeek = bookingWindowStatus.next_week;
+        showBookingStatusMessage("As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 23:59, e a escala da próxima semana será liberada todas as sextas-feiras, às 18h.", "info");
 
-        // Atualizar status da semana atual
-        currentWeekStatus.textContent = currentWeek.message;
-        currentWeekStatus.className = `status-value ${currentWeek.open ? 'open' : 'closed'}`;
-
-        // Atualizar status da próxima semana
-        nextWeekStatus.textContent = nextWeek.message;
-        nextWeekStatus.className = `status-value ${nextWeek.open ? 'open' : 'closed'}`;
-
-        // Mensagem geral
-        if (currentWeek.open || nextWeek.open) {
-            showBookingStatusMessage("Agendamentos disponíveis", "open");
-        } else {
-            showBookingStatusMessage("Agendamentos fechados no momento", "closed");
-        }
+        // Ocultar os status individuais da semana atual e próxima semana, pois a mensagem é fixa
+        currentWeekStatus.style.display = "none";
+        nextWeekStatus.style.display = "none";
     }
 
     // --- Room Data --- 
@@ -129,36 +115,17 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // --- Schedule Logic (Loading and Rendering) ---
-    async function loadScheduleData(selectedDateStr) {
+    async function loadScheduleData() {
         let startDate, endDate;
         const todayUTC = getTodayUTC();
 
         try {
-            if (selectedDateStr) {
-                const selectedDateObj = parseDateStrToUTC(selectedDateStr);
-                const tempDate = new Date(selectedDateObj.valueOf());
-                const dayOfWeek = tempDate.getUTCDay();
-                const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-                startDate = new Date(tempDate.setUTCDate(tempDate.getUTCDate() + diffToMonday));
-                
-                const endOfWeekForCheck = new Date(startDate.valueOf());
-                endOfWeekForCheck.setUTCDate(startDate.getUTCDate() + 4);
-                if (endOfWeekForCheck < todayUTC && endOfWeekForCheck.toISOString().split("T")[0] !== todayUTC.toISOString().split("T")[0]) {
-                    showScheduleMessage("Não é possível carregar escalas de semanas completamente passadas.", "info");
-                    if (scheduleTableContainer) {
-                        scheduleTableContainer.innerHTML = "<p>Selecione uma semana atual ou futura.</p>";
-                    }
-                    return;
-                }
-                endDate = new Date(new Date(startDate).setUTCDate(startDate.getUTCDate() + 4));
-            } else {
-                const todayForLogic = new Date();
-                const dayOfWeek = todayForLogic.getDay();
-                const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-                startDate = new Date(todayForLogic.setDate(todayForLogic.getDate() + diffToMonday));
-                startDate = parseDateStrToUTC(startDate.toISOString().split("T")[0]);
-                endDate = new Date(new Date(startDate).setUTCDate(startDate.getUTCDate() + 4));
-            }
+            const todayForLogic = new Date();
+            const dayOfWeek = todayForLogic.getDay();
+            const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+            startDate = new Date(todayForLogic.setDate(todayForLogic.getDate() + diffToMonday));
+            startDate = parseDateStrToUTC(startDate.toISOString().split("T")[0]);
+            endDate = new Date(new Date(startDate).setUTCDate(startDate.getUTCDate() + 4));
             
             currentWeekStartDate = startDate; 
 
