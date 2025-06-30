@@ -29,8 +29,8 @@ BRASILIA_TZ = pytz.timezone("America/Sao_Paulo")
 def require_admin_key(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        admin_key = request.headers.get('X-Admin-Key') or request.args.get('admin_key')
-        expected_key = current_app.config.get('ADMIN_KEY')
+        admin_key = request.headers.get("X-Admin-Key") or request.args.get("admin_key")
+        expected_key = current_app.config.get("ADMIN_KEY")
         
         if not expected_key:
             return jsonify({"error": "Configuração administrativa não encontrada"}), 500
@@ -74,7 +74,7 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, obs
                     except ValueError:
                         pass
 
-                html_body += f"<li>Sala: {slot['room_name']} - Data: {booking_date_formatted} - Período: {slot['period']}</li>"
+                html_body += f"<li>Sala: {slot["room_name"]} - Data: {booking_date_formatted} - Período: {slot["period"]}</li>"
             html_body += "</ul>"
         
         if observation:
@@ -261,14 +261,14 @@ def create_booking():
         observation = data.get("observation", "")
         slots_data = data.get("slots", [])
 
-        # Validação básica - agora permite slots vazios se houver observação
+        # Primeiro, verificar se há slots OU observação. Se não houver nenhum, é um erro.
+        if not slots_data and not observation.strip(): # Usar .strip() para considerar observações vazias
+            return jsonify({"error": "É necessário selecionar pelo menos uma sala ou fornecer uma observação."}), 400
+
+        # Agora, validar user_name e user_email, que são obrigatórios para qualquer tipo de agendamento/observação.
         if not all([user_name, user_email]):
             return jsonify({"error": "Missing fields. Required: user_name, user_email"}), 400
         
-        # Permitir agendamento sem slots se houver observação
-        if not slots_data and not observation:
-            return jsonify({"error": "É necessário selecionar pelo menos uma sala ou fornecer uma observação"}), 400
-
         if "@" not in user_email or "." not in user_email.split("@")[-1]:
             return jsonify({"error": "Invalid email format"}), 400
 
@@ -392,7 +392,7 @@ def create_booking():
             })
         
         # Se não há slots mas há observação, criar um registro de observação geral
-        if not processed_slots and observation:
+        if not processed_slots and observation.strip():
             # Determinar a data da semana atual para a observação geral
             now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
             now_brasilia = now_utc.astimezone(BRASILIA_TZ)
@@ -418,8 +418,10 @@ def create_booking():
         
         if processed_slots:
             response_message = "Agendamento(s) criado(s) com sucesso!"
-        else:
+        elif observation.strip():
             response_message = "Observação registrada com sucesso!"
+        else:
+            response_message = "Nenhuma ação realizada." # Caso não haja slots nem observação (já validado antes)
             
         if not email_sent_successfully:
             response_message += " (Houve um problema ao enviar o e-mail de confirmação.)"
@@ -427,7 +429,7 @@ def create_booking():
         return jsonify({
             "message": response_message,
             "bookings_created": newly_created_bookings_details_for_email,
-            "observation_saved": bool(observation and not processed_slots)
+            "observation_saved": bool(observation.strip() and not processed_slots)
         }), 201
 
     except Exception as e:
