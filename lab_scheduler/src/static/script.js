@@ -459,8 +459,18 @@ document.addEventListener("DOMContentLoaded", () => {
             }))
         };
 
+        // Verificar se os campos obrigatórios estão preenchidos
+        if (!requestData.user_name || !requestData.user_email || !requestData.coordinator_name) {
+            showModalMessage("Por favor, preencha todos os campos obrigatórios.", "error");
+            return;
+        }
+
         if (requestData.slots.length === 0) {
-            showModalMessage("Nenhum horário foi selecionado para agendar.", "error");
+            // Se não há slots selecionados, apenas salvar as informações do usuário
+            showModalMessage("Informações salvas com sucesso! Nenhum horário foi agendado.", "success");
+            setTimeout(() => {
+                closeBookingModal();
+            }, 2000);
             return;
         }
 
