@@ -438,19 +438,39 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- Booking Creation ---
     async function createBooking(formData) {
+        console.log("=== DEBUG: Iniciando createBooking ===");
+        
+        // Debug: Listar todos os campos do FormData
+        console.log("Campos do FormData:");
+        for (let [key, value] of formData.entries()) {
+            console.log(`  ${key}: "${value}"`);
+        }
+
         const userName = formData.get("user_name");
         const userEmail = formData.get("user_email");
         const coordinatorName = formData.get("coordinator_name") || "";
         const observation = formData.get("observation") || "";
 
+        console.log("Valores extraídos:");
+        console.log(`  userName: "${userName}"`);
+        console.log(`  userEmail: "${userEmail}"`);
+        console.log(`  coordinatorName: "${coordinatorName}"`);
+        console.log(`  observation: "${observation}"`);
+
         // Validação de campos obrigatórios no frontend
-        if (!userName || !userEmail) {
-            showModalMessage("Nome e e-mail são obrigatórios para o agendamento.", "error");
+        if (!userName || userName.trim() === "") {
+            showModalMessage("Nome é obrigatório para o agendamento.", "error");
+            return;
+        }
+
+        if (!userEmail || userEmail.trim() === "") {
+            showModalMessage("E-mail é obrigatório para o agendamento.", "error");
             return;
         }
 
         // Validação de formato de e-mail no frontend
-        if (!userEmail.includes("@") || !userEmail.includes(".")) {
+        const emailTrimmed = userEmail.trim();
+        if (!emailTrimmed.includes("@") || !emailTrimmed.includes(".")) {
             showModalMessage("Por favor, insira um e-mail válido.", "error");
             return;
         }
@@ -467,11 +487,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 booking_date: slot.date,
                 period: slot.period
             })),
-            user_name: userName,
-            user_email: userEmail,
-            coordinator_name: coordinatorName,
-            observation: observation
+            user_name: userName.trim(),
+            user_email: emailTrimmed,
+            coordinator_name: coordinatorName.trim(),
+            observation: observation.trim()
         };
+
+        console.log("Dados do agendamento:", bookingData);
 
         showModalMessage("Enviando agendamento...", "");
 
@@ -494,10 +516,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (slot.cellRef) {
                         slot.cellRef.classList.remove("selected");
                         slot.cellRef.classList.add("booked");
-                        slot.cellRef.textContent = userName;
+                        slot.cellRef.textContent = userName.trim();
                         slot.cellRef.removeEventListener("click", handleSlotClick);
                         slot.cellRef.style.cursor = "default";
-                        slot.cellRef.title = `Reservado por: ${userName}`;
+                        slot.cellRef.title = `Reservado por: ${userName.trim()}`;
                     }
                 });
                 
@@ -550,6 +572,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (modalBookingForm) {
         modalBookingForm.addEventListener("submit", async (event) => {
             event.preventDefault();
+            console.log("=== DEBUG: Form submit ===");
+            
+            // Debug: Verificar se o formulário existe e tem elementos
+            console.log("Form encontrado:", modalBookingForm);
+            console.log("Elementos do form:", modalBookingForm.elements);
+            
             const formData = new FormData(modalBookingForm);
             await createBooking(formData);
         });
