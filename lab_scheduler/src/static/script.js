@@ -376,8 +376,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
+            const a = document.createElement("a");
+            a.style.display = "none";
             a.href = url;
             a.download = `escala_agendamentos_${startDate}_a_${endDateStr}.pdf`;
             document.body.appendChild(a);
@@ -446,12 +446,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const coordinatorName = formData.get("coordinator_name") || "";
         const observation = formData.get("observation") || "";
 
-        if (!userName || !userEmail) {
-            showModalMessage("Nome e e-mail são obrigatórios.", "error");
-            return;
-        }
-
-        // Verificar se há pelo menos slots ou observação
+        // A validação de nome e e-mail agora é feita no backend. 
+        // Aqui, apenas verificamos se há slots OU observação.
         if (selectedSlots.length === 0 && !observation.trim()) {
             showModalMessage("É necessário selecionar pelo menos uma sala ou fornecer uma observação.", "error");
             return;
