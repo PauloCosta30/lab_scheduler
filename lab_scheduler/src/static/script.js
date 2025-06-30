@@ -343,8 +343,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function updateButtonStates() {
+        // Botão "Prosseguir com o agendamento" agora sempre fica habilitado
         if (proceedToBookingButton) {
-            proceedToBookingButton.disabled = selectedSlots.length === 0;
+            proceedToBookingButton.disabled = false;
         }
         if (generatePdfButton) {
             generatePdfButton.disabled = !currentWeekStartDate;
@@ -393,11 +394,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- Modal Logic ---
     function openBookingModal() {
-        if (selectedSlots.length === 0) {
-            showScheduleMessage("Nenhum horário selecionado.", "error");
-            return;
-        }
-
+        // Não verifica mais se há slots selecionados - permite abrir o modal sempre
+        
         const todayUTC = getTodayUTC();
         for (const slot of selectedSlots) {
             if (parseDateStrToUTC(slot.date) < todayUTC) {
@@ -412,11 +410,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (selectedSlotsSummaryList) {
             selectedSlotsSummaryList.innerHTML = "";
-            selectedSlots.forEach(slot => {
+            
+            if (selectedSlots.length === 0) {
+                // Mostra mensagem quando nenhum slot está selecionado
                 const li = document.createElement("li");
-                li.textContent = `${slot.roomName} - ${new Date(slot.date + 'T00:00:00').toLocaleDateString('pt-BR', {timeZone: 'UTC'})} - ${slot.period}`;
+                li.textContent = "Nenhum horário selecionado";
+                li.style.fontStyle = "italic";
+                li.style.color = "#666";
                 selectedSlotsSummaryList.appendChild(li);
-            });
+            } else {
+                selectedSlots.forEach(slot => {
+                    const li = document.createElement("li");
+                    li.textContent = `${slot.roomName} - ${new Date(slot.date + 'T00:00:00').toLocaleDateString('pt-BR', {timeZone: 'UTC'})} - ${slot.period}`;
+                    selectedSlotsSummaryList.appendChild(li);
+                });
+            }
         }
         
         if (modalBookingForm) {
