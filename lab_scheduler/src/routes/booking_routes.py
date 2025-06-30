@@ -20,6 +20,39 @@ except ImportError:
 
 bookings_bp = Blueprint("bookings_bp", __name__)
 
+
+# REGISTRO DO FILTRO date_from_string
+@bookings_bp.app_template_filter('date_from_string')
+def date_from_string_filter(date_str):
+    try:
+        if isinstance(date_str, str):
+            for fmt in ['%Y-%m-%d', '%d/%m/%Y']:
+                try:
+                    return datetime.strptime(date_str, fmt).date()
+                except ValueError:
+                    continue
+        elif isinstance(date_str, date):
+            return date_str
+        elif isinstance(date_str, datetime):
+            return date_str.date()
+    except Exception:
+        pass
+    return None
+
+# REGISTRO DO FILTRO format_weekday
+@bookings_bp.app_template_filter('format_weekday')
+def format_weekday_filter(date_obj):
+    weekdays = {
+        0: 'Segunda-feira', 1: 'Terça-feira', 2: 'Quarta-feira',
+        3: 'Quinta-feira', 4: 'Sexta-feira', 5: 'Sábado', 6: 'Domingo'
+    }
+    if isinstance(date_obj, str):
+        date_obj = date_from_string_filter(date_obj)
+    if date_obj:
+        return weekdays.get(date_obj.weekday(), '')
+    return ''
+
+
 MAX_BOOKINGS_PER_DAY = 3
 
 # Definir o fuso horário de Brasília
