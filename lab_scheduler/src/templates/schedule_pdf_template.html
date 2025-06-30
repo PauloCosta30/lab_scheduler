@@ -3,236 +3,526 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Escala de Agendamentos</title>
+    <title>Correção do Sistema de Agendamentos - Erro PDF</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
     <style>
+        .code-block {
+            background-color: #1a202c;
+            color: #e2e8f0;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            line-height: 1.5;
+        }
+        .code-header {
+            background-color: #2d3748;
+            color: #a0aec0;
+            padding: 0.5rem 1rem;
+            border-radius: 8px 8px 0 0;
+            font-weight: bold;
+            margin-bottom: 0;
+        }
+        .solution-card {
+            border-left: 4px solid #10b981;
+            background-color: #ecfdf5;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        .error-card {
+            border-left: 4px solid #ef4444;
+            background-color: #fef2f2;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        @media print {
+            body { font-size: 12px; }
+            .code-block { font-size: 10px; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+    <div class="max-w-6xl mx-auto p-6">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h1 class="text-3xl font-bold text-gray-900 mb-2">
+                <i class="fas fa-bug text-red-500 mr-3"></i>
+                Correção: Erro de Geração de PDF
+            </h1>
+            <p class="text-gray-600">Sistema de Agendamentos - Filtro date_from_string não encontrado</p>
+        </div>
+
+        <!-- Problema Identificado -->
+        <div class="error-card">
+            <h2 class="text-xl font-bold text-red-700 mb-3">
+                <i class="fas fa-exclamation-triangle mr-2"></i>
+                Problema Identificado
+            </h2>
+            <p class="text-red-800">
+                <strong>Erro:</strong> "No filter named 'date_from_string'"<br>
+                <strong>Causa:</strong> O template HTML está tentando usar um filtro personalizado do Jinja2 que não foi registrado no Flask.
+            </p>
+        </div>
+
+        <!-- Solução -->
+        <div class="solution-card">
+            <h2 class="text-xl font-bold text-green-700 mb-3">
+                <i class="fas fa-check-circle mr-2"></i>
+                Solução Implementada
+            </h2>
+            <p class="text-green-800">
+                Registrar o filtro personalizado no Flask e corrigir o template para processar datas corretamente.
+            </p>
+        </div>
+
+        <!-- Código Python Corrigido -->
+        <div class="bg-white rounded-lg shadow-md mb-6">
+            <div class="code-header">
+                <i class="fas fa-file-code mr-2"></i>
+                booking_routes.py - Código Corrigido
+            </div>
+            <div class="code-block">
+<pre># /home/ubuntu/lab_scheduler/src/routes/booking_routes.py
+
+from flask import Blueprint, request, jsonify, current_app, render_template, make_response
+from src.extensions import db
+from src.models.entities import Room, Booking
+from datetime import datetime, date, timedelta, time
+from collections import defaultdict
+from flask_mail import Message
+import re
+import pytz
+from functools import wraps
+
+# Importação condicional do weasyprint
+try:
+    from weasyprint import HTML
+    WEASYPRINT_AVAILABLE = True
+except ImportError:
+    WEASYPRINT_AVAILABLE = False
+    current_app.logger.warning("WeasyPrint não está disponível. Geração de PDF desabilitada.")
+
+bookings_bp = Blueprint("bookings_bp", __name__)
+
+MAX_BOOKINGS_PER_DAY = 3
+
+# Definir o fuso horário de Brasília
+BRASILIA_TZ = pytz.timezone("America/Sao_Paulo")
+
+# CORREÇÃO: Registrar filtro personalizado para templates
+@bookings_bp.app_template_filter('date_from_string')
+def date_from_string_filter(date_str):
+    """Converte string de data para objeto datetime"""
+    try:
+        if isinstance(date_str, str):
+            # Tenta diferentes formatos de data
+            for fmt in ['%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y']:
+                try:
+                    return datetime.strptime(date_str, fmt).date()
+                except ValueError:
+                    continue
+        elif isinstance(date_str, date):
+            return date_str
+        elif isinstance(date_str, datetime):
+            return date_str.date()
+        return None
+    except Exception:
+        return None
+
+# CORREÇÃO: Função auxiliar para formatar nomes de dias da semana
+@bookings_bp.app_template_filter('format_weekday')
+def format_weekday_filter(date_obj):
+    """Formata o nome do dia da semana em português"""
+    if not date_obj:
+        return ""
+    
+    weekdays = {
+        0: 'Segunda-feira',
+        1: 'Terça-feira', 
+        2: 'Quarta-feira',
+        3: 'Quinta-feira',
+        4: 'Sexta-feira',
+        5: 'Sábado',
+        6: 'Domingo'
+    }
+    
+    if isinstance(date_obj, str):
+        date_obj = date_from_string_filter(date_obj)
+    
+    if date_obj:
+        return weekdays.get(date_obj.weekday(), '')
+    return ""
+
+# Decorator para verificar se o PDF está disponível
+def pdf_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not WEASYPRINT_AVAILABLE:
+            return jsonify({"error": "Geração de PDF não está disponível"}), 503
+        return f(*args, **kwargs)
+    return decorated_function
+
+@bookings_bp.route("/generate_schedule_pdf", methods=["POST"])
+@pdf_required
+def generate_schedule_pdf():
+    try:
+        data = request.get_json()
+        start_date_str = data.get("start_date")
+        end_date_str = data.get("end_date")
+
+        if not start_date_str or not end_date_str:
+            return jsonify({"error": "Datas de início e fim são obrigatórias"}), 400
+
+        # Converter strings para objetos date
+        start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+        end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+
+        # Buscar agendamentos
+        bookings = db.session.query(Booking).join(Room).filter(
+            Booking.booking_date >= start_date,
+            Booking.booking_date <= end_date
+        ).all()
+
+        # CORREÇÃO: Organizar dados sem depender do filtro problemático
+        schedule_data = defaultdict(lambda: defaultdict(list))
+        user_observations = defaultdict(list)
+        general_observations = []
+
+        for booking in bookings:
+            # Usar a data diretamente como objeto
+            date_key = booking.booking_date.strftime('%Y-%m-%d')
+            
+            booking_info = {
+                'user_name': booking.user_name,
+                'room_name': booking.room.name,
+                'coordinator_name': booking.coordinator_name,
+                'observation': booking.observation
+            }
+            
+            schedule_data[date_key][booking.period].append(booking_info)
+            
+            # Coletar observações
+            if booking.observation:
+                user_observations[booking.user_name].append({
+                    'room': booking.room.name,
+                    'date': booking.booking_date,
+                    'period': booking.period,
+                    'observation': booking.observation
+                })
+                
+                general_observations.append({
+                    'user_name': booking.user_name,
+                    'coordinator_name': booking.coordinator_name,
+                    'booking_date': booking.booking_date,
+                    'observation': booking.observation
+                })
+
+        # Obter timestamp atual em Brasília
+        now_brasilia = datetime.now(BRASILIA_TZ)
+
+        # CORREÇÃO: Passar dados organizados para o template
+        template_data = {
+            'schedule_data': dict(schedule_data),
+            'user_observations': dict(user_observations),
+            'general_observations': general_observations,
+            'start_date': start_date,
+            'end_date': end_date,
+            'generated_at': now_brasilia
+        }
+
+        # Renderizar template HTML
+        html_content = render_template('schedule_pdf_template.html', **template_data)
+        
+        # Gerar PDF
+        pdf = HTML(string=html_content).write_pdf()
+        
+        # Retornar PDF como resposta
+        response = make_response(pdf)
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename=agendamentos_{start_date_str}_a_{end_date_str}.pdf'
+        
+        return response
+
+    except Exception as e:
+        current_app.logger.error(f"Erro ao gerar PDF: {str(e)}")
+        return jsonify({"error": f"Erro interno do servidor: {str(e)}"}), 500
+
+# Resto do código permanece igual...
+</pre>
+            </div>
+        </div>
+
+        <!-- Template HTML Corrigido -->
+        <div class="bg-white rounded-lg shadow-md mb-6">
+            <div class="code-header">
+                <i class="fas fa-file-code mr-2"></i>
+                schedule_pdf_template.html - Template Corrigido
+            </div>
+            <div class="code-block">
+<pre>&lt;!DOCTYPE html&gt;
+&lt;html lang="pt-BR"&gt;
+&lt;head&gt;
+    &lt;meta charset="UTF-8"&gt;
+    &lt;style&gt;
         body {
             font-family: Arial, sans-serif;
-            margin: 10px;
-            font-size: 10px;
+            margin: 20px;
+            color: #333;
         }
         .header {
             text-align: center;
             margin-bottom: 30px;
+            border-bottom: 2px solid #4a90e2;
+            padding-bottom: 15px;
         }
-        .header h1 {
-            margin: 0;
-            font-size: 18px;
-            color: #333;
-        }
-        .header p {
-            margin: 5px 0;
-            color: #666;
-        }
-        .schedule-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 30px;
-            table-layout: fixed;
-            font-size: 10px;
-        }
-        .schedule-table th,
-        .schedule-table td {
-            border: 1px solid #ddd;
-            padding: 4px;
-            text-align: center;
-            vertical-align: middle;
-            max-width: 60px;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-        }
-        .schedule-table th {
-            background-color: #f5f5f5;
-            font-weight: bold;
-        }
-        .schedule-table .room-name {
-            background-color: #f9f9f9;
-            font-weight: bold;
-            text-align: left;
-        }
-        .observations-section {
-            margin-top: 40px;
-            page-break-inside: avoid;
-        }
-        .observations-section h2 {
-            font-size: 16px;
-            color: #333;
-            border-bottom: 2px solid #ddd;
-            padding-bottom: 5px;
-            margin-bottom: 20px;
-        }
-        .user-observations {
+        .date-section {
             margin-bottom: 25px;
             page-break-inside: avoid;
         }
-        .user-observations h3 {
-            font-size: 14px;
-            color: #555;
-            margin-bottom: 10px;
-            background-color: #f0f0f0;
-            padding: 8px;
-            border-left: 4px solid #007bff;
-        }
-        .booking-item {
-            margin-bottom: 15px;
+        .date-title {
+            background-color: #f0f4f8;
             padding: 10px;
-            border: 1px solid #e0e0e0;
-            border-radius: 4px;
-            background-color: #fafafa;
-        }
-        .booking-details {
+            margin-bottom: 15px;
+            border-left: 4px solid #4a90e2;
             font-weight: bold;
-            color: #333;
-            margin-bottom: 5px;
+            font-size: 16px;
         }
-        .observation-text {
+        .period-section {
+            margin-bottom: 15px;
+        }
+        .period-title {
+            background-color: #e8f4fd;
+            padding: 8px;
+            margin-bottom: 10px;
+            font-weight: bold;
+            color: #2c5282;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        .observations-section {
+            margin-top: 30px;
+            border-top: 2px solid #4a90e2;
+            padding-top: 20px;
+        }
+        .user-observations {
+            margin-bottom: 20px;
+        }
+        .observation-item {
+            margin-bottom: 10px;
+            padding: 8px;
+            background-color: #f9f9f9;
+            border-left: 3px solid #17a2b8;
+        }
+        .no-bookings {
+            text-align: center;
             color: #666;
             font-style: italic;
-            margin-left: 10px;
-        }
-        .general-observations-section {
-            margin-top: 30px;
-            page-break-inside: avoid;
-        }
-        .general-observations-section h2 {
-            font-size: 16px;
-            color: #333;
-            border-bottom: 2px solid #28a745;
-            padding-bottom: 5px;
-            margin-bottom: 20px;
-        }
-        .general-observation-item {
-            margin-bottom: 20px;
-            padding: 15px;
-            border: 1px solid #d4edda;
-            border-radius: 4px;
-            background-color: #f8fff9;
-            border-left: 4px solid #28a745;
-        }
-        .general-observation-header {
-            font-weight: bold;
-            color: #155724;
-            margin-bottom: 8px;
-            font-size: 12px;
-        }
-        .general-observation-text {
-            color: #155724;
-            font-style: italic;
-            line-height: 1.4;
-        }
-        .no-observations {
-            color: #999;
-            font-style: italic;
-            text-align: center;
             padding: 20px;
         }
-        .section-divider {
-            border-top: 1px solid #ccc;
-            margin: 30px 0;
-        }
-        @media print {
-            body {
-                margin: 10px;
-            }
-            .observations-section {
-                page-break-before: always;
-            }
-            .general-observations-section {
-                page-break-before: auto;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>Escala de Agendamentos - ITV</h1>
-        <p>Período: {{ start_date.strftime('%d/%m/%Y') }} a {{ end_date.strftime('%d/%m/%Y') }}</p>
-        <p>Gerado em: {{ generated_at.strftime('%d/%m/%Y às %H:%M') }}</p>
-    </div>
+    &lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;div class="header"&gt;
+        &lt;h1&gt;Escala de Agendamentos - ITV&lt;/h1&gt;
+        &lt;h2&gt;Período: {{ start_date.strftime('%d/%m/%Y') }} a {{ end_date.strftime('%d/%m/%Y') }}&lt;/h2&gt;
+        &lt;p&gt;Gerado em: {{ generated_at.strftime('%d/%m/%Y às %H:%M') }}&lt;/p&gt;
+    &lt;/div&gt;
 
-    <!-- Tabela da Escala -->
     {% if schedule_data %}
-    <h2>Agendamentos da Semana</h2>
-    {% for date_str, periods in schedule_data.items() %}
-        {% set date_obj = date_str | date_from_string %}
-        <h3>{{ date_obj.strftime('%A, %d/%m/%Y') if date_obj else date_str }}</h3>
+        &lt;h2&gt;Agendamentos da Semana&lt;/h2&gt;
         
-        {% for period, bookings in periods.items() %}
-            <h4>{{ period }}</h4>
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px;">
-                <thead>
-                    <tr style="background-color: #f5f5f5;">
-                        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Usuário</th>
-                        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Sala</th>
-                        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Coordenador</th>
-                        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Observação</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for booking in bookings %}
-                    <tr>
-                        <td style="border: 1px solid #ddd; padding: 8px;">{{ booking.user_name }}</td>
-                        <td style="border: 1px solid #ddd; padding: 8px;">{{ booking.room_name }}</td>
-                        <td style="border: 1px solid #ddd; padding: 8px;">{{ booking.coordinator_name or '-' }}</td>
-                        <td style="border: 1px solid #ddd; padding: 8px;">{{ booking.observation or '-' }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        {% for date_str, periods in schedule_data.items() %}
+            {% set date_obj = date_str | date_from_string %}
+            &lt;div class="date-section"&gt;
+                &lt;div class="date-title"&gt;
+                    {% if date_obj %}
+                        {{ date_obj | format_weekday }}, {{ date_obj.strftime('%d/%m/%Y') }}
+                    {% else %}
+                        {{ date_str }}
+                    {% endif %}
+                &lt;/div&gt;
+                
+                {% for period, bookings in periods.items() %}
+                    &lt;div class="period-section"&gt;
+                        &lt;div class="period-title"&gt;{{ period }}&lt;/div&gt;
+                        &lt;table&gt;
+                            &lt;tr&gt;
+                                &lt;th&gt;Usuário&lt;/th&gt;
+                                &lt;th&gt;Sala&lt;/th&gt;
+                                &lt;th&gt;Coordenador&lt;/th&gt;
+                                &lt;th&gt;Observação&lt;/th&gt;
+                            &lt;/tr&gt;
+                            {% for booking in bookings %}
+                                &lt;tr&gt;
+                                    &lt;td&gt;{{ booking.user_name }}&lt;/td&gt;
+                                    &lt;td&gt;{{ booking.room_name }}&lt;/td&gt;
+                                    &lt;td&gt;{{ booking.coordinator_name or '-' }}&lt;/td&gt;
+                                    &lt;td&gt;{{ booking.observation or '-' }}&lt;/td&gt;
+                                &lt;/tr&gt;
+                            {% endfor %}
+                        &lt;/table&gt;
+                    &lt;/div&gt;
+                {% endfor %}
+            &lt;/div&gt;
         {% endfor %}
-    {% endfor %}
     {% endif %}
 
-    <!-- Seção de Observações por Usuário -->
     {% if user_observations %}
-    <div class="observations-section">
-        <h2>Observações dos Agendamentos por Usuário</h2>
-        
-        {% for user_name, observations in user_observations.items() %}
-        <div class="user-observations">
-            <h3>{{ user_name }}</h3>
+        &lt;div class="observations-section"&gt;
+            &lt;h2&gt;Observações dos Agendamentos por Usuário&lt;/h2&gt;
             
-            {% for obs in observations %}
-            <div class="booking-item">
-                <div class="booking-details">
-                    {{ obs.room }} - {{ obs.date.strftime('%d/%m/%Y') }} - {{ obs.period }}
-                </div>
-                <div class="observation-text">
-                    "{{ obs.observation }}"
-                </div>
-            </div>
+            {% for user_name, observations in user_observations.items() %}
+                &lt;div class="user-observations"&gt;
+                    &lt;h3&gt;{{ user_name }}&lt;/h3&gt;
+                    {% for obs in observations %}
+                        &lt;div class="observation-item"&gt;
+                            &lt;strong&gt;{{ obs.room }} - {{ obs.date.strftime('%d/%m/%Y') }} - {{ obs.period }}&lt;/strong&gt;&lt;br&gt;
+                            "{{ obs.observation }}"
+                        &lt;/div&gt;
+                    {% endfor %}
+                &lt;/div&gt;
             {% endfor %}
-        </div>
-        {% endfor %}
-    </div>
+        &lt;/div&gt;
     {% endif %}
 
-    <!-- Seção de Observações Gerais -->
     {% if general_observations %}
-    <div class="section-divider"></div>
-    <div class="general-observations-section">
-        <h2>Observações Gerais da Semana</h2>
-        
-        {% for obs in general_observations %}
-        <div class="general-observation-item">
-            <div class="general-observation-header">
-                {{ obs.user_name }}
-                {% if obs.coordinator_name %}
-                - Coordenador: {{ obs.coordinator_name }}
-                {% endif %}
-                - {{ obs.booking_date.strftime('%d/%m/%Y') }}
-            </div>
-            <div class="general-observation-text">
-                "{{ obs.observation }}"
-            </div>
-        </div>
-        {% endfor %}
-    </div>
+        &lt;div class="observations-section"&gt;
+            &lt;h2&gt;Observações Gerais da Semana&lt;/h2&gt;
+            {% for obs in general_observations %}
+                &lt;div class="observation-item"&gt;
+                    &lt;strong&gt;{{ obs.user_name }}{% if obs.coordinator_name %} - Coordenador: {{ obs.coordinator_name }}{% endif %} - {{ obs.booking_date.strftime('%d/%m/%Y') }}&lt;/strong&gt;&lt;br&gt;
+                    "{{ obs.observation }}"
+                &lt;/div&gt;
+            {% endfor %}
+        &lt;/div&gt;
     {% endif %}
 
-    {% if not schedule_data and not user_observations and not general_observations %}
-    <div class="no-observations">
-        Nenhum agendamento encontrado para o período selecionado.
-    </div>
+    {% if not schedule_data %}
+        &lt;div class="no-bookings"&gt;
+            Nenhum agendamento encontrado para o período selecionado.
+        &lt;/div&gt;
     {% endif %}
+&lt;/body&gt;
+&lt;/html&gt;
+</pre>
+            </div>
+        </div>
+
+        <!-- Principais Alterações -->
+        <div class="bg-white rounded-lg shadow-md mb-6">
+            <div class="p-6">
+                <h2 class="text-2xl font-bold text-gray-900 mb-4">
+                    <i class="fas fa-list-ul mr-2"></i>
+                    Principais Alterações Realizadas
+                </h2>
+                
+                <div class="space-y-4">
+                    <div class="flex items-start">
+                        <i class="fas fa-check text-green-500 mr-3 mt-1"></i>
+                        <div>
+                            <strong>Registros de Filtros Personalizados:</strong>
+                            <p class="text-gray-600">Adicionado <code>@bookings_bp.app_template_filter('date_from_string')</code> e <code>@bookings_bp.app_template_filter('format_weekday')</code> para processar datas corretamente.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-start">
+                        <i class="fas fa-check text-green-500 mr-3 mt-1"></i>
+                        <div>
+                            <strong>Processamento de Dados Melhorado:</strong>
+                            <p class="text-gray-600">Organização dos dados de agendamento sem depender de filtros problemáticos, passando objetos de data diretamente.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-start">
+                        <i class="fas fa-check text-green-500 mr-3 mt-1"></i>
+                        <div>
+                            <strong>Template HTML Otimizado:</strong>
+                            <p class="text-gray-600">Correção do uso dos filtros e melhoria na estrutura HTML para geração de PDF mais estável.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start">
+                        <i class="fas fa-check text-green-500 mr-3 mt-1"></i>
+                        <div>
+                            <strong>Tratamento de Erros:</strong>
+                            <p class="text-gray-600">Implementação de try-catch para diferentes formatos de data e validações mais robustas.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Instruções de Implementação -->
+        <div class="bg-blue-50 rounded-lg shadow-md mb-6">
+            <div class="p-6">
+                <h2 class="text-2xl font-bold text-blue-900 mb-4">
+                    <i class="fas fa-tools mr-2"></i>
+                    Instruções de Implementação
+                </h2>
+                
+                <div class="space-y-3 text-blue-800">
+                    <div class="flex items-start">
+                        <span class="bg-blue-200 text-blue-800 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3 mt-0.5">1</span>
+                        <p>Substitua o conteúdo do arquivo <code>booking_routes.py</code> pelo código corrigido acima.</p>
+                    </div>
+                    
+                    <div class="flex items-start">
+                        <span class="bg-blue-200 text-blue-800 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3 mt-0.5">2</span>
+                        <p>Atualize o template <code>schedule_pdf_template.html</code> com a versão corrigida.</p>
+                    </div>
+                    
+                    <div class="flex items-start">
+                        <span class="bg-blue-200 text-blue-800 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3 mt-0.5">3</span>
+                        <p>Certifique-se de que o WeasyPrint está instalado: <code>pip install weasyprint</code></p>
+                    </div>
+                    
+                    <div class="flex items-start">
+                        <span class="bg-blue-200 text-blue-800 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3 mt-0.5">4</span>
+                        <p>Reinicie a aplicação Flask para que os filtros sejam registrados corretamente.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resultado Esperado -->
+        <div class="bg-green-50 rounded-lg shadow-md">
+            <div class="p-6">
+                <h2 class="text-2xl font-bold text-green-900 mb-4">
+                    <i class="fas fa-trophy mr-2"></i>
+                    Resultado Esperado
+                </h2>
+                
+                <div class="text-green-800">
+                    <p class="mb-3">Após implementar as correções:</p>
+                    <ul class="list-disc pl-6 space-y-2">
+                        <li>O erro "No filter named 'date_from_string'" será eliminado</li>
+                        <li>A geração de PDF funcionará corretamente</li>
+                        <li>As datas serão formatadas apropriadamente no PDF</li>
+                        <li>Os nomes dos dias da semana aparecerão em português</li>
+                        <li>O sistema será mais robusto para diferentes formatos de data</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center text-gray-500 mt-8 text-sm">
+            <p>Correção gerada automaticamente • Sistema de Agendamentos</p>
+        </div>
+    </div>
 </body>
 </html>
