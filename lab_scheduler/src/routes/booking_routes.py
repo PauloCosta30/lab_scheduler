@@ -334,7 +334,7 @@ def create_booking():
             for booking_date_obj, count_for_this_request in daily_new_bookings_count.items():
                 existing_bookings_on_day = Booking.query.filter_by(user_name=user_name, booking_date=booking_date_obj).count()
                 if (existing_bookings_on_day + count_for_this_request) > MAX_BOOKINGS_PER_DAY:
-                    return jsonify({"error": f"Limite de {MAX_BOOKINGS_PER_DAY} agendamentos por dia para o usuário '{user_name}' seria excedido no dia {booking_date_obj.strftime('%Y-%m-%d')}."}), 409
+                    return jsonify({"error": f"Limite de {MAX_BOOKINGS_PER_DAY} agendamentos por dia para o usuário \'{user_name}\' seria excedido no dia {booking_date_obj.strftime('%Y-%m-%d')}."}), 409
 
             # Validation for "Geral" rooms - only one per period per day per user
             for booking_date_obj, _ in daily_new_bookings_count.items():
@@ -347,7 +347,7 @@ def create_booking():
                 for period, geral_rooms in geral_periods_in_request.items():
                     if len(geral_rooms) > 1:
                         return jsonify({
-                            "error": f"Você só pode agendar uma sala da categoria 'Geral' por período. Tentativa de agendar múltiplas salas 'Geral' no período '{period}' do dia {booking_date_obj.strftime('%Y-%m-%d')}."
+                            "error": f"Você só pode agendar uma sala da categoria \'Geral\' por período. Tentativa de agendar múltiplas salas \'Geral\' no período \'{period}\' do dia {booking_date_obj.strftime('%Y-%m-%d')}."
                         }), 409
                     
                     existing_geral_booking = Booking.query.join(Room).filter(
@@ -359,14 +359,14 @@ def create_booking():
                     
                     if existing_geral_booking:
                         return jsonify({
-                            "error": f"Você já possui um agendamento para uma sala da categoria 'Geral' ({existing_geral_booking.room.name}) no período '{period}' do dia {booking_date_obj.strftime('%Y-%m-%d')}."
+                            "error": f"Você já possui um agendamento para uma sala da categoria \'Geral\' ({existing_geral_booking.room.name}) no período \'{period}\' do dia {booking_date_obj.strftime('%Y-%m-%d')}."
                         }), 409
 
             # Validation for booking conflicts (slot already taken)
             for slot in processed_slots:
                 if check_booking_conflict(slot["room_id"], slot["booking_date_obj"], slot["period"]):
                     return jsonify({
-                        "error": f"A sala '{slot['room_name']}' já está reservada para o período '{slot['period']}' no dia {slot['booking_date_str']}."
+                        "error": f"A sala \'{slot['room_name']}\' já está reservada para o período \'{slot['period']}\' no dia {slot['booking_date_str']}."
                     }), 409
         
         newly_created_bookings_details_for_email = []
@@ -470,7 +470,7 @@ def get_bookings():
                     room_name = booking.room.name
                     if room_name.startswith("Geral "):
                         try:
-                            number = int(re.findall(r'\d+', room_name)[0])
+                            number = int(re.findall(r'\\d+', room_name)[0])
                             return (0, number)
                         except (IndexError, ValueError):
                             return (0, 999)
@@ -508,13 +508,14 @@ def generate_schedule_pdf():
     """Gera PDF da escala semanal com observações organizadas por usuário e observações gerais"""
     try:
         if not WEASYPRINT_AVAILABLE:
-            return jsonify({"error": "Geração de PDF não está disponível no servidor"}), 503
-            
+            return jsonify({"error": "WeasyPrint não está disponível. Geração de PDF desabilitada."}), 500
+        
+        # Obter parâmetros de data
         start_date_str = request.args.get("start_date")
         end_date_str = request.args.get("end_date")
         
         if not start_date_str or not end_date_str:
-            return jsonify({"error": "Parâmetros start_date e end_date são obrigatórios"}), 400
+            return jsonify({"error": "start_date e end_date são obrigatórios"}), 400
         
         try:
             start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
@@ -522,105 +523,82 @@ def generate_schedule_pdf():
         except ValueError:
             return jsonify({"error": "Formato de data inválido. Use YYYY-MM-DD"}), 400
         
+        # Buscar agendamentos no período
         bookings = Booking.query.outerjoin(Room).filter(
             Booking.booking_date.between(start_date, end_date)
         ).order_by(Booking.booking_date, Booking.period).all()
         
-        rooms = Room.query.all()
-        sorted_rooms = sort_rooms_custom(rooms)
-        
-        schedule_data = {}
-        dates_of_week = []
-        current_date = start_date
-        while current_date <= end_date:
-            if current_date.weekday() < 5:
-                date_str = current_date.isoformat()
-                dates_of_week.append(date_str)
-                schedule_data[date_str] = {
-                    "Manhã": {room.name: "" for room in sorted_rooms},
-                    "Tarde": {room.name: "" for room in sorted_rooms}
-                }
-            current_date += timedelta(days=1)
-        
-        # Organizar observações por usuário
-        user_observations = {}
+        # Organizar dados por data e período
+        schedule_data = defaultdict(lambda: defaultdict(list))
+        user_observations = defaultdict(list)
         general_observations = []
         
         for booking in bookings:
-            # Pular observações gerais para processamento separado
             if booking.period == "Observação Geral":
                 general_observations.append({
                     "user_name": booking.user_name,
-                    "user_email": booking.user_email,
                     "coordinator_name": booking.coordinator_name,
                     "observation": booking.observation,
-                    "date": booking.booking_date
+                    "booking_date": booking.booking_date
                 })
-                continue
+            else:
+                date_str = booking.booking_date.strftime("%Y-%m-%d")
+                schedule_data[date_str][booking.period].append({
+                    "user_name": booking.user_name,
+                    "coordinator_name": booking.coordinator_name,
+                    "room_name": booking.room.name if booking.room else "N/A",
+                    "observation": booking.observation
+                })
                 
-            # Processar agendamentos normais com salas
-            if booking.room and booking.booking_date.isoformat() in schedule_data:
-                room_name = booking.room.name
-                period = booking.period
-                schedule_data[booking.booking_date.isoformat()][period][room_name] = booking.user_name
-            
-            # Organizar observações por usuário
-            user_key = booking.user_name
-            if user_key not in user_observations:
-                user_observations[user_key] = {
-                    "email": booking.user_email,
-                    "coordinator": booking.coordinator_name,
-                    "bookings": []
-                }
-            
-            # Adicionar booking às observações do usuário (incluindo observações sem sala)
-            booking_info = {
-                "room_name": booking.room.name if booking.room else "Observação Geral",
-                "date": booking.booking_date,
-                "period": booking.period,
-                "observation": booking.observation
-            }
-            user_observations[user_key]["bookings"].append(booking_info)
+                # Coletar observações específicas por usuário
+                if booking.observation and booking.observation.strip():
+                    user_observations[booking.user_name].append({
+                        "date": booking.booking_date,
+                        "room": booking.room.name if booking.room else "N/A",
+                        "period": booking.period,
+                        "observation": booking.observation
+                    })
         
-        # Dados para o template
-        template_data = {
-            "week_start_date_formatted": start_date.strftime("%d/%m/%Y"),
-            "week_end_date_formatted": end_date.strftime("%d/%m/%Y"),
-            "generation_date": datetime.now().strftime("%d/%m/%Y às %H:%M"),
-            "dates_of_week": dates_of_week,
-            "days_locale": ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"],
-            "rooms": sorted_rooms,
-            "schedule_data": schedule_data,
-            "user_observations": user_observations,
-            "general_observations": general_observations
-        }
-        
-        # Renderizar template
-        html_content = render_template("schedule_pdf_template.html", **template_data)
+        # Renderizar template HTML
+        html_content = render_template(
+            "schedule_pdf_template.html",
+            schedule_data=dict(schedule_data),
+            user_observations=dict(user_observations),
+            general_observations=general_observations,
+            start_date=start_date,
+            end_date=end_date,
+            generated_at=datetime.now(BRASILIA_TZ)
+        )
         
         # Gerar PDF
         pdf = HTML(string=html_content).write_pdf()
         
+        # Criar resposta
         response = make_response(pdf)
         response.headers["Content-Type"] = "application/pdf"
-        response.headers["Content-Disposition"] = f"attachment; filename=escala_agendamentos_{start_date_str}_a_{end_date_str}.pdf"
+        response.headers["Content-Disposition"] = f"attachment; filename=escala_{start_date_str}_a_{end_date_str}.pdf"
         
         return response
         
     except Exception as e:
         current_app.logger.error(f"Erro ao gerar PDF: {str(e)}")
-        return jsonify({"error": f"Erro ao gerar PDF: {str(e)}"}), 500
+        return jsonify({"error": "Erro ao gerar PDF", "details": str(e)}), 500
 
-# Rota para deletar agendamento (administrativa)
 @bookings_bp.route("/bookings/<int:booking_id>", methods=["DELETE"])
 @require_admin_key
 def delete_booking(booking_id):
     try:
-        booking = Booking.query.get_or_404(booking_id)
+        booking = Booking.query.get(booking_id)
+        if not booking:
+            return jsonify({"error": "Agendamento não encontrado"}), 404
+        
         db.session.delete(booking)
         db.session.commit()
-        return jsonify({"message": "Agendamento deletado com sucesso"}), 200
+        
+        return jsonify({"message": "Agendamento excluído com sucesso"}), 200
+    
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Erro ao deletar agendamento {booking_id}: {str(e)}")
-        return jsonify({"error": "Erro ao deletar agendamento"}), 500
+        current_app.logger.error(f"Erro ao excluir agendamento: {str(e)}")
+        return jsonify({"error": "Erro ao excluir agendamento"}), 500
+
