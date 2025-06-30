@@ -207,6 +207,16 @@ document.addEventListener("DOMContentLoaded", () => {
         updateButtonStates();
         const todayUTC = getTodayUTC();
 
+        // Adicionar aviso sobre agendamentos somente observação
+        const infoDiv = document.createElement("div");
+        infoDiv.className = "booking-info";
+        infoDiv.style.cssText = "background: #e8f4fd; border: 1px solid #bee5eb; padding: 10px; margin-bottom: 15px; border-radius: 4px; color: #0c5460;";
+        infoDiv.innerHTML = `
+            <strong>💡 Dica:</strong> Se todas as salas estiverem ocupadas, você pode fazer um agendamento apenas com observação para solicitar encaixe. 
+            Clique em "Prosseguir com o agendamento" mesmo sem selecionar nenhuma sala.
+        `;
+        scheduleTableContainer.appendChild(infoDiv);
+
         const table = document.createElement("table");
         table.className = "schedule-table";
         const thead = document.createElement("thead");
@@ -390,6 +400,12 @@ document.addEventListener("DOMContentLoaded", () => {
         // Botão "Prosseguir com o agendamento" sempre habilitado (permite apenas observações)
         if (proceedToBookingButton) {
             proceedToBookingButton.disabled = false;
+            // Atualizar texto do botão dependendo da situação
+            if (selectedSlots.length > 0) {
+                proceedToBookingButton.textContent = "Prosseguir com o agendamento";
+            } else {
+                proceedToBookingButton.textContent = "Fazer agendamento (somente observação)";
+            }
         }
         if (generatePdfButton) {
             generatePdfButton.disabled = !currentWeekStartDate;
@@ -475,9 +491,10 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        // Verificar se há slots OU observação
+        // REMOVIDA A VALIDAÇÃO QUE IMPEDIA AGENDAMENTOS SEM SLOTS
+        // Agora permite agendamentos somente com observação
         if (selectedSlots.length === 0 && !observation.trim()) {
-            showModalMessage("É necessário selecionar pelo menos uma sala ou fornecer uma observação.", "error");
+            showModalMessage("É necessário fornecer uma observação quando não há salas selecionadas (ex: solicitação de encaixe).", "error");
             return;
         }
 
@@ -495,7 +512,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
         console.log("Dados do agendamento:", bookingData);
 
-        showModalMessage("Enviando agendamento...", "");
+        // Mostrar mensagem diferente para agendamentos somente observação
+        if (selectedSlots.length === 0) {
+            showModalMessage("Enviando solicitação de encaixe...", "");
+        } else {
+            showModalMessage("Enviando agendamento...", "");
+        }
 
         try {
             const response = await fetch(`${API_BASE_URL}/bookings`, {
@@ -509,7 +531,11 @@ document.addEventListener("DOMContentLoaded", () => {
             const result = await response.json();
 
             if (response.ok) {
-                showModalMessage("Agendamento realizado com sucesso!", "success");
+                if (selectedSlots.length === 0) {
+                    showModalMessage("Solicitação de encaixe registrada com sucesso!", "success");
+                } else {
+                    showModalMessage("Agendamento realizado com sucesso!", "success");
+                }
                 
                 // Limpar slots selecionados e atualizar a tabela após o sucesso
                 selectedSlots.forEach(slot => {
@@ -525,6 +551,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 
                 selectedSlots = [];
                 updateSelectedSlotsSummary();
+                updateButtonStates(); // Atualizar texto do botão
                 modalBookingForm.reset();
                 
                 // Recarregar a escala para garantir consistência
@@ -546,6 +573,17 @@ document.addEventListener("DOMContentLoaded", () => {
         proceedToBookingButton.addEventListener("click", () => {
             updateSelectedSlotsSummary();
             bookingModal.style.display = "block";
+            
+            // Focar no campo de observação se não há slots selecionados
+            if (selectedSlots.length === 0) {
+                setTimeout(() => {
+                    const observationField = document.querySelector('#modalBookingForm textarea[name="observation"]');
+                    if (observationField) {
+                        observationField.focus();
+                        observationField.placeholder = "Descreva sua solicitação de encaixe (ex: 'Preciso de uma sala na sexta à tarde para reunião urgente')";
+                    }
+                }, 100);
+            }
         });
     }
 
@@ -588,7 +626,10 @@ document.addEventListener("DOMContentLoaded", () => {
         
         selectedSlotsSummaryList.innerHTML = "";
         if (selectedSlots.length === 0) {
-            selectedSlotsSummaryList.innerHTML = "<li>Nenhum horário selecionado.</li>";
+            const li = document.createElement("li");
+            li.innerHTML = "<em>Nenhum horário selecionado - Agendamento somente observação</em>";
+            li.style.color = "#666";
+            selectedSlotsSummaryList.appendChild(li);
             return;
         }
         selectedSlots.forEach(slot => {
