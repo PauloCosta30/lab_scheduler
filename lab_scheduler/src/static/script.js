@@ -6,8 +6,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const scheduleMessage = document.getElementById("scheduleMessage");
     const proceedToBookingButton = document.getElementById("proceedToBookingButton");
     const generatePdfButton = document.getElementById("generatePdfButton");
-    const weekSelector = document.getElementById("weekSelector"); // ADICIONADO - estava faltando
-    const loadScheduleButton = document.getElementById("loadScheduleButton"); // ADICIONADO - estava faltando
+    const weekSelector = document.getElementById("weekSelector");
+    const loadScheduleButton = document.getElementById("loadScheduleButton");
 
     // DOM Elements for Booking Status
     const bookingStatusMessage = document.getElementById("bookingStatusMessage");
@@ -117,7 +117,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // --- Schedule Logic (Loading and Rendering) ---
-    async function loadScheduleData(inputDate = null) { // CORRIGIDO - aceita parâmetro
+    async function loadScheduleData(inputDate = null) {
         let startDate, endDate;
         const todayUTC = getTodayUTC();
 
@@ -266,56 +266,32 @@ document.addEventListener("DOMContentLoaded", () => {
         scheduleTableContainer.appendChild(table);
     }
 
+    // FUNÇÃO CORRIGIDA: Simplificou a lógica para usar apenas o status do backend
     function checkIfBookingAllowed(dateStr) {
         if (!bookingWindowStatus) return false;
 
         try {
             const slotDate = parseDateStrToUTC(dateStr);
-            const now = new Date(); // Hora atual no Brasil
-            const today = getTodayUTC();
+            const todayUTC = getTodayUTC();
             
-            // Calcular segunda-feira da semana atual
-            const currentWeekMonday = new Date(today.valueOf());
-            const dayOffset = today.getUTCDay() === 0 ? 6 : today.getUTCDay() - 1;
-            currentWeekMonday.setUTCDate(today.getUTCDate() - dayOffset);
+            // Calcular segunda-feira da semana atual (UTC)
+            const currentWeekMonday = new Date(todayUTC.valueOf());
+            const dayOffset = todayUTC.getUTCDay() === 0 ? 6 : todayUTC.getUTCDay() - 1;
+            currentWeekMonday.setUTCDate(todayUTC.getUTCDate() - dayOffset);
             
             const nextWeekMonday = new Date(currentWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000);
 
             // Verificar se o slot é da semana atual
             if (slotDate >= currentWeekMonday && slotDate < nextWeekMonday) {
-                // Para semana atual: disponível até quarta-feira às 23:59
-                const currentDayOfWeek = now.getDay(); // 0=domingo, 1=segunda, ..., 6=sábado
-                const currentHour = now.getHours();
-                const currentMinute = now.getMinutes();
-                
-                // Se hoje é quinta-feira (4) ou depois (sexta/sábado/domingo)
-                if (currentDayOfWeek >= 4 || currentDayOfWeek === 0) {
-                    return false; // Fechado para semana atual
-                }
-                
-                // Se hoje é quarta-feira (3) e já passou das 23:59
-                if (currentDayOfWeek === 3 && (currentHour > 23 || (currentHour === 23 && currentMinute >= 59))) {
-                    return false; // Fechado para semana atual
-                }
-                
+                // Para semana atual: usar status do backend
                 return bookingWindowStatus.current_week.open;
                 
             } else if (slotDate >= nextWeekMonday && slotDate < new Date(nextWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000)) {
-                // Para próxima semana: disponível a partir de sexta-feira às 18h
-                const currentDayOfWeek = now.getDay();
-                const currentHour = now.getHours();
-                
-                // Só aberto se já é sexta-feira (5) após 18h, ou se é sábado/domingo
-                if (currentDayOfWeek === 5 && currentHour >= 18) {
-                    return bookingWindowStatus.next_week.open; // Sexta após 18h
-                } else if (currentDayOfWeek === 6 || currentDayOfWeek === 0) {
-                    return bookingWindowStatus.next_week.open; // Sábado ou domingo
-                } else {
-                    return false; // Ainda não abriu
-                }
+                // Para próxima semana: usar status do backend
+                return bookingWindowStatus.next_week.open;
             }
 
-            return false;
+            return false; // Fora das duas semanas permitidas
         } catch (error) {
             console.error("Erro ao verificar se agendamento é permitido:", error);
             return false;
@@ -368,7 +344,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function updateButtonStates() {
         if (proceedToBookingButton) {
-            proceedToBookingButton.disabled = selectedSlots.length === 0; // CORRIGIDO
+            proceedToBookingButton.disabled = selectedSlots.length === 0;
         }
         if (generatePdfButton) {
             generatePdfButton.disabled = !currentWeekStartDate;
@@ -477,7 +453,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (requestData.slots.length === 0) {
             showModalMessage("Nenhum horário foi selecionado para agendar.", "error");
-            return; // CORRIGIDO - removido console.warn
+            return;
         }
 
         showModalMessage("Processando agendamento...", "");
@@ -502,7 +478,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 updateButtonStates();
                 setTimeout(() => {
                     closeBookingModal();
-                    loadScheduleData(); // CORRIGIDO - parâmetro removido
+                    loadScheduleData();
                 }, 2000);
             } else {
                 showModalMessage(result.error || "Erro ao realizar agendamento.", "error");
