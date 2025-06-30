@@ -446,9 +446,9 @@ document.addEventListener("DOMContentLoaded", () => {
             console.log(`  ${key}: "${value}"`);
         }
 
-        const userName = formData.get("user_name");
-        const userEmail = formData.get("user_email");
-        const coordinatorName = formData.get("coordinator_name") || "";
+        const userName = formData.get("userName");
+        const userEmail = formData.get("userEmail");
+        const coordinatorName = formData.get("coordinatorName") || "";
         const observation = formData.get("observation") || "";
 
         console.log("Valores extraídos:");
