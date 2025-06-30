@@ -472,6 +472,7 @@ document.addEventListener("DOMContentLoaded", () => {
         console.log(`  userEmail: "${userEmail}"`);
         console.log(`  coordinatorName: "${coordinatorName}"`);
         console.log(`  observation: "${observation}"`);
+        console.log(`  selectedSlots: ${selectedSlots.length} slots`);
 
         // Validação de campos obrigatórios no frontend
         if (!userName || userName.trim() === "") {
@@ -510,7 +511,9 @@ document.addEventListener("DOMContentLoaded", () => {
             observation: observation.trim()
         };
 
-        console.log("Dados do agendamento:", bookingData);
+        console.log("=== DEBUG: Dados finais do agendamento ===");
+        console.log(JSON.stringify(bookingData, null, 2));
+        console.log(`URL da requisição: ${API_BASE_URL}/bookings`);
 
         // Mostrar mensagem diferente para agendamentos somente observação
         if (selectedSlots.length === 0) {
@@ -520,6 +523,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         try {
+            console.log("=== DEBUG: Fazendo requisição POST ===");
             const response = await fetch(`${API_BASE_URL}/bookings`, {
                 method: "POST",
                 headers: {
@@ -528,7 +532,20 @@ document.addEventListener("DOMContentLoaded", () => {
                 body: JSON.stringify(bookingData)
             });
 
-            const result = await response.json();
+            console.log(`=== DEBUG: Response Status: ${response.status} ===`);
+            console.log(`=== DEBUG: Response OK: ${response.ok} ===`);
+
+            let result;
+            try {
+                result = await response.json();
+                console.log("=== DEBUG: Response JSON ===");
+                console.log(JSON.stringify(result, null, 2));
+            } catch (jsonError) {
+                console.error("=== DEBUG: Erro ao fazer parse do JSON ===", jsonError);
+                const textResponse = await response.text();
+                console.log("=== DEBUG: Response Text ===", textResponse);
+                throw new Error(`Resposta inválida do servidor (Status: ${response.status})`);
+            }
 
             if (response.ok) {
                 if (selectedSlots.length === 0) {
@@ -560,11 +577,38 @@ document.addEventListener("DOMContentLoaded", () => {
                 }, 1000);
                 
             } else {
-                showModalMessage(`Erro ao criar agendamento: ${result.error || response.statusText}`, "error");
+                // Tratar diferentes tipos de erro do servidor
+                let errorMessage = "Erro desconhecido do servidor";
+                
+                if (result && result.error) {
+                    errorMessage = result.error;
+                } else if (result && result.message) {
+                    errorMessage = result.message;
+                } else if (result && result.detail) {
+                    errorMessage = result.detail;
+                } else {
+                    errorMessage = `Erro ${response.status}: ${response.statusText}`;
+                }
+                
+                console.error("=== DEBUG: Erro do servidor ===", {
+                    status: response.status,
+                    statusText: response.statusText,
+                    result: result,
+                    errorMessage: errorMessage
+                });
+                
+                showModalMessage(`Falha ao criar agendamento: ${errorMessage}`, "error");
             }
         } catch (error) {
-            console.error("Erro na requisição de agendamento:", error);
-            showModalMessage(`Erro de conexão: ${error.message}`, "error");
+            console.error("=== DEBUG: Erro na requisição ===", error);
+            
+            if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                showModalMessage("Erro de conexão: Não foi possível conectar ao servidor. Verifique sua conexão.", "error");
+            } else if (error.message.includes('JSON')) {
+                showModalMessage("Erro de comunicação: Resposta inválida do servidor.", "error");
+            } else {
+                showModalMessage(`Erro de conexão: ${error.message}`, "error");
+            }
         }
     }
 
