@@ -334,7 +334,7 @@ def create_booking():
             for booking_date_obj, count_for_this_request in daily_new_bookings_count.items():
                 existing_bookings_on_day = Booking.query.filter_by(user_name=user_name, booking_date=booking_date_obj).count()
                 if (existing_bookings_on_day + count_for_this_request) > MAX_BOOKINGS_PER_DAY:
-                    return jsonify({"error": f"Limite de {MAX_BOOKINGS_PER_DAY} agendamentos por dia para o usuário \'{user_name}\' seria excedido no dia {booking_date_obj.strftime('%Y-%m-%d')}."}), 409
+                    return jsonify({"error": f"Limite de {MAX_BOOKINGS_PER_DAY} agendamentos por dia para o usuário '{user_name}' seria excedido no dia {booking_date_obj.strftime('%Y-%m-%d')}."}), 409
 
             # Validation for "Geral" rooms - only one per period per day per user
             for booking_date_obj, _ in daily_new_bookings_count.items():
@@ -347,7 +347,7 @@ def create_booking():
                 for period, geral_rooms in geral_periods_in_request.items():
                     if len(geral_rooms) > 1:
                         return jsonify({
-                            "error": f"Você só pode agendar uma sala da categoria \'Geral\' por período. Tentativa de agendar múltiplas salas \'Geral\' no período \'{period}\' do dia {booking_date_obj.strftime("%Y-%m-%d")}."
+                            "error": f"Você só pode agendar uma sala da categoria 'Geral' por período. Tentativa de agendar múltiplas salas 'Geral' no período '{period}' do dia {booking_date_obj.strftime('%Y-%m-%d')}."
                         }), 409
                     
                     existing_geral_booking = Booking.query.join(Room).filter(
@@ -359,14 +359,14 @@ def create_booking():
                     
                     if existing_geral_booking:
                         return jsonify({
-                            "error": f"Você já possui um agendamento para uma sala da categoria \'Geral\' ({existing_geral_booking.room.name}) no período \'{period}\' do dia {booking_date_obj.strftime("%Y-%m-%d")}."
+                            "error": f"Você já possui um agendamento para uma sala da categoria 'Geral' ({existing_geral_booking.room.name}) no período '{period}' do dia {booking_date_obj.strftime('%Y-%m-%d')}."
                         }), 409
 
             # Validation for booking conflicts (slot already taken)
             for slot in processed_slots:
                 if check_booking_conflict(slot["room_id"], slot["booking_date_obj"], slot["period"]):
                     return jsonify({
-                        "error": f"A sala \'{slot["room_name"]}\' já está reservada para o período \'{slot["period"]}\' no dia {slot["booking_date_str"]}."
+                        "error": f"A sala '{slot["room_name"]}' já está reservada para o período '{slot['period']}' no dia {slot['booking_date_str']}."
                     }), 409
         
         newly_created_bookings_details_for_email = []
@@ -470,7 +470,7 @@ def get_bookings():
                     room_name = booking.room.name
                     if room_name.startswith("Geral "):
                         try:
-                            number = int(re.findall(r'\\d+', room_name)[0])
+                            number = int(re.findall(r'\d+', room_name)[0])
                             return (0, number)
                         except (IndexError, ValueError):
                             return (0, 999)
