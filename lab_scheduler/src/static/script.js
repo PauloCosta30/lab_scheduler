@@ -92,7 +92,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function updateBookingStatusDisplay() {
         if (!bookingWindowStatus) return;
 
-        showBookingStatusMessage("As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 23:59, e a escala da próxima semana será liberada todas as sextas-feiras, às 18h.", "info");
+        showBookingStatusMessage("As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 18h, e a escala da próxima semana será liberada todas as sextas-feiras, às 18h.", "info");
 
         // Ocultar os status individuais da semana atual e próxima semana, pois a mensagem é fixa
         if (currentWeekStatus) currentWeekStatus.style.display = "none";
@@ -271,6 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         try {
             const slotDate = parseDateStrToUTC(dateStr);
+            const now = new Date(); // Hora atual no Brasil
             const today = getTodayUTC();
             
             // Calcular segunda-feira da semana atual
@@ -280,10 +281,32 @@ document.addEventListener("DOMContentLoaded", () => {
             
             const nextWeekMonday = new Date(currentWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000);
 
+            // Verificar se o slot é da semana atual
             if (slotDate >= currentWeekMonday && slotDate < nextWeekMonday) {
+                // Para semana atual: disponível até quarta-feira às 18h
+                const currentDayOfWeek = now.getDay(); // 0=domingo, 1=segunda, ..., 6=sábado
+                const currentHour = now.getHours();
+                
+                // Se hoje é quarta-feira (3) e já passou das 18h, ou se já é quinta/sexta/sábado/domingo
+                if ((currentDayOfWeek === 3 && currentHour >= 18) || currentDayOfWeek > 3 || currentDayOfWeek === 0) {
+                    return false; // Fechado para semana atual
+                }
+                
                 return bookingWindowStatus.current_week.open;
+                
             } else if (slotDate >= nextWeekMonday && slotDate < new Date(nextWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000)) {
-                return bookingWindowStatus.next_week.open;
+                // Para próxima semana: disponível a partir de sexta-feira às 18h
+                const currentDayOfWeek = now.getDay();
+                const currentHour = now.getHours();
+                
+                // Só aberto se já é sexta-feira (5) após 18h, ou se é sábado/domingo
+                if (currentDayOfWeek === 5 && currentHour >= 18) {
+                    return bookingWindowStatus.next_week.open; // Sexta após 18h
+                } else if (currentDayOfWeek === 6 || currentDayOfWeek === 0) {
+                    return bookingWindowStatus.next_week.open; // Sábado ou domingo
+                } else {
+                    return false; // Ainda não abriu
+                }
             }
 
             return false;
