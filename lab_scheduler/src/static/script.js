@@ -6,6 +6,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const scheduleMessage = document.getElementById("scheduleMessage");
     const proceedToBookingButton = document.getElementById("proceedToBookingButton");
     const generatePdfButton = document.getElementById("generatePdfButton");
+    const weekSelector = document.getElementById("weekSelector"); // ADICIONADO - estava faltando
+    const loadScheduleButton = document.getElementById("loadScheduleButton"); // ADICIONADO - estava faltando
 
     // DOM Elements for Booking Status
     const bookingStatusMessage = document.getElementById("bookingStatusMessage");
@@ -88,13 +90,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function updateBookingStatusDisplay() {
-        if (!bookingWindowStatus || !currentWeekStatus || !nextWeekStatus) return;
+        if (!bookingWindowStatus) return;
 
         showBookingStatusMessage("As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 23:59, e a escala da próxima semana será liberada todas as sextas-feiras, às 18h.", "info");
 
         // Ocultar os status individuais da semana atual e próxima semana, pois a mensagem é fixa
-        currentWeekStatus.style.display = "none";
-        nextWeekStatus.style.display = "none";
+        if (currentWeekStatus) currentWeekStatus.style.display = "none";
+        if (nextWeekStatus) nextWeekStatus.style.display = "none";
     }
 
     // --- Room Data --- 
@@ -115,17 +117,26 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // --- Schedule Logic (Loading and Rendering) ---
-    async function loadScheduleData() {
+    async function loadScheduleData(inputDate = null) { // CORRIGIDO - aceita parâmetro
         let startDate, endDate;
         const todayUTC = getTodayUTC();
 
         try {
-            const todayForLogic = new Date();
-            const dayOfWeek = todayForLogic.getDay();
+            let referenceDate;
+            if (inputDate) {
+                referenceDate = parseDateStrToUTC(inputDate);
+            } else {
+                referenceDate = todayUTC;
+            }
+
+            // Calcular segunda-feira da semana
+            const dayOfWeek = referenceDate.getUTCDay();
             const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-            startDate = new Date(todayForLogic.setDate(todayForLogic.getDate() + diffToMonday));
-            startDate = parseDateStrToUTC(startDate.toISOString().split("T")[0]);
-            endDate = new Date(new Date(startDate).setUTCDate(startDate.getUTCDate() + 4));
+            startDate = new Date(referenceDate.valueOf());
+            startDate.setUTCDate(referenceDate.getUTCDate() + diffToMonday);
+            
+            endDate = new Date(startDate.valueOf());
+            endDate.setUTCDate(startDate.getUTCDate() + 4);
             
             currentWeekStartDate = startDate; 
 
@@ -328,7 +339,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function updateButtonStates() {
         if (proceedToBookingButton) {
-            proceedToBookingButton.disabled = false;
+            proceedToBookingButton.disabled = selectedSlots.length === 0; // CORRIGIDO
         }
         if (generatePdfButton) {
             generatePdfButton.disabled = !currentWeekStartDate;
@@ -437,7 +448,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (requestData.slots.length === 0) {
             showModalMessage("Nenhum horário foi selecionado para agendar.", "error");
-            console.warn;
+            return; // CORRIGIDO - removido console.warn
         }
 
         showModalMessage("Processando agendamento...", "");
@@ -462,7 +473,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 updateButtonStates();
                 setTimeout(() => {
                     closeBookingModal();
-                    loadScheduleData(weekSelector ? weekSelector.value : getTodayUTC().toISOString().split("T")[0]);
+                    loadScheduleData(); // CORRIGIDO - parâmetro removido
                 }, 2000);
             } else {
                 showModalMessage(result.error || "Erro ao realizar agendamento.", "error");
@@ -522,15 +533,19 @@ document.addEventListener("DOMContentLoaded", () => {
             
             // Carregar status da janela de agendamento
             console.log("Carregando status da janela de agendamento...");
-            await fetchBookingWindowStatus();
+            const statusLoaded = await fetchBookingWindowStatus();
             
             // Carregar salas
             console.log("Carregando salas...");
-            await fetchAllRooms();
+            const roomsLoaded = await fetchAllRooms();
             
-            // Carregar escala inicial
-            console.log("Carregando escala inicial...");
-            await loadScheduleData(todayUTCStr);
+            // Só carregar a escala se o status e as salas foram carregados com sucesso
+            if (statusLoaded && roomsLoaded) {
+                console.log("Carregando escala inicial...");
+                await loadScheduleData();
+            } else {
+                throw new Error("Falha ao carregar dados iniciais");
+            }
             
             // Atualizar status a cada 5 minutos
             setInterval(fetchBookingWindowStatus, 5 * 60 * 1000);
