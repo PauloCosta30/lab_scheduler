@@ -366,7 +366,7 @@ def create_booking():
             for slot in processed_slots:
                 if check_booking_conflict(slot["room_id"], slot["booking_date_obj"], slot["period"]):
                     return jsonify({
-                        "error": f\"A sala '{slot['room_name']}' já está reservada para o período '{slot['period']}' no dia {slot['booking_date_str']}.\"
+                        "error": f"A sala '{slot["room_name"]}' já está reservada para o período '{slot['period']}' no dia {slot['booking_date_str']}."
                     }), 409
         
         newly_created_bookings_details_for_email = []
