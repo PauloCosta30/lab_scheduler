@@ -92,7 +92,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function updateBookingStatusDisplay() {
         if (!bookingWindowStatus) return;
 
-        showBookingStatusMessage("As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 18h, e a escala da próxima semana será liberada todas as sextas-feiras, às 18h.", "info");
+        showBookingStatusMessage("As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 23:59, e a escala da próxima semana será liberada todas as sextas-feiras, às 18h.", "info");
 
         // Ocultar os status individuais da semana atual e próxima semana, pois a mensagem é fixa
         if (currentWeekStatus) currentWeekStatus.style.display = "none";
@@ -283,12 +283,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
             // Verificar se o slot é da semana atual
             if (slotDate >= currentWeekMonday && slotDate < nextWeekMonday) {
-                // Para semana atual: disponível até quarta-feira às 18h
+                // Para semana atual: disponível até quarta-feira às 23:59
                 const currentDayOfWeek = now.getDay(); // 0=domingo, 1=segunda, ..., 6=sábado
                 const currentHour = now.getHours();
+                const currentMinute = now.getMinutes();
                 
-                // Se hoje é quarta-feira (3) e já passou das 18h, ou se já é quinta/sexta/sábado/domingo
-                if ((currentDayOfWeek === 3 && currentHour >= 18) || currentDayOfWeek > 3 || currentDayOfWeek === 0) {
+                // Se hoje é quinta-feira (4) ou depois (sexta/sábado/domingo)
+                if (currentDayOfWeek >= 4 || currentDayOfWeek === 0) {
+                    return false; // Fechado para semana atual
+                }
+                
+                // Se hoje é quarta-feira (3) e já passou das 23:59
+                if (currentDayOfWeek === 3 && (currentHour > 23 || (currentHour === 23 && currentMinute >= 59))) {
                     return false; // Fechado para semana atual
                 }
                 
