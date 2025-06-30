@@ -269,7 +269,7 @@ def create_booking():
         if not all([user_name, user_email]):
             return jsonify({"error": "Missing fields. Required: user_name, user_email"}), 400
         
-        if "@" not in user_email or "." not in user_email.split("@")[-1]:
+        if not re.match(r"[^@]+@[^@]+\.[^@]+", user_email):
             return jsonify({"error": "Invalid email format"}), 400
 
         processed_slots = []
