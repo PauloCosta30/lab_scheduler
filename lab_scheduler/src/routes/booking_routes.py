@@ -568,7 +568,7 @@ def generate_schedule_pdf():
         
         # Organizar dados por data e período
         schedule_data = defaultdict(lambda: defaultdict(list))
-        user_observations = defaultdict(list)
+        user_observations = {}
         general_observations = []
         
         for booking in bookings:
@@ -590,9 +590,16 @@ def generate_schedule_pdf():
                 
                 # Coletar observações específicas por usuário
                 if booking.observation and booking.observation.strip():
-                    user_observations[booking.user_name].append({
+                    if booking.user_name not in user_observations:
+                        user_observations[booking.user_name] = {
+                            "email": getattr(booking, "user_email", ""),
+                            "coordinator": booking.coordinator_name,
+                            "bookings": []
+                        }
+
+                    user_observations[booking.user_name]["bookings"].append({
+                        "room_name": booking.room.name if booking.room else "N/A",
                         "date": booking.booking_date,
-                        "room": booking.room.name if booking.room else "N/A",
                         "period": booking.period,
                         "observation": booking.observation
                     })
@@ -621,22 +628,3 @@ def generate_schedule_pdf():
     except Exception as e:
         current_app.logger.error(f"Erro ao gerar PDF: {str(e)}")
         return jsonify({"error": "Erro ao gerar PDF", "details": str(e)}), 500
-
-@bookings_bp.route("/bookings/<int:booking_id>", methods=["DELETE"])
-@require_admin_key
-def delete_booking(booking_id):
-    try:
-        booking = Booking.query.get(booking_id)
-        if not booking:
-            return jsonify({"error": "Agendamento não encontrado"}), 404
-        
-        db.session.delete(booking)
-        db.session.commit()
-        
-        return jsonify({"message": "Agendamento excluído com sucesso"}), 200
-    
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Erro ao excluir agendamento: {str(e)}")
-        return jsonify({"error": "Erro ao excluir agendamento"}), 500
-
