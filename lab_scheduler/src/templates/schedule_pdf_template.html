@@ -2,433 +2,249 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Agenda de Agendamentos - Laboratório</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <title>Escala de Agendamentos</title>
     <style>
-        @media print {
-            body { 
-                font-size: 12px; 
-                margin: 0; 
-                padding: 20px;
-            }
-            .no-print { display: none; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+            line-height: 1.2;
+            margin: 15px;
+            color: #000;
+        }
+        
+        h1 {
+            text-align: center;
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .header-info {
+            text-align: center;
+            font-size: 10px;
+            margin-bottom: 15px;
+            line-height: 1.3;
         }
         
         .schedule-table {
-            min-width: 100%;
-            font-size: 0.875rem;
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid #000;
+            font-size: 9px;
+            table-layout: fixed;
         }
         
-        .time-slot {
-            min-height: 60px;
-            vertical-align: top;
-        }
-        
-        .booking-item {
-            background: #f3f4f6;
-            border: 1px solid #d1d5db;
-            border-radius: 4px;
-            padding: 4px 8px;
-            margin: 2px 0;
-            font-size: 0.75rem;
-        }
-        
-        .period-header {
-            background: #374151;
-            color: white;
+        .schedule-table th {
+            background-color: #f0f0f0;
+            border: 1px solid #000;
+            padding: 6px 3px;
+            text-align: center;
+            vertical-align: middle;
             font-weight: bold;
+            font-size: 8px;
+            line-height: 1.1;
+        }
+        
+        .schedule-table td {
+            border: 1px solid #000;
+            padding: 4px 3px;
+            text-align: center;
+            vertical-align: middle;
+            height: 22px;
+            font-size: 8px;
+        }
+        
+        .room-column {
+            width: 12%;
+            text-align: left !important;
+            padding-left: 6px !important;
+            font-weight: normal;
+            background-color: #fff;
         }
         
         .day-header {
-            background: #4b5563;
-            color: white;
+            background-color: #e8e8e8 !important;
             font-weight: bold;
+        }
+        
+        .period-header {
+            background-color: #f5f5f5 !important;
+            font-weight: bold;
+            font-size: 7px;
+        }
+        
+        .schedule-cell {
+            background-color: #fff;
+            min-height: 20px;
+        }
+        
+        /* Larguras das colunas para os dias */
+        .day-col {
+            width: 6.29%; /* (88% / 14 colunas) */
+        }
+        
+        .observations-section {
+            margin-top: 25px;
+            page-break-inside: avoid;
+        }
+        
+        .observations-section h2 {
+            font-size: 12px;
+            font-weight: bold;
+            border-bottom: 1px solid #000;
+            padding-bottom: 3px;
+            margin-bottom: 12px;
+        }
+        
+        .user-observations {
+            margin-bottom: 15px;
+            page-break-inside: avoid;
+        }
+        
+        .user-observations h3 {
+            font-size: 11px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .booking-item {
+            margin-bottom: 6px;
+            padding-left: 12px;
+            font-size: 9px;
+        }
+        
+        .observation-text {
+            font-style: italic;
+            color: #555;
+            display: block;
+            margin-top: 2px;
+        }
+        
+        /* Estilos específicos para PDF */
+        @media print {
+            body {
+                margin: 10px;
+                font-size: 9px;
+            }
+            
+            .schedule-table {
+                font-size: 8px;
+            }
+            
+            .schedule-table th {
+                font-size: 7px;
+            }
+            
+            .schedule-table td {
+                font-size: 7px;
+            }
+        }
+        
+        @page {
+            margin: 1cm;
+            size: A4;
         }
     </style>
 </head>
-<body class="bg-white">
-    <div class="container mx-auto px-4 py-6">
-        <!-- Cabeçalho -->
-        <div class="text-center mb-6">
-            <h1 class="text-3xl font-bold text-gray-800 mb-2">Agenda de Agendamentos</h1>
-            <h2 class="text-xl text-gray-600 mb-1">Laboratório de Pesquisa</h2>
-            <p class="text-gray-500" id="weekRange">Semana de {{ start_date }} a {{ end_date }}</p>
-            <p class="text-gray-500 text-sm">Gerado em: {{ generation_date }}</p>
-        </div>
+<body>
 
-        <!-- Tabela de Agendamentos -->
-        <div class="overflow-x-auto">
-            <table class="schedule-table table-fixed w-full border-collapse border border-gray-300">
-                <thead>
-                    <tr>
-                        <th class="period-header border border-gray-300 w-24 p-2">Período</th>
-                        <th class="day-header border border-gray-300 p-2">Segunda</th>
-                        <th class="day-header border border-gray-300 p-2">Terça</th>
-                        <th class="day-header border border-gray-300 p-2">Quarta</th>
-                        <th class="day-header border border-gray-300 p-2">Quinta</th>
-                        <th class="day-header border border-gray-300 p-2">Sexta</th>
-                        <th class="day-header border border-gray-300 p-2">Sábado</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Período Manhã -->
-                    <tr>
-                        <td rowspan="4" class="period-header border border-gray-300 p-2 text-center">
-                            <div class="transform -rotate-90 whitespace-nowrap">MANHÃ</div>
-                        </td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">08:00 - 10:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">08:00 - 10:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">08:00 - 10:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">08:00 - 10:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">08:00 - 10:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">08:00 - 10:00</td>
-                    </tr>
-                    <tr>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in monday_morning %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in tuesday_morning %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in wednesday_morning %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in thursday_morning %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in friday_morning %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in saturday_morning %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">10:00 - 12:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">10:00 - 12:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">10:00 - 12:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">10:00 - 12:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">10:00 - 12:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">10:00 - 12:00</td>
-                    </tr>
-                    <tr>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in monday_late_morning %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in tuesday_late_morning %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in wednesday_late_morning %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in thursday_late_morning %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in friday_late_morning %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in saturday_late_morning %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                    </tr>
-
-                    <!-- Período Tarde -->
-                    <tr>
-                        <td rowspan="4" class="period-header border border-gray-300 p-2 text-center">
-                            <div class="transform -rotate-90 whitespace-nowrap">TARDE</div>
-                        </td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">14:00 - 16:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">14:00 - 16:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">14:00 - 16:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">14:00 - 16:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">14:00 - 16:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">14:00 - 16:00</td>
-                    </tr>
-                    <tr>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in monday_afternoon %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in tuesday_afternoon %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in wednesday_afternoon %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in thursday_afternoon %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in friday_afternoon %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in saturday_afternoon %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">16:00 - 18:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">16:00 - 18:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">16:00 - 18:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">16:00 - 18:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">16:00 - 18:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">16:00 - 18:00</td>
-                    </tr>
-                    <tr>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in monday_late_afternoon %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in tuesday_late_afternoon %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in wednesday_late_afternoon %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in thursday_late_afternoon %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in friday_late_afternoon %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in saturday_late_afternoon %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                    </tr>
-
-                    <!-- Período Noite -->
-                    <tr>
-                        <td rowspan="2" class="period-header border border-gray-300 p-2 text-center">
-                            <div class="transform -rotate-90 whitespace-nowrap">NOITE</div>
-                        </td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">19:00 - 21:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">19:00 - 21:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">19:00 - 21:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">19:00 - 21:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">19:00 - 21:00</td>
-                        <td class="border border-gray-300 p-1 text-xs text-center bg-gray-50">19:00 - 21:00</td>
-                    </tr>
-                    <tr>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in monday_evening %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in tuesday_evening %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in wednesday_evening %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in thursday_evening %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in friday_evening %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td class="time-slot border border-gray-300 p-1">
-                            {% for booking in saturday_evening %}
-                            <div class="booking-item">
-                                <strong>{{ booking.user_name }}</strong><br>
-                                Sala: {{ booking.room }}<br>
-                                {{ booking.start_time }} - {{ booking.end_time }}
-                            </div>
-                            {% endfor %}
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Legenda -->
-        <div class="mt-6 text-sm text-gray-600">
-            <h3 class="font-bold mb-2">Legenda:</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                <div class="flex items-center">
-                    <div class="w-4 h-4 bg-gray-200 border border-gray-300 mr-2"></div>
-                    <span>Agendamento confirmado</span>
-                </div>
-                <div class="text-xs text-gray-500">
-                    <strong>Informações do agendamento:</strong> Nome, Sala/Equipamento, Horário
-                </div>
-            </div>
-        </div>
-
-        <!-- Rodapé -->
-        <div class="mt-8 text-center text-xs text-gray-500 border-t pt-4">
-            <p>Este documento foi gerado automaticamente pelo Sistema de Agendamento do Laboratório</p>
-            <p>Para alterações ou dúvidas, entre em contato com a administração</p>
-        </div>
+    <h1>Escala de Agendamentos - ITV</h1>
+    <div class="header-info">
+        Semana de {{ start_date.strftime('%d/%m/%Y') }} a {{ end_date.strftime('%d/%m/%Y') }}<br>
+        Gerado em: {{ generated_at.strftime('%d/%m/%Y') }} às {{ generated_at.strftime('%H:%M') }}
     </div>
+
+    <table class="schedule-table">
+        <colgroup>
+            <col style="width: 12%;">
+            {% for _ in dates_of_week %}
+                <col class="day-col">
+                <col class="day-col">
+            {% endfor %}
+        </colgroup>
+        
+        <thead>
+            <tr>
+                <th rowspan="2" class="room-column">Sala</th>
+                {% for date in dates_of_week %}
+                    <th colspan="2" class="day-header">
+                        {{ date.strftime('%A') }} ({{ date.strftime('%d/%m') }})
+                    </th>
+                {% endfor %}
+            </tr>
+            <tr>
+                {% for _ in dates_of_week %}
+                    <th class="period-header">Manhã</th>
+                    <th class="period-header">Tarde</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        
+        <tbody>
+            {% for room in rooms %}
+            <tr>
+                <td class="room-column">{{ room.name }}</td>
+                {% for date in dates_of_week %}
+                    {% set date_key = date.strftime('%Y-%m-%d') %}
+                    <td class="schedule-cell">
+                        {% set bookings = schedule_data.get(date_key, {}).get('Manhã', []) %}
+                        {% set found = namespace(user='-') %}
+                        {% for b in bookings %}
+                            {% if b.room_name == room.name and found.user == '-' %}
+                                {% set found.user = b.user_name %}
+                            {% endif %}
+                        {% endfor %}
+                        {{ found.user }}
+                    </td>
+                    <td class="schedule-cell">
+                        {% set bookings = schedule_data.get(date_key, {}).get('Tarde', []) %}
+                        {% set found = namespace(user='-') %}
+                        {% for b in bookings %}
+                            {% if b.room_name == room.name and found.user == '-' %}
+                                {% set found.user = b.user_name %}
+                            {% endif %}
+                        {% endfor %}
+                        {{ found.user }}
+                    </td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="observations-section">
+        <h2>Observações por Usuário</h2>
+        {% for user_name, user_data in user_observations.items() %}
+            <div class="user-observations">
+                <h3>{{ user_name }}{% if user_data.email %} ({{ user_data.email }}){% endif %}</h3>
+                {% if user_data.coordinator %}
+                    <p><strong>Coordenador:</strong> {{ user_data.coordinator }}</p>
+                {% endif %}
+                {% for booking in user_data.bookings %}
+                    <div class="booking-item">
+                        <strong>{{ booking.room_name }} - {{ booking.date.strftime('%d/%m/%Y') }} - {{ booking.period }}</strong>
+                        <span class="observation-text">"{{ booking.observation }}"</span>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endfor %}
+    </div>
+
+    <div class="observations-section">
+        <h2>Observações Gerais</h2>
+        {% for obs in general_observations %}
+            <div class="booking-item">
+                <strong>{{ obs.booking_date.strftime('%d/%m/%Y') }} - {{ obs.user_name }}</strong>
+                <span class="observation-text">{{ obs.observation }}</span>
+            </div>
+        {% endfor %}
+    </div>
+
 </body>
 </html>
