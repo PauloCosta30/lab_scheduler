@@ -88,6 +88,12 @@
             background-color: #fff;
         }
         
+        .occupied-cell {
+            background-color: #ffffcc;
+            font-weight: bold;
+            color: #333;
+        }
+        
         .observations-section {
             margin-top: 30px;
             page-break-inside: avoid;
@@ -146,6 +152,20 @@
             font-size: 10px;
         }
         
+        .general-observations {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+        }
+        
+        .general-observations h3 {
+            font-size: 12px;
+            color: #555;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        
         /* Estilos específicos para PDF */
         @media print {
             body {
@@ -175,8 +195,8 @@
 <body>
     <div class="header">
         <h1>Escala de Agendamentos - ITV</h1>
-        <p>Semana de {{ week_start_date_formatted|default('__/__/____') }} a {{ week_end_date_formatted|default('__/__/____') }}</p>
-        <p>Gerado em: {{ generation_date|default('__/__/____ __:__') }}</p>
+        <p>Semana de {{ start_date.strftime('%d/%m/%Y') if start_date else '__/__/____' }} a {{ end_date.strftime('%d/%m/%Y') if end_date else '__/__/____' }}</p>
+        <p>Gerado em: {{ generated_at.strftime('%d/%m/%Y %H:%M') if generated_at else '__/__/____ __:__' }}</p>
     </div>
 
     <!-- Tabela da Escala (Segunda a Sexta apenas) -->
@@ -184,23 +204,17 @@
         <thead>
             <tr>
                 <th rowspan="2" class="room-name">Sala</th>
-                {% if dates_of_week %}
-                    <!-- Mostrar apenas os primeiros 5 dias (Segunda a Sexta) -->
-                    {% for date in dates_of_week[:5] %}
+                {% set weekdays_names = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'] %}
+                {% set current_date = start_date %}
+                {% for i in range(5) %}
+                    {% set display_date = current_date + timedelta(days=i) %}
+                    {% if display_date.weekday() < 5 %}
                         <th colspan="2" class="day-header">
-                            {% set day_names = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'] %}
-                            {{ day_names[loop.index0] }}
-                            ({{ date.strftime('%d/%m') if date.strftime is defined else date[:2] + '/' + date[3:5] if date|length >= 5 else '__/__' }})
+                            {{ weekdays_names[display_date.weekday()] }}
+                            ({{ display_date.strftime('%d/%m') }})
                         </th>
-                    {% endfor %}
-                {% else %}
-                    <!-- Fallback com datas de exemplo -->
-                    <th colspan="2" class="day-header">Segunda (__/__)</th>
-                    <th colspan="2" class="day-header">Terça (__/__)</th>
-                    <th colspan="2" class="day-header">Quarta (__/__)</th>
-                    <th colspan="2" class="day-header">Quinta (__/__)</th>
-                    <th colspan="2" class="day-header">Sexta (__/__)</th>
-                {% endif %}
+                    {% endif %}
+                {% endfor %}
             </tr>
             <tr>
                 <!-- Cabeçalhos de período apenas para os 5 dias úteis -->
@@ -212,53 +226,48 @@
         </thead>
         
         <tbody>
-            {% if rooms and rooms|length > 0 %}
-                {% for room in rooms %}
-                <tr>
-                    <td class="room-name">{{ room.name if room.name is defined else room }}</td>
-                    {% if dates_of_week %}
-                        <!-- Processar apenas os primeiros 5 dias (Segunda a Sexta) -->
-                        {% for date in dates_of_week[:5] %}
-                            {% set date_key = date.strftime('%Y-%m-%d') if date.strftime is defined else date %}
-                            {% set room_name = room.name if room.name is defined else room %}
-                            
-                            <!-- Manhã -->
-                            <td class="schedule-cell">
-                                {% if schedule_data and schedule_data.get(date_key) and schedule_data[date_key].get('Manhã') and schedule_data[date_key]['Manhã'].get(room_name) %}
-                                    {{ schedule_data[date_key]['Manhã'][room_name] }}
-                                {% else %}
-                                    -
-                                {% endif %}
-                            </td>
-                            
-                            <!-- Tarde -->
-                            <td class="schedule-cell">
-                                {% if schedule_data and schedule_data.get(date_key) and schedule_data[date_key].get('Tarde') and schedule_data[date_key]['Tarde'].get(room_name) %}
-                                    {{ schedule_data[date_key]['Tarde'][room_name] }}
-                                {% else %}
-                                    -
-                                {% endif %}
-                            </td>
-                        {% endfor %}
-                    {% else %}
-                        <!-- Fallback - apenas 10 células (5 dias x 2 períodos) -->
-                        {% for i in range(10) %}
-                            <td class="schedule-cell">-</td>
-                        {% endfor %}
+            <!-- Definir as salas padrão -->
+            {% set rooms_list = ['Geral 1', 'Geral 2', 'Geral 3'] %}
+            
+            {% for room_name in rooms_list %}
+            <tr>
+                <td class="room-name">{{ room_name }}</td>
+                
+                {% set current_date = start_date %}
+                {% for day_offset in range(5) %}
+                    {% set display_date = current_date + timedelta(days=day_offset) %}
+                    {% if display_date.weekday() < 5 %}
+                        {% set date_str = display_date.strftime('%Y-%m-%d') %}
+                        
+                        <!-- Manhã -->
+                        <td class="schedule-cell {% if schedule_data.get(date_str, {}).get('Manhã', []) | selectattr('room_name', 'equalto', room_name) | list %}occupied-cell{% endif %}">
+                            {% set morning_bookings = schedule_data.get(date_str, {}).get('Manhã', []) | selectattr('room_name', 'equalto', room_name) | list %}
+                            {% if morning_bookings %}
+                                {% for booking in morning_bookings %}
+                                    {{ booking.user_name }}{% if booking.coordinator_name %} ({{ booking.coordinator_name }}){% endif %}
+                                    {% if not loop.last %}<br>{% endif %}
+                                {% endfor %}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        
+                        <!-- Tarde -->
+                        <td class="schedule-cell {% if schedule_data.get(date_str, {}).get('Tarde', []) | selectattr('room_name', 'equalto', room_name) | list %}occupied-cell{% endif %}">
+                            {% set afternoon_bookings = schedule_data.get(date_str, {}).get('Tarde', []) | selectattr('room_name', 'equalto', room_name) | list %}
+                            {% if afternoon_bookings %}
+                                {% for booking in afternoon_bookings %}
+                                    {{ booking.user_name }}{% if booking.coordinator_name %} ({{ booking.coordinator_name }}){% endif %}
+                                    {% if not loop.last %}<br>{% endif %}
+                                {% endfor %}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
                     {% endif %}
-                </tr>
                 {% endfor %}
-            {% else %}
-                <!-- Fallback com salas padrão -->
-                {% for room_num in range(1, 4) %}
-                <tr>
-                    <td class="room-name">Geral {{ room_num }}</td>
-                    {% for i in range(10) %}
-                        <td class="schedule-cell">-</td>
-                    {% endfor %}
-                </tr>
-                {% endfor %}
-            {% endif %}
+            </tr>
+            {% endfor %}
         </tbody>
     </table>
 
@@ -279,10 +288,8 @@
                     <div class="booking-item">
                         <div class="booking-details">
                             {{ booking.room_name }} - 
-                            {% if booking.date and booking.date.strftime is defined %}
-                                {{ booking.date.strftime('%d/%m/%Y') }}
-                            {% elif booking.date %}
-                                {{ booking.date|string }}
+                            {% if booking.date %}
+                                {{ booking.date.strftime('%d/%m/%Y') if booking.date.strftime else booking.date }}
                             {% else %}
                                 __/__/____
                             {% endif %}
@@ -310,6 +317,24 @@
             <div class="no-observations">
                 Nenhum agendamento com observações encontrado para esta semana.
             </div>
+        {% endif %}
+        
+        <!-- Observações Gerais -->
+        {% if general_observations and general_observations|length > 0 %}
+        <div class="general-observations">
+            <h3>Observações Gerais</h3>
+            {% for obs in general_observations %}
+            <div class="booking-item">
+                <div class="booking-details">
+                    {{ obs.user_name }}{% if obs.coordinator_name %} ({{ obs.coordinator_name }}){% endif %}
+                    - {{ obs.booking_date.strftime('%d/%m/%Y') if obs.booking_date.strftime else obs.booking_date }}
+                </div>
+                <div class="observation-text">
+                    "{{ obs.observation }}"
+                </div>
+            </div>
+            {% endfor %}
+        </div>
         {% endif %}
     </div>
 </body>
