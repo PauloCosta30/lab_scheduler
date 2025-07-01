@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Escala de Agendamentos - Semana de {{ week_start_date_formatted }}</title>
+    <title>Escala de Agendamentos</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -38,175 +38,97 @@
             vertical-align: middle;
             max-width: 60px;
             word-wrap: break-word;
-            overflow-wrap: break-word;
         }
         .schedule-table th {
             background-color: #f5f5f5;
-            font-weight: bold;
         }
-        .schedule-table .room-name {
-            background-color: #f9f9f9;
-            font-weight: bold;
+        .room-name {
             text-align: left;
+            font-weight: bold;
+            background-color: #f0f0f0;
         }
         .observations-section {
             margin-top: 40px;
-            page-break-inside: avoid;
-        }
-        .observations-section h2 {
-            font-size: 16px;
-            color: #333;
-            border-bottom: 2px solid #ddd;
-            padding-bottom: 5px;
-            margin-bottom: 20px;
-        }
-        .user-observations {
-            margin-bottom: 25px;
-            page-break-inside: avoid;
         }
         .user-observations h3 {
-            font-size: 14px;
-            color: #555;
-            margin-bottom: 10px;
-            background-color: #f0f0f0;
-            padding: 8px;
+            margin-bottom: 5px;
             border-left: 4px solid #007bff;
+            padding-left: 8px;
+            font-size: 12px;
         }
         .booking-item {
-            margin-bottom: 15px;
-            padding: 10px;
-            border: 1px solid #e0e0e0;
-            border-radius: 4px;
-            background-color: #fafafa;
-        }
-        .booking-details {
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 5px;
+            margin-bottom: 10px;
+            padding-left: 10px;
         }
         .observation-text {
-            color: #666;
             font-style: italic;
-            margin-left: 10px;
-        }
-        .no-observations {
-            color: #999;
-            font-style: italic;
-            text-align: center;
-            padding: 20px;
-        }
-        @media print {
-            body {
-                margin: 10px;
-            }
-            .observations-section {
-                page-break-before: always;
-            }
+            color: #555;
         }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>Escala de Agendamentos - ITV</h1>
-        <p>Semana de {{ week_start_date_formatted }} a {{ week_end_date_formatted }}</p>
-        <p>Gerado em: {{ generation_date }}</p>
+        <h1>Escala de Agendamentos</h1>
+        <p>De {{ start_date.strftime('%d/%m/%Y') }} a {{ end_date.strftime('%d/%m/%Y') }}</p>
+        <p>Gerado em: {{ generated_at.strftime('%d/%m/%Y %H:%M') }}</p>
     </div>
 
-    <!-- Tabela da Escala -->
-    <table class="schedule-table">
-        <thead>
-            <tr>
-                <th rowspan="2">Sala</th>
-                {% for date in dates_of_week %}
-                    {% set day_name = days_locale[loop.index0] if days_locale else date.strftime('%A') %}
-                    <th colspan="2">{{ day_name }} ({{ date.strftime('%d/%m') if date else '' }})</th>
-                {% endfor %}
-            </tr>
-            <tr>
-                {% for date in dates_of_week %}
-                    <th>Manhã</th>
-                    <th>Tarde</th>
-                {% endfor %}
-            </tr>
-        </thead>
-        <tbody>
-            {% for room in rooms %}
-            <tr>
-                <td class="room-name">{{ room.name if room.name else (room if room else '') }}</td>
-                {% for date in dates_of_week %}
-                    {% set date_key = date.strftime('%Y-%m-%d') if date else '' %}
-                    <td>
-                        {% if schedule_data and date_key in schedule_data and 'Manhã' in schedule_data[date_key] %}
-                            {{ schedule_data[date_key]['Manhã'].get(room.name if room.name else room, '-') }}
-                        {% else %}
-                            -
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if schedule_data and date_key in schedule_data and 'Tarde' in schedule_data[date_key] %}
-                            {{ schedule_data[date_key]['Tarde'].get(room.name if room.name else room, '-') }}
-                        {% else %}
-                            -
-                        {% endif %}
-                    </td>
-                {% endfor %}
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <!-- Tabela de Escala -->
+    {% for date, periods in schedule_data.items() %}
+        <h3>{{ date }}</h3>
+        {% for period, bookings in periods.items() %}
+            <strong>{{ period }}</strong>
+            <table class="schedule-table">
+                <thead>
+                    <tr>
+                        <th>Usuário</th>
+                        <th>Coordenador</th>
+                        <th>Sala</th>
+                        <th>Observação</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for booking in bookings %}
+                        <tr>
+                            <td>{{ booking.user_name }}</td>
+                            <td>{{ booking.coordinator_name }}</td>
+                            <td>{{ booking.room_name }}</td>
+                            <td>{{ booking.observation or "-" }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endfor %}
+    {% endfor %}
 
-    <!-- Seção de Observações por Usuário -->
+    <!-- Observações por Usuário -->
     <div class="observations-section">
-        <h2>Observações dos Agendamentos por Usuário</h2>
-        
-        {% if user_observations and user_observations|length > 0 %}
-            {% for user_name, user_data in user_observations.items() %}
+        <h2>Observações dos Usuários</h2>
+        {% for user_name, user_data in user_observations.items() %}
             <div class="user-observations">
-                <h3>{{ user_name }} {% if user_data.email %}({{ user_data.email }}){% endif %}</h3>
+                <h3>{{ user_name }}{% if user_data.email %} ({{ user_data.email }}){% endif %}</h3>
                 {% if user_data.coordinator %}
-                <p><strong>Coordenador:</strong> {{ user_data.coordinator }}</p>
+                    <p><strong>Coordenador:</strong> {{ user_data.coordinator }}</p>
                 {% endif %}
-                
                 {% for booking in user_data.bookings %}
-                <div class="booking-item">
-                    <div class="booking-details">
-                        {{ booking.room_name }} - 
-                        {% if booking.date %}
-                            {{ booking.date.strftime('%d/%m/%Y') if booking.date.strftime else booking.date }}
-                        {% endif %}
-                        - {{ booking.period }}
+                    <div class="booking-item">
+                        <strong>{{ booking.room_name }} - {{ booking.date.strftime('%d/%m/%Y') }} - {{ booking.period }}</strong><br>
+                        <span class="observation-text">"{{ booking.observation }}"</span>
                     </div>
-                    {% if booking.observation %}
-                    <div class="observation-text">
-                        "{{ booking.observation }}"
-                    </div>
-                    {% else %}
-                    <div class="observation-text">
-                        Sem observações
-                    </div>
-                    {% endif %}
-                </div>
                 {% endfor %}
             </div>
-            {% endfor %}
-        {% else %}
-            <div class="no-observations">
-                Nenhum agendamento com observações encontrado para esta semana.
-            </div>
-        {% endif %}
+        {% endfor %}
     </div>
 
-    <!-- Debug: Exibir dados brutos se necessário -->
-    {% if debug_mode %}
-    <div style="margin-top: 50px; padding: 20px; background-color: #f0f0f0; border: 1px solid #ccc;">
-        <h3>Debug - Dados Recebidos:</h3>
-        <pre>
-Dates: {{ dates_of_week|string }}
-Rooms: {{ rooms|string }}
-Schedule Data: {{ schedule_data|string }}
-User Observations: {{ user_observations|string }}
-        </pre>
+    <!-- Observações Gerais -->
+    <div class="observations-section">
+        <h2>Observações Gerais</h2>
+        {% for obs in general_observations %}
+            <div class="booking-item">
+                <strong>{{ obs.booking_date.strftime('%d/%m/%Y') }} - {{ obs.user_name }}</strong><br>
+                <em>{{ obs.observation }}</em>
+            </div>
+        {% endfor %}
     </div>
-    {% endif %}
 </body>
 </html>
