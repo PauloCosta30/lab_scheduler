@@ -91,27 +91,23 @@
                     {% set date_key = date.strftime('%Y-%m-%d') %}
                     <td>
                         {% set bookings = schedule_data.get(date_key, {}).get('Manhã', []) %}
-                        {% set found = false %}
+                        {% set found = namespace(user='-') %}
                         {% for b in bookings %}
-                            {% if b.room_name == room.name %}
-                                {{ b.user_name }}
-                                {% set found = true %}
-                                {% break %}
+                            {% if b.room_name == room.name and found.user == '-' %}
+                                {% set found.user = b.user_name %}
                             {% endif %}
                         {% endfor %}
-                        {% if not found %}-{% endif %}
+                        {{ found.user }}
                     </td>
                     <td>
                         {% set bookings = schedule_data.get(date_key, {}).get('Tarde', []) %}
-                        {% set found = false %}
+                        {% set found = namespace(user='-') %}
                         {% for b in bookings %}
-                            {% if b.room_name == room.name %}
-                                {{ b.user_name }}
-                                {% set found = true %}
-                                {% break %}
+                            {% if b.room_name == room.name and found.user == '-' %}
+                                {% set found.user = b.user_name %}
                             {% endif %}
                         {% endfor %}
-                        {% if not found %}-{% endif %}
+                        {{ found.user }}
                     </td>
                 {% endfor %}
             </tr>
