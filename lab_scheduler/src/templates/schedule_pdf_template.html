@@ -2,58 +2,50 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Escala de Agendamentos</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 10px;
+            margin: 20px;
             font-size: 10px;
         }
-        .header {
+        h1 {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 10px;
         }
-        .header h1 {
-            margin: 0;
-            font-size: 18px;
-            color: #333;
+        p {
+            text-align: center;
+            margin-top: 0;
+            margin-bottom: 20px;
         }
-        .header p {
-            margin: 5px 0;
-            color: #666;
-        }
-        .schedule-table {
+        table.schedule-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 30px;
             table-layout: fixed;
             font-size: 10px;
         }
-        .schedule-table th,
-        .schedule-table td {
-            border: 1px solid #ddd;
+        table.schedule-table th,
+        table.schedule-table td {
+            border: 1px solid #ccc;
             padding: 4px;
             text-align: center;
             vertical-align: middle;
-            max-width: 60px;
             word-wrap: break-word;
         }
-        .schedule-table th {
-            background-color: #f5f5f5;
+        table.schedule-table th {
+            background-color: #f0f0f0;
+            font-weight: bold;
         }
         .room-name {
             text-align: left;
             font-weight: bold;
-            background-color: #f0f0f0;
+            background-color: #f9f9f9;
         }
         .observations-section {
             margin-top: 40px;
         }
-        .user-observations h3 {
-            margin-bottom: 5px;
-            border-left: 4px solid #007bff;
-            padding-left: 8px;
+        .observations-section h2 {
+            border-bottom: 1px solid #ccc;
             font-size: 12px;
         }
         .booking-item {
@@ -67,43 +59,68 @@
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>Escala de Agendamentos</h1>
-        <p>De {{ start_date.strftime('%d/%m/%Y') }} a {{ end_date.strftime('%d/%m/%Y') }}</p>
-        <p>Gerado em: {{ generated_at.strftime('%d/%m/%Y %H:%M') }}</p>
-    </div>
 
-    <!-- Tabela de Escala -->
-    {% for date, periods in schedule_data.items() %}
-        <h3>{{ date }}</h3>
-        {% for period, bookings in periods.items() %}
-            <strong>{{ period }}</strong>
-            <table class="schedule-table">
-                <thead>
-                    <tr>
-                        <th>Usuário</th>
-                        <th>Coordenador</th>
-                        <th>Sala</th>
-                        <th>Observação</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for booking in bookings %}
-                        <tr>
-                            <td>{{ booking.user_name }}</td>
-                            <td>{{ booking.coordinator_name }}</td>
-                            <td>{{ booking.room_name }}</td>
-                            <td>{{ booking.observation or "-" }}</td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        {% endfor %}
-    {% endfor %}
+    <h1>Escala de Agendamentos</h1>
+    <p>
+        Semana de {{ start_date.strftime('%d/%m/%Y') }} a {{ end_date.strftime('%d/%m/%Y') }}<br>
+        Gerado em: {{ generated_at.strftime('%d/%m/%Y %H:%M') }}
+    </p>
 
-    <!-- Observações por Usuário -->
+    <table class="schedule-table">
+        <thead>
+            <tr>
+                <th rowspan="2">Sala</th>
+                {% for date in dates_of_week %}
+                    <th colspan="2">
+                        {{ date.strftime('%A') }}<br>{{ date.strftime('%d/%m') }}
+                    </th>
+                {% endfor %}
+            </tr>
+            <tr>
+                {% for _ in dates_of_week %}
+                    <th>Manhã</th>
+                    <th>Tarde</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for room in rooms %}
+            <tr>
+                <td class="room-name">{{ room.name }}</td>
+                {% for date in dates_of_week %}
+                    {% set date_key = date.strftime('%Y-%m-%d') %}
+                    <td>
+                        {% set bookings = schedule_data.get(date_key, {}).get('Manhã', []) %}
+                        {% set found = false %}
+                        {% for b in bookings %}
+                            {% if b.room_name == room.name %}
+                                {{ b.user_name }}
+                                {% set found = true %}
+                                {% break %}
+                            {% endif %}
+                        {% endfor %}
+                        {% if not found %}-{% endif %}
+                    </td>
+                    <td>
+                        {% set bookings = schedule_data.get(date_key, {}).get('Tarde', []) %}
+                        {% set found = false %}
+                        {% for b in bookings %}
+                            {% if b.room_name == room.name %}
+                                {{ b.user_name }}
+                                {% set found = true %}
+                                {% break %}
+                            {% endif %}
+                        {% endfor %}
+                        {% if not found %}-{% endif %}
+                    </td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
     <div class="observations-section">
-        <h2>Observações dos Usuários</h2>
+        <h2>Observações por Usuário</h2>
         {% for user_name, user_data in user_observations.items() %}
             <div class="user-observations">
                 <h3>{{ user_name }}{% if user_data.email %} ({{ user_data.email }}){% endif %}</h3>
@@ -120,7 +137,6 @@
         {% endfor %}
     </div>
 
-    <!-- Observações Gerais -->
     <div class="observations-section">
         <h2>Observações Gerais</h2>
         {% for obs in general_observations %}
@@ -130,5 +146,6 @@
             </div>
         {% endfor %}
     </div>
+
 </body>
 </html>
