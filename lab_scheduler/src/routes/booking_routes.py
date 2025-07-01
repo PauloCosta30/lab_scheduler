@@ -286,6 +286,210 @@ def get_rooms():
     except Exception as e:
         current_app.logger.error(f"Erro ao buscar salas: {str(e)}")
         return jsonify({"error": "Erro ao carregar salas"}), 500
+        # Adicione esta nova rota ao seu arquivo booking_routes.py
+
+@bookings_bp.route("/room-availability", methods=["GET"])
+def get_room_availability():
+    """
+    Retorna a disponibilidade das salas considerando a janela de agendamento
+    e os agendamentos existentes
+    """
+    try:
+        target_date_str = request.args.get("date")
+        if not target_date_str:
+            return jsonify({"error": "Parameter 'date' is required"}), 400
+        
+        try:
+            target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+        
+        # Verificar se é fim de semana
+        if target_date.weekday() >= 5:  # Sábado ou Domingo
+            return jsonify({
+                "date": target_date_str,
+                "available": False,
+                "message": "Agendamentos não são permitidos em fins de semana",
+                "rooms": {}
+            })
+        
+        # Obter status da janela de agendamento
+        booking_window = get_booking_window_status()
+        
+        # Determinar se a data está na semana atual ou próxima
+        now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
+        now_brasilia = now_utc.astimezone(BRASILIA_TZ)
+        today_brasilia = now_brasilia.date()
+        current_week_monday = today_brasilia - timedelta(days=today_brasilia.weekday())
+        next_week_monday = current_week_monday + timedelta(weeks=1)
+        
+        week_type = None
+        window_open = False
+        
+        if target_date >= current_week_monday and target_date < next_week_monday:
+            # Data na semana atual
+            week_type = "current_week"
+            window_open = booking_window["current_week"]["open"]
+        elif target_date >= next_week_monday and target_date < (next_week_monday + timedelta(weeks=1)):
+            # Data na próxima semana
+            week_type = "next_week"
+            window_open = booking_window["next_week"]["open"]
+        else:
+            # Data fora do período permitido
+            return jsonify({
+                "date": target_date_str,
+                "available": False,
+                "message": "Agendamentos só são permitidos para a semana atual ou próxima semana",
+                "rooms": {}
+            })
+        
+        # Se a janela não está aberta, retornar indisponível
+        if not window_open:
+            message = booking_window[week_type]["message"]
+            return jsonify({
+                "date": target_date_str,
+                "available": False,
+                "message": f"Janela de agendamento fechada: {message}",
+                "rooms": {}
+            })
+        
+        # Buscar todas as salas
+        rooms = Room.query.all()
+        sorted_rooms = sort_rooms_custom(rooms)
+        
+        # Buscar agendamentos existentes para a data
+        existing_bookings = Booking.query.filter_by(booking_date=target_date).all()
+        
+        # Criar dicionário de salas ocupadas
+        occupied_slots = {}
+        for booking in existing_bookings:
+            if booking.room_id:
+                key = f"{booking.room_id}_{booking.period}"
+                occupied_slots[key] = {
+                    "user_name": booking.user_name,
+                    "coordinator_name": booking.coordinator_name
+                }
+        
+        # Montar resposta de disponibilidade por sala
+        rooms_availability = {}
+        for room in sorted_rooms:
+            morning_key = f"{room.id}_Manhã"
+            afternoon_key = f"{room.id}_Tarde"
+            
+            rooms_availability[room.id] = {
+                "name": room.name,
+                "periods": {
+                    "Manhã": {
+                        "available": morning_key not in occupied_slots,
+                        "occupied_by": occupied_slots.get(morning_key, {})
+                    },
+                    "Tarde": {
+                        "available": afternoon_key not in occupied_slots,
+                        "occupied_by": occupied_slots.get(afternoon_key, {})
+                    }
+                }
+            }
+        
+        return jsonify({
+            "date": target_date_str,
+            "available": True,
+            "message": f"Janela de agendamento aberta: {booking_window[week_type]['message']}",
+            "window_status": booking_window,
+            "rooms": rooms_availability
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Erro ao verificar disponibilidade de salas: {str(e)}")
+        return jsonify({"error": "Erro interno do servidor"}), 500
+
+
+# Modifique também a função get_booking_window_status para garantir que a lógica está correta:
+
+def get_booking_window_status():
+    try:
+        now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
+        now_brasilia = now_utc.astimezone(BRASILIA_TZ)
+        
+        # Encontrar a segunda-feira da semana atual
+        today_brasilia = now_brasilia.date()
+        current_week_monday = today_brasilia - timedelta(days=today_brasilia.weekday())
+        
+        # Encontrar a segunda-feira da próxima semana
+        next_week_monday = current_week_monday + timedelta(weeks=1)
+        
+        # Definir os pontos de corte para a semana atual
+        current_week_cutoff_date = current_week_monday + timedelta(days=2) # Quarta-feira
+        current_week_cutoff_time = time(23, 59, 59) # 23:59:59
+        current_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(current_week_cutoff_date, current_week_cutoff_time))
+
+        # Definir os pontos de corte para a próxima semana
+        next_week_open_date = current_week_monday + timedelta(days=4) # Sexta-feira
+        next_week_open_time = time(18, 0, 0) # 18:00
+        next_week_open_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_open_date, next_week_open_time))
+
+        next_week_cutoff_date = next_week_monday + timedelta(days=2) # Quarta-feira da próxima semana
+        next_week_cutoff_time = time(23, 59, 59) # 23:59:59
+        next_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_cutoff_date, next_week_cutoff_time))
+
+        status = {
+            "current_week": {"open": False, "message": "Fechado"},
+            "next_week": {"open": False, "message": "Fechado"},
+            "general_message": "As escolhas para a semana atual sempre serão encerradas às 23:59 de quarta-feira, e a escala da próxima semana será liberada todas as sextas-feiras, às 18h."
+        }
+
+        # DEBUG: Log para verificar os valores
+        current_app.logger.info(f"Agora (Brasília): {now_brasilia}")
+        current_app.logger.info(f"Cutoff semana atual: {current_week_cutoff_datetime}")
+        current_app.logger.info(f"Abertura próxima semana: {next_week_open_datetime}")
+        current_app.logger.info(f"Cutoff próxima semana: {next_week_cutoff_datetime}")
+
+        # Regra para a semana atual - CORRIGIDA AQUI
+        # A janela deve estar aberta até quarta-feira às 23:59, então usamos <= ao invés de <
+        if now_brasilia <= current_week_cutoff_datetime:
+            status["current_week"]["open"] = True
+            remaining_time = current_week_cutoff_datetime - now_brasilia
+            if remaining_time.days > 0:
+                status["current_week"]["message"] = f"Aberto até quarta-feira às 23:59 ({remaining_time.days} dia(s) restantes)"
+            elif remaining_time.seconds > 3600:  # Mais de 1 hora
+                hours = remaining_time.seconds // 3600
+                status["current_week"]["message"] = f"Aberto até quarta-feira às 23:59 ({hours}h restantes)"
+            else:
+                status["current_week"]["message"] = "Aberto até quarta-feira às 23:59 (encerrando em breve)"
+        else:
+            status["current_week"]["message"] = "Fechado (após quarta-feira 23:59)"
+
+        # Regra para a próxima semana - CORRIGIDA AQUI
+        # Deve estar aberto desde sexta 18h até quarta da próxima semana às 23:59
+        if now_brasilia >= next_week_open_datetime and now_brasilia <= next_week_cutoff_datetime:
+            status["next_week"]["open"] = True
+            remaining_time = next_week_cutoff_datetime - now_brasilia
+            if remaining_time.days > 0:
+                status["next_week"]["message"] = f"Aberto para a próxima semana ({remaining_time.days} dia(s) restantes)"
+            elif remaining_time.seconds > 3600:  # Mais de 1 hora
+                hours = remaining_time.seconds // 3600
+                status["next_week"]["message"] = f"Aberto para a próxima semana ({hours}h restantes)"
+            else:
+                status["next_week"]["message"] = "Aberto para a próxima semana (encerrando em breve)"
+        elif now_brasilia < next_week_open_datetime:
+            time_to_open = next_week_open_datetime - now_brasilia
+            if time_to_open.days > 0:
+                status["next_week"]["message"] = f"Abre na sexta-feira às 18:00 ({time_to_open.days} dia(s))"
+            elif time_to_open.seconds > 3600:
+                hours = time_to_open.seconds // 3600
+                status["next_week"]["message"] = f"Abre na sexta-feira às 18:00 ({hours}h)"
+            else:
+                status["next_week"]["message"] = "Abre na sexta-feira às 18:00 (em breve)"
+        else:
+            status["next_week"]["message"] = "Fechado (após quarta-feira 23:59 da próxima semana)"
+
+        return status
+    except Exception as e:
+        current_app.logger.error(f"Erro ao obter status da janela de agendamento: {str(e)}")
+        return {
+            "current_week": {"open": False, "message": "Erro no sistema"},
+            "next_week": {"open": False, "message": "Erro no sistema"},
+            "general_message": "As escolhas para a semana atual sempre serão encerradas às 23:59 de quarta-feira, e a escala da próxima semana será liberada todas as sextas-feiras, às 18h."
+        }
 
 @bookings_bp.route("/bookings", methods=["POST"])
 def create_booking():
@@ -299,6 +503,7 @@ def create_booking():
         coordinator_name = data.get("coordinator_name", "")
         observation = data.get("observation", "")
         slots_data = data.get("slots", [])
+        
 
         # Primeiro, verificar se há slots OU observação. Se não houver nenhum, é um erro.
         if not slots_data and not observation.strip(): # Usar .strip() para considerar observações vazias
