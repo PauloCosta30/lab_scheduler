@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Escala de Agendamentos - Semana de {{ week_start_date_formatted }}</title>
+    <title>Escala de Agendamentos</title>
     <style>
         * {
             box-sizing: border-box;
@@ -39,8 +39,8 @@
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 25px;
-            table-layout: fixed;
             border: 1px solid #000;
+            font-size: 9px;
         }
         
         .schedule-table th {
@@ -50,7 +50,7 @@
             vertical-align: middle;
             background-color: #f0f0f0;
             font-weight: bold;
-            font-size: 9px;
+            font-size: 8px;
             line-height: 1.2;
         }
         
@@ -62,7 +62,6 @@
             font-size: 8px;
             height: 25px;
             word-wrap: break-word;
-            overflow-wrap: break-word;
         }
         
         .room-name {
@@ -81,12 +80,10 @@
         .period-header {
             background-color: #f5f5f5 !important;
             font-weight: bold;
-            font-size: 8px;
         }
         
         .schedule-cell {
             background-color: #fff;
-            width: 6.3%;
         }
         
         .observations-section {
@@ -147,6 +144,29 @@
             font-size: 10px;
         }
         
+        /* Força a tabela a aparecer */
+        .schedule-table,
+        .schedule-table tbody,
+        .schedule-table tr,
+        .schedule-table td,
+        .schedule-table th {
+            display: table;
+            border: 1px solid #000 !important;
+        }
+        
+        .schedule-table tbody {
+            display: table-row-group;
+        }
+        
+        .schedule-table tr {
+            display: table-row;
+        }
+        
+        .schedule-table td,
+        .schedule-table th {
+            display: table-cell;
+        }
+        
         /* Estilos específicos para PDF */
         @media print {
             body {
@@ -165,10 +185,6 @@
             .schedule-table td {
                 font-size: 7px;
             }
-            
-            .observations-section {
-                page-break-before: auto;
-            }
         }
         
         @page {
@@ -180,33 +196,39 @@
 <body>
     <div class="header">
         <h1>Escala de Agendamentos - ITV</h1>
-        <p>Semana de {{ week_start_date_formatted }} a {{ week_end_date_formatted }}</p>
-        <p>Gerado em: {{ generation_date }}</p>
+        <p>Semana de {{ week_start_date_formatted|default('__/__/____') }} a {{ week_end_date_formatted|default('__/__/____') }}</p>
+        <p>Gerado em: {{ generation_date|default('__/__/____ __:__') }}</p>
     </div>
 
     <!-- Tabela da Escala -->
     <table class="schedule-table">
-        <colgroup>
-            <col style="width: 12%;">
-            {% for date in dates_of_week %}
-                <col style="width: 6.3%;">
-                <col style="width: 6.3%;">
-            {% endfor %}
-        </colgroup>
-        
         <thead>
             <tr>
                 <th rowspan="2" class="room-name">Sala</th>
-                {% for i in range(dates_of_week|length) %}
-                    {% set date = dates_of_week[i] %}
-                    {% set day_name = days_locale[i] if days_locale is defined and i < days_locale|length else date.strftime('%A') %}
-                    <th colspan="2" class="day-header">
-                        {{ day_name }} ({{ date.strftime('%d/%m') if date.strftime is defined else date|string }})
-                    </th>
-                {% endfor %}
+                {% if dates_of_week %}
+                    {% for date in dates_of_week %}
+                        <th colspan="2" class="day-header">
+                            {% if days_locale and loop.index0 < days_locale|length %}
+                                {{ days_locale[loop.index0] }}
+                            {% else %}
+                                {{ date.strftime('%A') if date.strftime is defined else 'Dia' }}
+                            {% endif %}
+                            ({{ date.strftime('%d/%m') if date.strftime is defined else '__/__' }})
+                        </th>
+                    {% endfor %}
+                {% else %}
+                    <th colspan="2" class="day-header">Segunda (29/06)</th>
+                    <th colspan="2" class="day-header">Terça (30/06)</th>
+                    <th colspan="2" class="day-header">Quarta (01/07)</th>
+                    <th colspan="2" class="day-header">Quinta (02/07)</th>
+                    <th colspan="2" class="day-header">Sexta (03/07)</th>
+                    <th colspan="2" class="day-header">Sábado (04/07)</th>
+                    <th colspan="2" class="day-header">Domingo (05/07)</th>
+                {% endif %}
             </tr>
             <tr>
-                {% for date in dates_of_week %}
+                {% set num_days = dates_of_week|length if dates_of_week else 7 %}
+                {% for i in range(num_days) %}
                     <th class="period-header">Manhã</th>
                     <th class="period-header">Tarde</th>
                 {% endfor %}
@@ -214,28 +236,58 @@
         </thead>
         
         <tbody>
-            {% for room in rooms %}
-            <tr>
-                <td class="room-name">{{ room.name }}</td>
-                {% for date in dates_of_week %}
-                    {% set date_key = date.strftime('%Y-%m-%d') if date.strftime is defined else date|string %}
-                    <td class="schedule-cell">
-                        {% if schedule_data and schedule_data.get(date_key) and schedule_data[date_key].get('Manhã') %}
-                            {{ schedule_data[date_key]['Manhã'].get(room.name, '-') }}
-                        {% else %}
-                            -
-                        {% endif %}
-                    </td>
-                    <td class="schedule-cell">
-                        {% if schedule_data and schedule_data.get(date_key) and schedule_data[date_key].get('Tarde') %}
-                            {{ schedule_data[date_key]['Tarde'].get(room.name, '-') }}
-                        {% else %}
-                            -
-                        {% endif %}
-                    </td>
+            {% if rooms %}
+                {% for room in rooms %}
+                <tr>
+                    <td class="room-name">{{ room.name if room.name is defined else room }}</td>
+                    {% if dates_of_week %}
+                        {% for date in dates_of_week %}
+                            <td class="schedule-cell">
+                                {% if schedule_data %}
+                                    {% set date_key = date.strftime('%Y-%m-%d') if date.strftime is defined else date|string %}
+                                    {% set room_name = room.name if room.name is defined else room %}
+                                    {{ schedule_data.get(date_key, {}).get('Manhã', {}).get(room_name, '-') }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td class="schedule-cell">
+                                {% if schedule_data %}
+                                    {% set date_key = date.strftime('%Y-%m-%d') if date.strftime is defined else date|string %}
+                                    {% set room_name = room.name if room.name is defined else room %}
+                                    {{ schedule_data.get(date_key, {}).get('Tarde', {}).get(room_name, '-') }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                        {% endfor %}
+                    {% else %}
+                        {% for i in range(14) %}
+                            <td class="schedule-cell">-</td>
+                        {% endfor %}
+                    {% endif %}
+                </tr>
                 {% endfor %}
-            </tr>
-            {% endfor %}
+            {% else %}
+                <tr>
+                    <td class="room-name">Geral 1</td>
+                    {% for i in range(14) %}
+                        <td class="schedule-cell">-</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td class="room-name">Geral 2</td>
+                    {% for i in range(14) %}
+                        <td class="schedule-cell">-</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td class="room-name">Geral 3</td>
+                    {% for i in range(14) %}
+                        <td class="schedule-cell">-</td>
+                    {% endfor %}
+                </tr>
+            {% endif %}
         </tbody>
     </table>
 
@@ -251,22 +303,24 @@
                 <p><strong>Coordenador:</strong> {{ user_data.coordinator }}</p>
                 {% endif %}
                 
-                {% for booking in user_data.bookings %}
-                <div class="booking-item">
-                    <div class="booking-details">
-                        {{ booking.room_name }} - {{ booking.date.strftime('%d/%m/%Y') if booking.date.strftime is defined else booking.date|string }} - {{ booking.period }}
+                {% if user_data.bookings %}
+                    {% for booking in user_data.bookings %}
+                    <div class="booking-item">
+                        <div class="booking-details">
+                            {{ booking.room_name }} - {{ booking.date.strftime('%d/%m/%Y') if booking.date and booking.date.strftime is defined else booking.date|string }} - {{ booking.period }}
+                        </div>
+                        {% if booking.observation %}
+                        <div class="observation-text">
+                            "{{ booking.observation }}"
+                        </div>
+                        {% else %}
+                        <div class="observation-text">
+                            Sem observações
+                        </div>
+                        {% endif %}
                     </div>
-                    {% if booking.observation %}
-                    <div class="observation-text">
-                        "{{ booking.observation }}"
-                    </div>
-                    {% else %}
-                    <div class="observation-text">
-                        Sem observações
-                    </div>
-                    {% endif %}
-                </div>
-                {% endfor %}
+                    {% endfor %}
+                {% endif %}
             </div>
             {% endfor %}
         {% else %}
