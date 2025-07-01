@@ -204,21 +204,17 @@
         <thead>
             <tr>
                 <th rowspan="2" class="room-name">Sala</th>
-                {% set weekdays_names = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'] %}
-                {% set current_date = start_date %}
-                {% for i in range(5) %}
-                    {% set display_date = current_date + timedelta(days=i) %}
-                    {% if display_date.weekday() < 5 %}
-                        <th colspan="2" class="day-header">
-                            {{ weekdays_names[display_date.weekday()] }}
-                            ({{ display_date.strftime('%d/%m') }})
-                        </th>
-                    {% endif %}
+                {% for date in dates_of_week %}
+                    {% set weekdays_names = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'] %}
+                    <th colspan="2" class="day-header">
+                        {{ weekdays_names[date.weekday()] }}
+                        ({{ date.strftime('%d/%m') }})
+                    </th>
                 {% endfor %}
             </tr>
             <tr>
-                <!-- Cabeçalhos de período apenas para os 5 dias úteis -->
-                {% for i in range(5) %}
+                <!-- Cabeçalhos de período para cada dia -->
+                {% for date in dates_of_week %}
                     <th class="period-header">Manhã</th>
                     <th class="period-header">Tarde</th>
                 {% endfor %}
@@ -226,45 +222,39 @@
         </thead>
         
         <tbody>
-            <!-- Definir as salas padrão -->
-            {% set rooms_list = ['Geral 1', 'Geral 2', 'Geral 3'] %}
-            
-            {% for room_name in rooms_list %}
+            <!-- Listar todas as salas disponíveis dinamicamente -->
+            {% for room in all_rooms %}
             <tr>
-                <td class="room-name">{{ room_name }}</td>
+                <td class="room-name">{{ room.name }}</td>
                 
-                {% set current_date = start_date %}
-                {% for day_offset in range(5) %}
-                    {% set display_date = current_date + timedelta(days=day_offset) %}
-                    {% if display_date.weekday() < 5 %}
-                        {% set date_str = display_date.strftime('%Y-%m-%d') %}
-                        
-                        <!-- Manhã -->
-                        <td class="schedule-cell {% if schedule_data.get(date_str, {}).get('Manhã', []) | selectattr('room_name', 'equalto', room_name) | list %}occupied-cell{% endif %}">
-                            {% set morning_bookings = schedule_data.get(date_str, {}).get('Manhã', []) | selectattr('room_name', 'equalto', room_name) | list %}
-                            {% if morning_bookings %}
-                                {% for booking in morning_bookings %}
-                                    {{ booking.user_name }}{% if booking.coordinator_name %} ({{ booking.coordinator_name }}){% endif %}
-                                    {% if not loop.last %}<br>{% endif %}
-                                {% endfor %}
-                            {% else %}
-                                -
-                            {% endif %}
-                        </td>
-                        
-                        <!-- Tarde -->
-                        <td class="schedule-cell {% if schedule_data.get(date_str, {}).get('Tarde', []) | selectattr('room_name', 'equalto', room_name) | list %}occupied-cell{% endif %}">
-                            {% set afternoon_bookings = schedule_data.get(date_str, {}).get('Tarde', []) | selectattr('room_name', 'equalto', room_name) | list %}
-                            {% if afternoon_bookings %}
-                                {% for booking in afternoon_bookings %}
-                                    {{ booking.user_name }}{% if booking.coordinator_name %} ({{ booking.coordinator_name }}){% endif %}
-                                    {% if not loop.last %}<br>{% endif %}
-                                {% endfor %}
-                            {% else %}
-                                -
-                            {% endif %}
-                        </td>
-                    {% endif %}
+                {% for date in dates_of_week %}
+                    {% set date_str = date.strftime('%Y-%m-%d') %}
+                    
+                    <!-- Manhã -->
+                    <td class="schedule-cell {% if schedule_data.get(date_str, {}).get('Manhã', []) | selectattr('room_name', 'equalto', room.name) | list %}occupied-cell{% endif %}">
+                        {% set morning_bookings = schedule_data.get(date_str, {}).get('Manhã', []) | selectattr('room_name', 'equalto', room.name) | list %}
+                        {% if morning_bookings %}
+                            {% for booking in morning_bookings %}
+                                {{ booking.user_name }}{% if booking.coordinator_name %} ({{ booking.coordinator_name }}){% endif %}
+                                {% if not loop.last %}<br>{% endif %}
+                            {% endfor %}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Tarde -->
+                    <td class="schedule-cell {% if schedule_data.get(date_str, {}).get('Tarde', []) | selectattr('room_name', 'equalto', room.name) | list %}occupied-cell{% endif %}">
+                        {% set afternoon_bookings = schedule_data.get(date_str, {}).get('Tarde', []) | selectattr('room_name', 'equalto', room.name) | list %}
+                        {% if afternoon_bookings %}
+                            {% for booking in afternoon_bookings %}
+                                {{ booking.user_name }}{% if booking.coordinator_name %} ({{ booking.coordinator_name }}){% endif %}
+                                {% if not loop.last %}<br>{% endif %}
+                            {% endfor %}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
                 {% endfor %}
             </tr>
             {% endfor %}
