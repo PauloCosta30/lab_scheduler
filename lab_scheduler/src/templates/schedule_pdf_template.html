@@ -117,24 +117,38 @@
         <thead>
             <tr>
                 <th rowspan="2">Sala</th>
-                {% for date, day_name in zip(dates_of_week, days_locale) %}
-                <th colspan="2">{{ day_name }} ({{ date|format_date }})</th>
+                {% for date in dates_of_week %}
+                    {% set day_name = days_locale[loop.index0] if days_locale else date.strftime('%A') %}
+                    <th colspan="2">{{ day_name }} ({{ date.strftime('%d/%m') if date else '' }})</th>
                 {% endfor %}
             </tr>
             <tr>
                 {% for date in dates_of_week %}
-                <th>Manhã</th>
-                <th>Tarde</th>
+                    <th>Manhã</th>
+                    <th>Tarde</th>
                 {% endfor %}
             </tr>
         </thead>
         <tbody>
             {% for room in rooms %}
             <tr>
-                <td class="room-name">{{ room.name }}</td>
+                <td class="room-name">{{ room.name if room.name else (room if room else '') }}</td>
                 {% for date in dates_of_week %}
-                    <td>{{ schedule_data[date]['Manhã'][room.name] or '-' }}</td>
-                    <td>{{ schedule_data[date]['Tarde'][room.name] or '-' }}</td>
+                    {% set date_key = date.strftime('%Y-%m-%d') if date else '' %}
+                    <td>
+                        {% if schedule_data and date_key in schedule_data and 'Manhã' in schedule_data[date_key] %}
+                            {{ schedule_data[date_key]['Manhã'].get(room.name if room.name else room, '-') }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if schedule_data and date_key in schedule_data and 'Tarde' in schedule_data[date_key] %}
+                            {{ schedule_data[date_key]['Tarde'].get(room.name if room.name else room, '-') }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
                 {% endfor %}
             </tr>
             {% endfor %}
@@ -145,10 +159,10 @@
     <div class="observations-section">
         <h2>Observações dos Agendamentos por Usuário</h2>
         
-        {% if user_observations %}
+        {% if user_observations and user_observations|length > 0 %}
             {% for user_name, user_data in user_observations.items() %}
             <div class="user-observations">
-                <h3>{{ user_name }} ({{ user_data.email }})</h3>
+                <h3>{{ user_name }} {% if user_data.email %}({{ user_data.email }}){% endif %}</h3>
                 {% if user_data.coordinator %}
                 <p><strong>Coordenador:</strong> {{ user_data.coordinator }}</p>
                 {% endif %}
@@ -156,7 +170,11 @@
                 {% for booking in user_data.bookings %}
                 <div class="booking-item">
                     <div class="booking-details">
-                        {{ booking.room_name }} - {{ booking.date|format_date("%d/%m/%Y") }} - {{ booking.period }}
+                        {{ booking.room_name }} - 
+                        {% if booking.date %}
+                            {{ booking.date.strftime('%d/%m/%Y') if booking.date.strftime else booking.date }}
+                        {% endif %}
+                        - {{ booking.period }}
                     </div>
                     {% if booking.observation %}
                     <div class="observation-text">
@@ -177,5 +195,18 @@
             </div>
         {% endif %}
     </div>
+
+    <!-- Debug: Exibir dados brutos se necessário -->
+    {% if debug_mode %}
+    <div style="margin-top: 50px; padding: 20px; background-color: #f0f0f0; border: 1px solid #ccc;">
+        <h3>Debug - Dados Recebidos:</h3>
+        <pre>
+Dates: {{ dates_of_week|string }}
+Rooms: {{ rooms|string }}
+Schedule Data: {{ schedule_data|string }}
+User Observations: {{ user_observations|string }}
+        </pre>
+    </div>
+    {% endif %}
 </body>
 </html>
