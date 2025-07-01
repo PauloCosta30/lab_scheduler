@@ -235,7 +235,7 @@
                         {% set morning_bookings = schedule_data.get(date_str, {}).get('Manhã', []) | selectattr('room_name', 'equalto', room.name) | list %}
                         {% if morning_bookings %}
                             {% for booking in morning_bookings %}
-                                {{ booking.user_name }}{% if booking.coordinator_name %} ({{ booking.coordinator_name }}){% endif %}
+                                {{ booking.user_name }}
                                 {% if not loop.last %}<br>{% endif %}
                             {% endfor %}
                         {% else %}
@@ -244,11 +244,11 @@
                     </td>
                     
                     <!-- Tarde -->
-                    <td class="schedule-cell {% if schedule_data.get(date_str, {}).get('Tarde', []) | selectattr('room_name', 'equalto', room.name) | list %}occupied-cell{% endif %}">
-                        {% set afternoon_bookings = schedule_data.get(date_str, {}).get('Tarde', []) | selectattr('room_name', 'equalto', room.name) | list %}
-                        {% if afternoon_bookings %}
-                            {% for booking in afternoon_bookings %}
-                                {{ booking.user_name }}{% if booking.coordinator_name %} ({{ booking.coordinator_name }}){% endif %}
+                   <td class="schedule-cell {% if schedule_data.get(date_str, {}).get('Tarde', []) | selectattr('room_name', 'equalto', room.name) | list %}occupied-cell{% endif %}">
+                        {% set morning_bookings = schedule_data.get(date_str, {}).get('Tarde', []) | selectattr('room_name', 'equalto', room.name) | list %}
+                        {% if morning_bookings %}
+                            {% for booking in morning_bookings %}
+                                {{ booking.user_name }}
                                 {% if not loop.last %}<br>{% endif %}
                             {% endfor %}
                         {% else %}
