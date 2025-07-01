@@ -561,18 +561,19 @@ def generate_schedule_pdf():
         except ValueError:
             return jsonify({"error": "Formato de data inválido. Use YYYY-MM-DD"}), 400
             
-        # Buscar agendamentos no período
+        # Buscar agendamentos no período (excluindo fins de semana)
         bookings = Booking.query.outerjoin(Room).filter(
             Booking.booking_date.between(start_date, end_date)
         ).order_by(Booking.booking_date, Booking.period).all()
         
-        # Organizar dados por data e período
+        # Organizar dados por data e período para a tabela da escala
         schedule_data = defaultdict(lambda: defaultdict(list))
         user_observations = {}
         general_observations = []
         
         for booking in bookings:
             if booking.period == "Observação Geral":
+                # Observações gerais (sem sala específica)
                 general_observations.append({
                     "user_name": booking.user_name,
                     "coordinator_name": booking.coordinator_name,
@@ -580,19 +581,23 @@ def generate_schedule_pdf():
                     "booking_date": booking.booking_date
                 })
             else:
-                date_str = booking.booking_date.strftime("%Y-%m-%d")
-                schedule_data[date_str][booking.period].append({
-                    "user_name": booking.user_name,
-                    "coordinator_name": booking.coordinator_name,
-                    "room_name": booking.room.name if booking.room else "N/A",
-                    "observation": booking.observation
-                })
+                # Agendamentos normais com sala
+                if booking.room and booking.booking_date.weekday() < 5:  # Segunda a Sexta apenas
+                    date_str = booking.booking_date.strftime("%Y-%m-%d")
+                    
+                    # Adicionar à estrutura da escala
+                    schedule_data[date_str][booking.period].append({
+                        "user_name": booking.user_name,
+                        "coordinator_name": booking.coordinator_name,
+                        "room_name": booking.room.name,
+                        "observation": booking.observation
+                    })
                 
-                # Coletar observações específicas por usuário
+                # Coletar observações específicas por usuário (se houver observação)
                 if booking.observation and booking.observation.strip():
                     if booking.user_name not in user_observations:
                         user_observations[booking.user_name] = {
-                            "email": getattr(booking, "user_email", ""),
+                            "email": booking.user_email if hasattr(booking, 'user_email') else "",
                             "coordinator": booking.coordinator_name,
                             "bookings": []
                         }
@@ -604,6 +609,18 @@ def generate_schedule_pdf():
                         "observation": booking.observation
                     })
         
+        # Gerar lista de datas para os dias úteis da semana
+        dates_of_week = []
+        current_date = start_date
+        while current_date <= end_date and len(dates_of_week) < 5:
+            if current_date.weekday() < 5:  # Segunda a Sexta
+                dates_of_week.append(current_date)
+            current_date += timedelta(days=1)
+        
+        # Obter timestamp atual para o cabeçalho
+        now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
+        now_brasilia = now_utc.astimezone(BRASILIA_TZ)
+        
         # Renderizar template HTML
         html_content = render_template(
             "schedule_pdf_template.html",
@@ -612,7 +629,9 @@ def generate_schedule_pdf():
             general_observations=general_observations,
             start_date=start_date,
             end_date=end_date,
-            generated_at=datetime.now(BRASILIA_TZ)
+            generated_at=now_brasilia,
+            dates_of_week=dates_of_week,
+            timedelta=timedelta  # Disponibilizar timedelta para o template
         )
         
         # Gerar PDF
