@@ -412,7 +412,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // --- PDF Generation ---
+    // --- PDF Generation (CORRIGIDA) ---
     async function generatePdf() {
         if (!currentWeekStartDate) {
             showScheduleMessage("Carregue uma escala primeiro antes de gerar o PDF.", "error");
@@ -424,31 +424,151 @@ document.addEventListener("DOMContentLoaded", () => {
         endDate.setUTCDate(currentWeekStartDate.getUTCDate() + 4);
         const endDateStr = endDate.toISOString().split("T")[0];
 
+        // Desabilitar o botão durante a geração
+        if (generatePdfButton) {
+            generatePdfButton.disabled = true;
+            generatePdfButton.textContent = "Gerando PDF...";
+        }
+
         showScheduleMessage("Gerando PDF...", "");
         
         try {
-            const response = await fetch(`${API_BASE_URL}/generate-pdf?start_date=${startDate}&end_date=${endDateStr}`);
+            console.log(`Solicitando PDF para período: ${startDate} até ${endDateStr}`);
+            
+            const response = await fetch(`${API_BASE_URL}/generate-pdf?start_date=${startDate}&end_date=${endDateStr}`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/pdf',
+                    'Cache-Control': 'no-cache'
+                }
+            });
+            
+            console.log(`Response status: ${response.status}`);
+            console.log(`Response headers:`, response.headers);
             
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || "Erro ao gerar PDF");
+                let errorMessage = `Erro ${response.status}: ${response.statusText}`;
+                
+                try {
+                    // Tentar ler como JSON para obter mensagem de erro detalhada
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        const errorData = await response.json();
+                        errorMessage = errorData.error || errorData.message || errorMessage;
+                    } else {
+                        // Se não for JSON, ler como texto
+                        const errorText = await response.text();
+                        if (errorText.trim()) {
+                            errorMessage = errorText;
+                        }
+                    }
+                } catch (parseError) {
+                    console.error("Erro ao fazer parse da resposta de erro:", parseError);
+                }
+                
+                throw new Error(errorMessage);
+            }
+
+            // Verificar se a resposta é realmente um PDF
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/pdf')) {
+                console.warn(`Tipo de conteúdo inesperado: ${contentType}`);
             }
 
             const blob = await response.blob();
+            
+            // Verificar se o blob tem conteúdo
+            if (blob.size === 0) {
+                throw new Error("PDF gerado está vazio");
+            }
+            
+            console.log(`PDF blob criado com tamanho: ${blob.size} bytes`);
+
+            // Criar URL para download
             const url = window.URL.createObjectURL(blob);
+            
+            // Criar elemento de download
             const a = document.createElement("a");
             a.style.display = "none";
             a.href = url;
-            a.download = `escala_agendamentos_${startDate}_a_${endDateStr}.pdf`;
+            
+            // Nome do arquivo com data formatada
+            const startDateFormatted = new Date(startDate).toLocaleDateString('pt-BR').replace(/\//g, '-');
+            const endDateFormatted = new Date(endDateStr).toLocaleDateString('pt-BR').replace(/\//g, '-');
+            a.download = `escala_agendamentos_${startDateFormatted}_a_${endDateFormatted}.pdf`;
+            
+            // Adicionar ao DOM, clicar e remover
             document.body.appendChild(a);
             a.click();
+            
+            // Limpar recursos
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
             
             showScheduleMessage("PDF gerado e baixado com sucesso!", "success");
+            console.log("PDF baixado com sucesso");
+            
         } catch (error) {
             console.error("Falha ao gerar PDF:", error);
-            showScheduleMessage(`Não foi possível gerar o PDF: ${error.message}`, "error");
+            
+            let userMessage = "Não foi possível gerar o PDF.";
+            
+            if (error.message.includes('Failed to fetch')) {
+                userMessage = "Erro de conexão: Não foi possível conectar ao servidor para gerar o PDF.";
+            } else if (error.message.includes('NetworkError')) {
+                userMessage = "Erro de rede: Verifique sua conexão com a internet.";
+            } else if (error.message.includes('timeout')) {
+                userMessage = "Timeout: A geração do PDF demorou muito tempo. Tente novamente.";
+            } else if (error.message) {
+                userMessage = `Erro: ${error.message}`;
+            }
+            
+            showScheduleMessage(userMessage, "error");
+            
+        } finally {
+            // Re-habilitar o botão
+            if (generatePdfButton) {
+                generatePdfButton.disabled = false;
+                generatePdfButton.textContent = "Gerar PDF";
+            }
+        }
+    }
+
+    // Função auxiliar para debug do endpoint PDF
+    async function testPdfEndpoint() {
+        if (!currentWeekStartDate) {
+            console.error("Nenhuma data de semana definida");
+            return;
+        }
+
+        const startDate = currentWeekStartDate.toISOString().split("T")[0];
+        const endDate = new Date(currentWeekStartDate.valueOf());
+        endDate.setUTCDate(currentWeekStartDate.getUTCDate() + 4);
+        const endDateStr = endDate.toISOString().split("T")[0];
+        
+        const testUrl = `${API_BASE_URL}/generate-pdf?start_date=${startDate}&end_date=${endDateStr}`;
+        
+        console.log("=== TESTE DO ENDPOINT PDF ===");
+        console.log(`URL: ${testUrl}`);
+        console.log(`Período: ${startDate} até ${endDateStr}`);
+        
+        try {
+            const response = await fetch(testUrl, {
+                method: 'HEAD' // Usar HEAD para testar sem baixar o conteúdo
+            });
+            
+            console.log(`Status: ${response.status}`);
+            console.log(`Status Text: ${response.statusText}`);
+            console.log(`Headers:`, [...response.headers.entries()]);
+            
+            if (response.ok) {
+                console.log("✅ Endpoint PDF está respondendo corretamente");
+            } else {
+                console.log("❌ Endpoint PDF retornou erro");
+            }
+            
+        } catch (error) {
+            console.error("❌ Erro ao testar endpoint PDF:", error);
         }
     }
 
@@ -600,7 +720,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 showModalMessage(`Falha ao criar agendamento: ${errorMessage}`, "error");
             }
         } catch (error) {
-            console.error("=== DEBUG: Erro na requisição ===", error);
+            console.error("=== DEBUG: Erro na requisição ===", error)
             
             if (error.name === 'TypeError' && error.message.includes('fetch')) {
                 showModalMessage("Erro de conexão: Não foi possível conectar ao servidor. Verifique sua conexão.", "error");
