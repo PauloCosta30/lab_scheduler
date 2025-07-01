@@ -2,249 +2,180 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Escala de Agendamentos</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escala de Agendamentos - Semana de {{ week_start_date_formatted }}</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
         body {
             font-family: Arial, sans-serif;
-            font-size: 11px;
-            line-height: 1.2;
-            margin: 15px;
-            color: #000;
-        }
-        
-        h1 {
-            text-align: center;
-            font-size: 16px;
-            font-weight: bold;
-            margin-bottom: 8px;
-        }
-        
-        .header-info {
-            text-align: center;
+            margin: 10px;
             font-size: 10px;
-            margin-bottom: 15px;
-            line-height: 1.3;
         }
-        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 18px;
+            color: #333;
+        }
+        .header p {
+            margin: 5px 0;
+            color: #666;
+        }
         .schedule-table {
             width: 100%;
             border-collapse: collapse;
-            border: 1px solid #000;
-            font-size: 9px;
+            margin-bottom: 30px;
             table-layout: fixed;
+            font-size: 10px;
         }
-        
-        .schedule-table th {
-            background-color: #f0f0f0;
-            border: 1px solid #000;
-            padding: 6px 3px;
-            text-align: center;
-            vertical-align: middle;
-            font-weight: bold;
-            font-size: 8px;
-            line-height: 1.1;
-        }
-        
+        .schedule-table th,
         .schedule-table td {
-            border: 1px solid #000;
-            padding: 4px 3px;
+            border: 1px solid #ddd;
+            padding: 4px;
             text-align: center;
             vertical-align: middle;
-            height: 22px;
-            font-size: 8px;
+            max-width: 60px;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
-        
-        .room-column {
-            width: 12%;
-            text-align: left !important;
-            padding-left: 6px !important;
-            font-weight: normal;
-            background-color: #fff;
-        }
-        
-        .day-header {
-            background-color: #e8e8e8 !important;
+        .schedule-table th {
+            background-color: #f5f5f5;
             font-weight: bold;
         }
-        
-        .period-header {
-            background-color: #f5f5f5 !important;
+        .schedule-table .room-name {
+            background-color: #f9f9f9;
             font-weight: bold;
-            font-size: 7px;
+            text-align: left;
         }
-        
-        .schedule-cell {
-            background-color: #fff;
-            min-height: 20px;
-        }
-        
-        /* Larguras das colunas para os dias */
-        .day-col {
-            width: 6.29%; /* (88% / 14 colunas) */
-        }
-        
         .observations-section {
-            margin-top: 25px;
+            margin-top: 40px;
             page-break-inside: avoid;
         }
-        
         .observations-section h2 {
-            font-size: 12px;
-            font-weight: bold;
-            border-bottom: 1px solid #000;
-            padding-bottom: 3px;
-            margin-bottom: 12px;
+            font-size: 16px;
+            color: #333;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 5px;
+            margin-bottom: 20px;
         }
-        
         .user-observations {
-            margin-bottom: 15px;
+            margin-bottom: 25px;
             page-break-inside: avoid;
         }
-        
         .user-observations h3 {
-            font-size: 11px;
-            font-weight: bold;
-            margin-bottom: 8px;
-        }
-        
-        .booking-item {
-            margin-bottom: 6px;
-            padding-left: 12px;
-            font-size: 9px;
-        }
-        
-        .observation-text {
-            font-style: italic;
+            font-size: 14px;
             color: #555;
-            display: block;
-            margin-top: 2px;
+            margin-bottom: 10px;
+            background-color: #f0f0f0;
+            padding: 8px;
+            border-left: 4px solid #007bff;
         }
-        
-        /* Estilos específicos para PDF */
+        .booking-item {
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            background-color: #fafafa;
+        }
+        .booking-details {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .observation-text {
+            color: #666;
+            font-style: italic;
+            margin-left: 10px;
+        }
+        .no-observations {
+            color: #999;
+            font-style: italic;
+            text-align: center;
+            padding: 20px;
+        }
         @media print {
             body {
                 margin: 10px;
-                font-size: 9px;
             }
-            
-            .schedule-table {
-                font-size: 8px;
+            .observations-section {
+                page-break-before: always;
             }
-            
-            .schedule-table th {
-                font-size: 7px;
-            }
-            
-            .schedule-table td {
-                font-size: 7px;
-            }
-        }
-        
-        @page {
-            margin: 1cm;
-            size: A4;
         }
     </style>
 </head>
 <body>
-
-    <h1>Escala de Agendamentos - ITV</h1>
-    <div class="header-info">
-        Semana de {{ start_date.strftime('%d/%m/%Y') }} a {{ end_date.strftime('%d/%m/%Y') }}<br>
-        Gerado em: {{ generated_at.strftime('%d/%m/%Y') }} às {{ generated_at.strftime('%H:%M') }}
+    <div class="header">
+        <h1>Escala de Agendamentos - ITV</h1>
+        <p>Semana de {{ week_start_date_formatted }} a {{ week_end_date_formatted }}</p>
+        <p>Gerado em: {{ generation_date }}</p>
     </div>
 
+    <!-- Tabela da Escala -->
     <table class="schedule-table">
-        <colgroup>
-            <col style="width: 12%;">
-            {% for _ in dates_of_week %}
-                <col class="day-col">
-                <col class="day-col">
-            {% endfor %}
-        </colgroup>
-        
         <thead>
             <tr>
-                <th rowspan="2" class="room-column">Sala</th>
-                {% for date in dates_of_week %}
-                    <th colspan="2" class="day-header">
-                        {{ date.strftime('%A') }} ({{ date.strftime('%d/%m') }})
-                    </th>
+                <th rowspan="2">Sala</th>
+                {% for date, day_name in zip(dates_of_week, days_locale) %}
+                <th colspan="2">{{ day_name }} ({{ date|format_date }})</th>
                 {% endfor %}
             </tr>
             <tr>
-                {% for _ in dates_of_week %}
-                    <th class="period-header">Manhã</th>
-                    <th class="period-header">Tarde</th>
+                {% for date in dates_of_week %}
+                <th>Manhã</th>
+                <th>Tarde</th>
                 {% endfor %}
             </tr>
         </thead>
-        
         <tbody>
             {% for room in rooms %}
             <tr>
-                <td class="room-column">{{ room.name }}</td>
+                <td class="room-name">{{ room.name }}</td>
                 {% for date in dates_of_week %}
-                    {% set date_key = date.strftime('%Y-%m-%d') %}
-                    <td class="schedule-cell">
-                        {% set bookings = schedule_data.get(date_key, {}).get('Manhã', []) %}
-                        {% set found = namespace(user='-') %}
-                        {% for b in bookings %}
-                            {% if b.room_name == room.name and found.user == '-' %}
-                                {% set found.user = b.user_name %}
-                            {% endif %}
-                        {% endfor %}
-                        {{ found.user }}
-                    </td>
-                    <td class="schedule-cell">
-                        {% set bookings = schedule_data.get(date_key, {}).get('Tarde', []) %}
-                        {% set found = namespace(user='-') %}
-                        {% for b in bookings %}
-                            {% if b.room_name == room.name and found.user == '-' %}
-                                {% set found.user = b.user_name %}
-                            {% endif %}
-                        {% endfor %}
-                        {{ found.user }}
-                    </td>
+                    <td>{{ schedule_data[date]['Manhã'][room.name] or '-' }}</td>
+                    <td>{{ schedule_data[date]['Tarde'][room.name] or '-' }}</td>
                 {% endfor %}
             </tr>
             {% endfor %}
         </tbody>
     </table>
 
+    <!-- Seção de Observações por Usuário -->
     <div class="observations-section">
-        <h2>Observações por Usuário</h2>
-        {% for user_name, user_data in user_observations.items() %}
+        <h2>Observações dos Agendamentos por Usuário</h2>
+        
+        {% if user_observations %}
+            {% for user_name, user_data in user_observations.items() %}
             <div class="user-observations">
-                <h3>{{ user_name }}{% if user_data.email %} ({{ user_data.email }}){% endif %}</h3>
+                <h3>{{ user_name }} ({{ user_data.email }})</h3>
                 {% if user_data.coordinator %}
-                    <p><strong>Coordenador:</strong> {{ user_data.coordinator }}</p>
+                <p><strong>Coordenador:</strong> {{ user_data.coordinator }}</p>
                 {% endif %}
+                
                 {% for booking in user_data.bookings %}
-                    <div class="booking-item">
-                        <strong>{{ booking.room_name }} - {{ booking.date.strftime('%d/%m/%Y') }} - {{ booking.period }}</strong>
-                        <span class="observation-text">"{{ booking.observation }}"</span>
+                <div class="booking-item">
+                    <div class="booking-details">
+                        {{ booking.room_name }} - {{ booking.date|format_date("%d/%m/%Y") }} - {{ booking.period }}
                     </div>
+                    {% if booking.observation %}
+                    <div class="observation-text">
+                        "{{ booking.observation }}"
+                    </div>
+                    {% else %}
+                    <div class="observation-text">
+                        Sem observações
+                    </div>
+                    {% endif %}
+                </div>
                 {% endfor %}
             </div>
-        {% endfor %}
-    </div>
-
-    <div class="observations-section">
-        <h2>Observações Gerais</h2>
-        {% for obs in general_observations %}
-            <div class="booking-item">
-                <strong>{{ obs.booking_date.strftime('%d/%m/%Y') }} - {{ obs.user_name }}</strong>
-                <span class="observation-text">{{ obs.observation }}</span>
+            {% endfor %}
+        {% else %}
+            <div class="no-observations">
+                Nenhum agendamento com observações encontrado para esta semana.
             </div>
-        {% endfor %}
+        {% endif %}
     </div>
-
 </body>
 </html>
