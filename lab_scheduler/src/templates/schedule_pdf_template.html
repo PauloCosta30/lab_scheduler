@@ -7,54 +7,130 @@
         body {
             font-family: Arial, sans-serif;
             margin: 20px;
-            font-size: 10px;
+            font-size: 12px;
+            line-height: 1.4;
         }
+        
         h1 {
             text-align: center;
             margin-bottom: 10px;
+            font-size: 18px;
         }
+        
         p {
             text-align: center;
             margin-top: 0;
             margin-bottom: 20px;
         }
-        table.schedule-table {
+        
+        /* Estilos específicos para PDF */
+        @media print {
+            body {
+                font-size: 10px;
+                margin: 10px;
+            }
+            .schedule-table {
+                page-break-inside: avoid;
+            }
+        }
+        
+        .schedule-table {
             width: 100%;
             border-collapse: collapse;
-            table-layout: fixed;
+            margin-bottom: 20px;
             font-size: 10px;
+            border: 2px solid #000;
         }
-        table.schedule-table th,
-        table.schedule-table td {
-            border: 1px solid #ccc;
-            padding: 4px;
+        
+        .schedule-table th {
+            background-color: #e0e0e0;
+            font-weight: bold;
+            padding: 8px 4px;
             text-align: center;
             vertical-align: middle;
+            border: 1px solid #000;
+            font-size: 9px;
+        }
+        
+        .schedule-table td {
+            padding: 6px 4px;
+            text-align: center;
+            vertical-align: middle;
+            border: 1px solid #000;
+            min-height: 25px;
             word-wrap: break-word;
+            overflow-wrap: break-word;
         }
-        table.schedule-table th {
-            background-color: #f0f0f0;
-            font-weight: bold;
-        }
+        
         .room-name {
-            text-align: left;
+            text-align: left !important;
             font-weight: bold;
-            background-color: #f9f9f9;
+            background-color: #f5f5f5;
+            padding-left: 8px;
+            min-width: 100px;
         }
+        
+        .day-header {
+            background-color: #d0d0d0;
+            font-weight: bold;
+            text-align: center;
+        }
+        
+        .period-header {
+            background-color: #e8e8e8;
+            font-weight: bold;
+            font-size: 8px;
+        }
+        
+        /* Larguras específicas das colunas */
+        .schedule-table col.room-col {
+            width: 15%;
+        }
+        
+        .schedule-table col.day-col {
+            width: 12.14%; /* 85% / 7 dias */
+        }
+        
         .observations-section {
-            margin-top: 40px;
+            margin-top: 30px;
+            page-break-inside: avoid;
         }
+        
         .observations-section h2 {
-            border-bottom: 1px solid #ccc;
+            border-bottom: 2px solid #000;
+            font-size: 14px;
+            margin-bottom: 15px;
+            padding-bottom: 5px;
+        }
+        
+        .user-observations {
+            margin-bottom: 20px;
+            page-break-inside: avoid;
+        }
+        
+        .user-observations h3 {
             font-size: 12px;
-        }
-        .booking-item {
             margin-bottom: 10px;
-            padding-left: 10px;
+            color: #333;
         }
+        
+        .booking-item {
+            margin-bottom: 8px;
+            padding-left: 15px;
+            font-size: 10px;
+        }
+        
         .observation-text {
             font-style: italic;
             color: #555;
+            margin-top: 3px;
+            display: block;
+        }
+        
+        /* Força quebras de linha para nomes longos */
+        .user-name {
+            word-break: break-word;
+            hyphens: auto;
         }
     </style>
 </head>
@@ -67,19 +143,26 @@
     </p>
 
     <table class="schedule-table">
+        <colgroup>
+            <col class="room-col">
+            {% for _ in dates_of_week %}
+                <col class="day-col">
+                <col class="day-col">
+            {% endfor %}
+        </colgroup>
         <thead>
             <tr>
-                <th rowspan="2">Sala</th>
+                <th rowspan="2" class="room-name">Sala</th>
                 {% for date in dates_of_week %}
-                    <th colspan="2">
+                    <th colspan="2" class="day-header">
                         {{ date.strftime('%A') }}<br>{{ date.strftime('%d/%m') }}
                     </th>
                 {% endfor %}
             </tr>
             <tr>
                 {% for _ in dates_of_week %}
-                    <th>Manhã</th>
-                    <th>Tarde</th>
+                    <th class="period-header">Manhã</th>
+                    <th class="period-header">Tarde</th>
                 {% endfor %}
             </tr>
         </thead>
@@ -97,7 +180,7 @@
                                 {% set found.user = b.user_name %}
                             {% endif %}
                         {% endfor %}
-                        {{ found.user }}
+                        <span class="user-name">{{ found.user }}</span>
                     </td>
                     <td>
                         {% set bookings = schedule_data.get(date_key, {}).get('Tarde', []) %}
@@ -107,7 +190,7 @@
                                 {% set found.user = b.user_name %}
                             {% endif %}
                         {% endfor %}
-                        {{ found.user }}
+                        <span class="user-name">{{ found.user }}</span>
                     </td>
                 {% endfor %}
             </tr>
@@ -125,7 +208,7 @@
                 {% endif %}
                 {% for booking in user_data.bookings %}
                     <div class="booking-item">
-                        <strong>{{ booking.room_name }} - {{ booking.date.strftime('%d/%m/%Y') }} - {{ booking.period }}</strong><br>
+                        <strong>{{ booking.room_name }} - {{ booking.date.strftime('%d/%m/%Y') }} - {{ booking.period }}</strong>
                         <span class="observation-text">"{{ booking.observation }}"</span>
                     </div>
                 {% endfor %}
@@ -137,8 +220,8 @@
         <h2>Observações Gerais</h2>
         {% for obs in general_observations %}
             <div class="booking-item">
-                <strong>{{ obs.booking_date.strftime('%d/%m/%Y') }} - {{ obs.user_name }}</strong><br>
-                <em>{{ obs.observation }}</em>
+                <strong>{{ obs.booking_date.strftime('%d/%m/%Y') }} - {{ obs.user_name }}</strong>
+                <span class="observation-text">{{ obs.observation }}</span>
             </div>
         {% endfor %}
     </div>
