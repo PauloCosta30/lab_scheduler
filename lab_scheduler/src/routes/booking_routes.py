@@ -9,6 +9,7 @@ from flask_mail import Message
 import re
 import pytz # Importar pytz para lidar com fusos horários
 from functools import wraps
+from datetime import datetime, date, timedelta, time
 
 # Importação condicional do weasyprint
 try:
