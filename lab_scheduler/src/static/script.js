@@ -25,9 +25,10 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentWeekStartDate;
     let bookingWindowStatus = null;
 
-    // REMOVIDO: Mapeamento de períodos para o formato esperado pelo backend
-    // REMOVIDO: Função para converter período para o formato do backend
-    // REMOVIDO: Função para converter período do backend para o frontend
+    // Debug helper function
+    function debugLog(message, data = null) {
+        console.log(`[DEBUG] ${message}`, data ? data : '');
+    }
 
     // --- Helper Functions for Date Handling (UTC) ---
     function getTodayUTC() {
@@ -60,11 +61,12 @@ document.addEventListener("DOMContentLoaded", () => {
             // Converter para horário local do usuário para comparação
             const deadlineLocal = new Date(slotWeekWednesday.getTime());
             
-            console.log(`Verificando prazo para ${slotDateStr}:`);
-            console.log(`  Slot date: ${slotDate.toISOString()}`);
-            console.log(`  Deadline (quarta 23:59): ${deadlineLocal.toISOString()}`);
-            console.log(`  Now: ${now.toISOString()}`);
-            console.log(`  Dentro do prazo: ${now <= deadlineLocal}`);
+            debugLog(`Verificando prazo para ${slotDateStr}:`, {
+                slotDate: slotDate.toISOString(),
+                deadline: deadlineLocal.toISOString(),
+                now: now.toISOString(),
+                withinDeadline: now <= deadlineLocal
+            });
             
             return now <= deadlineLocal;
             
@@ -89,6 +91,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function showScheduleMessage(message, type) {
+        debugLog(`Schedule Message: [${type}] ${message}`);
         if (scheduleMessage) {
             scheduleMessage.textContent = message;
             scheduleMessage.className = `message ${type}`;
@@ -102,6 +105,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function showBookingStatusMessage(message, type) {
+        debugLog(`Booking Status Message: [${type}] ${message}`);
         if (bookingStatusMessage) {
             bookingStatusMessage.textContent = message;
             bookingStatusMessage.className = `status-message ${type}`;
@@ -110,14 +114,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- Booking Window Status Functions ---
     async function fetchBookingWindowStatus() {
+        debugLog("Fetching booking window status...");
         try {
             const response = await fetch(`${API_BASE_URL}/booking-window-status`);
+            debugLog(`Booking status response: ${response.status} ${response.statusText}`);
+            
             if (!response.ok) {
-                throw new Error(`Erro ao buscar status: ${response.statusText}`);
+                throw new Error(`Erro ao buscar status: ${response.status} ${response.statusText}`);
             }
+            
             bookingWindowStatus = await response.json();
+            debugLog("Booking window status loaded:", bookingWindowStatus);
             updateBookingStatusDisplay();
-            console.log("Status da janela de agendamento carregado:", bookingWindowStatus);
             return true;
         } catch (error) {
             console.error("Falha ao buscar status da janela de agendamento:", error);
@@ -138,33 +146,46 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- Room Data --- 
     async function fetchAllRooms() {
+        debugLog("Fetching all rooms...");
         try {
-            console.log("Buscando salas...");
             const response = await fetch(`${API_BASE_URL}/rooms`);
+            debugLog(`Rooms response: ${response.status} ${response.statusText}`);
+            
             if (!response.ok) {
-                throw new Error(`Erro ao buscar salas: ${response.statusText}`);
+                throw new Error(`Erro ao buscar salas: ${response.status} ${response.statusText}`);
             }
+            
             allRooms = await response.json();
-            console.log(`Carregadas ${allRooms.length} salas:`, allRooms);
+            debugLog(`Loaded ${allRooms.length} rooms:`, allRooms);
+            
+            if (!Array.isArray(allRooms) || allRooms.length === 0) {
+                throw new Error("Nenhuma sala encontrada ou formato inválido");
+            }
+            
             return true;
         } catch (error) {
             console.error("Falha ao buscar salas:", error);
-            showScheduleMessage("Não foi possível carregar dados das salas. Tente recarregar.", "error");
+            showScheduleMessage(`Não foi possível carregar dados das salas: ${error.message}`, "error");
             return false;
         }
     }
 
     // --- Schedule Logic (Loading and Rendering) ---
     async function loadScheduleData(inputDate = null) {
-        console.log("Iniciando carregamento da escala...");
+        debugLog("Starting schedule data load...", { inputDate });
         
         let startDate, endDate;
         const todayUTC = getTodayUTC();
 
         try {
+            // Verificar se os elementos DOM existem
+            if (!scheduleTableContainer) {
+                throw new Error("Element scheduleTableContainer not found");
+            }
+
             let referenceDate;
             if (inputDate) {
-                console.log("Data de entrada:", inputDate);
+                debugLog("Using input date:", inputDate);
                 referenceDate = parseDateStrToUTC(inputDate);
             } else {
                 referenceDate = todayUTC;
@@ -184,13 +205,12 @@ document.addEventListener("DOMContentLoaded", () => {
             const startDateStrAPI = startDate.toISOString().split("T")[0];
             const endDateStrAPI = endDate.toISOString().split("T")[0];
             
+            debugLog(`Loading bookings from ${startDateStrAPI} to ${endDateStrAPI}`);
             showScheduleMessage("Carregando escala...", "");
-            
-            console.log(`Carregando agendamentos de ${startDateStrAPI} até ${endDateStrAPI}`);
             
             // Primeiro, verificar se temos as salas carregadas
             if (allRooms.length === 0) {
-                console.log("Salas não carregadas, carregando...");
+                debugLog("Rooms not loaded, loading now...");
                 const roomsLoaded = await fetchAllRooms();
                 if (!roomsLoaded) {
                     throw new Error("Não foi possível carregar as salas");
@@ -198,28 +218,45 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             
             // Carregar agendamentos
-            const response = await fetch(`${API_BASE_URL}/bookings?start_date=${startDateStrAPI}&end_date=${endDateStrAPI}`);
+            debugLog("Fetching bookings...");
+            const bookingsUrl = `${API_BASE_URL}/bookings?start_date=${startDateStrAPI}&end_date=${endDateStrAPI}`;
+            debugLog("Bookings URL:", bookingsUrl);
+            
+            const response = await fetch(bookingsUrl);
+            debugLog(`Bookings response: ${response.status} ${response.statusText}`);
+            
             if (!response.ok) {
-                throw new Error(`Erro ao buscar agendamentos: ${response.statusText}`);
+                const errorText = await response.text();
+                debugLog("Bookings error response:", errorText);
+                throw new Error(`Erro ao buscar agendamentos: ${response.status} ${response.statusText}`);
             }
+            
             currentFetchedBookings = await response.json();
-            console.log(`Carregados ${currentFetchedBookings.length} agendamentos:`, currentFetchedBookings);
+            debugLog(`Loaded ${currentFetchedBookings.length} bookings:`, currentFetchedBookings);
+            
+            // Verificar se os dados estão no formato esperado
+            if (!Array.isArray(currentFetchedBookings)) {
+                throw new Error("Formato inválido de agendamentos recebido");
+            }
             
             renderScheduleTable(currentFetchedBookings, allRooms, currentWeekStartDate);
-            showScheduleMessage("Escala carregada.", "success");
+            showScheduleMessage("Escala carregada com sucesso.", "success");
             
         } catch (error) {
             console.error("Falha ao carregar escala:", error);
             showScheduleMessage(`Não foi possível carregar a escala: ${error.message}`, "error");
             if (scheduleTableContainer) {
-                scheduleTableContainer.innerHTML = "<p>Erro ao carregar escala.</p>";
+                scheduleTableContainer.innerHTML = `<p>Erro ao carregar escala: ${error.message}</p>`;
             }
         }
     }
 
     function renderScheduleTable(bookings, roomsData, weekStartDateObj) {
-        console.log("Renderizando tabela da escala...");
-        console.log("Agendamentos recebidos:", bookings);
+        debugLog("Starting table render...", {
+            bookingsCount: bookings.length,
+            roomsCount: roomsData.length,
+            weekStart: weekStartDateObj?.toISOString()
+        });
         
         if (!scheduleTableContainer) {
             console.error("scheduleTableContainer não encontrado");
@@ -302,21 +339,20 @@ document.addEventListener("DOMContentLoaded", () => {
                     const cell = document.createElement("td");
                     cell.className = "schedule-cell";
                     
-                    // MODIFICAÇÃO: Usar 'period' diretamente, sem conversão
+                    // Usar 'period' diretamente, sem conversão
                     const booking = bookings.find(b => 
                         b.room_id === room.id && 
                         b.booking_date === dateStr && 
-                        b.period === period // Usando 'period' diretamente
+                        b.period === period
                     );
                     
-                    console.log(`Verificando agendamento para Sala ${room.id} (${room.name}), Data ${dateStr}, Período ${period}:`, booking);
+                    debugLog(`Checking booking for Room ${room.id} (${room.name}), Date ${dateStr}, Period ${period}:`, booking);
                     
                     if (booking) {
                         // Sala já está reservada
                         cell.textContent = booking.user_name;
                         cell.classList.add("booked");
                         cell.title = `Reservado por: ${booking.user_name}`;
-                        console.log(`Célula marcada como ocupada: ${room.name} - ${dateStr} - ${period} por ${booking.user_name}`);
                     } else {
                         // Verificar se o agendamento está permitido para esta data
                         const isBookingAllowed = checkIfBookingAllowed(dateStr);
@@ -328,7 +364,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             cell.dataset.roomId = room.id;
                             cell.dataset.roomName = room.name;
                             cell.dataset.date = dateStr;
-                            cell.dataset.period = period; // Mantém o período no formato frontend
+                            cell.dataset.period = period;
                             cell.addEventListener("click", handleSlotClick);
                             cell.style.cursor = "pointer";
                             cell.title = "Clique para selecionar";
@@ -348,14 +384,14 @@ document.addEventListener("DOMContentLoaded", () => {
         table.appendChild(tbody);
         scheduleTableContainer.appendChild(table);
         
-        console.log("Tabela renderizada com sucesso");
+        debugLog("Table rendered successfully");
     }
 
     function checkIfBookingAllowed(dateStr) {
-        console.log(`Verificando se agendamento é permitido para ${dateStr}`);
+        debugLog(`Checking if booking is allowed for ${dateStr}`);
         
         if (!bookingWindowStatus) {
-            console.log("Status da janela de agendamento não disponível");
+            debugLog("Booking window status not available");
             return false;
         }
 
@@ -375,17 +411,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 // Para semana atual, verificar se ainda está dentro do prazo (até quarta 23:59)
                 const withinDeadline = isWithinBookingDeadline(dateStr);
                 const allowed = bookingWindowStatus.current_week.open && withinDeadline;
-                console.log(`Semana atual - ${dateStr}: janela=${bookingWindowStatus.current_week.open}, prazo=${withinDeadline}, permitido=${allowed}`);
+                debugLog(`Current week - ${dateStr}: window=${bookingWindowStatus.current_week.open}, deadline=${withinDeadline}, allowed=${allowed}`);
                 return allowed;
                 
             } else if (slotDate >= nextWeekMonday && slotDate < new Date(nextWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000)) {
                 const allowed = bookingWindowStatus.next_week.open;
-                console.log(`Próxima semana - ${dateStr}: ${allowed ? 'PERMITIDO' : 'FECHADO'}`);
+                debugLog(`Next week - ${dateStr}: ${allowed ? 'ALLOWED' : 'CLOSED'}`);
                 return allowed;
             }
 
             // Se não é da semana atual nem da próxima, não permitir
-            console.log(`Data fora do período permitido - ${dateStr}: FECHADO`);
+            debugLog(`Date outside allowed period - ${dateStr}: CLOSED`);
             return false;
             
         } catch (error) {
@@ -400,7 +436,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const slotDateStr = cell.dataset.date;
 
-        // REMOVIDA a verificação de data passada - agora só verifica se está dentro do prazo
         if (!checkIfBookingAllowed(slotDateStr)) {
             showScheduleMessage("Agendamentos estão fechados para esta data (prazo: até quarta-feira 23:59).", "error");
             return;
@@ -410,7 +445,7 @@ document.addEventListener("DOMContentLoaded", () => {
             roomId: parseInt(cell.dataset.roomId),
             roomName: cell.dataset.roomName,
             date: slotDateStr,
-            period: cell.dataset.period, // Mantém o período no formato frontend
+            period: cell.dataset.period,
             cellRef: cell
         };
 
@@ -445,6 +480,26 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         if (generatePdfButton) {
             generatePdfButton.disabled = !currentWeekStartDate;
+        }
+    }
+
+    function updateSelectedSlotsSummary() {
+        if (!selectedSlotsSummaryList) return;
+        
+        selectedSlotsSummaryList.innerHTML = "";
+        
+        if (selectedSlots.length === 0) {
+            const li = document.createElement("li");
+            li.textContent = "Nenhuma sala selecionada - será criado um agendamento apenas com observação";
+            li.style.fontStyle = "italic";
+            li.style.color = "#666";
+            selectedSlotsSummaryList.appendChild(li);
+        } else {
+            selectedSlots.forEach(slot => {
+                const li = document.createElement("li");
+                li.textContent = `${slot.roomName} - ${new Date(slot.date + 'T00:00:00Z').toLocaleDateString('pt-BR', {timeZone: 'UTC'})} - ${slot.period}`;
+                selectedSlotsSummaryList.appendChild(li);
+            });
         }
     }
 
