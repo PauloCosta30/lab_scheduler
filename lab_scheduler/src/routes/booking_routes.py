@@ -382,9 +382,9 @@ def create_booking():
 
                 if booking_date_obj.weekday() >= 5: # Sábado ou Domingo
                     return jsonify({"error": f"Agendamentos para {booking_date_str} são permitidos apenas de segunda a sexta-feira."}), 400
-
-                if booking_date_obj < today_brasilia:
-                    return jsonify({"error": f"Agendamento para {booking_date_str} não pode ser no passado."}), 400
+                    
+                #if booking_date_obj < today_brasilia:
+                 #   return jsonify({"error": f"Agendamento para {booking_date_str} não pode ser no passado."}), 400
                 
                 if booking_date_obj >= current_week_monday and booking_date_obj < next_week_monday:
                     # Agendamento para a semana atual
