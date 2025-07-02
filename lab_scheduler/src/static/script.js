@@ -876,17 +876,3 @@ loadScheduleData(currentWeekStartDate.toISOString().split("T")[0]);
         loadScheduleData();
     });
 });
-
-
-// Função que recarrega a escala do servidor e atualiza a tabela
-async function recarregarEscala() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/bookings`);
-        if (!response.ok) throw new Error('Erro ao carregar escala.');
-        const data = await response.json();
-        renderScheduleTable(data);
-    } catch (error) {
-        console.error('Erro ao recarregar escala:', error);
-        alert('Falha ao recarregar a escala. Tente atualizar a página.');
-    }
-}
