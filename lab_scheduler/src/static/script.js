@@ -877,36 +877,16 @@ loadScheduleData(currentWeekStartDate.toISOString().split("T")[0]);
     });
 });
 
-// Função para salvar agendamento
-async function salvarAgendamento(agendamento) {
-    try {
-        await api.salvar(agendamento);
-
-        // Forçar a recarga imediata da escala após salvar com sucesso
-        await recarregarEscala();
-
-        alert('Agendamento salvo com sucesso!');
-    } catch (erro) {
-        console.error('Erro ao salvar agendamento:', erro);
-        alert('Falha ao salvar o agendamento. Tente novamente.');
-    }
-}
-
 
 // Função que recarrega a escala do servidor e atualiza a tabela
 async function recarregarEscala() {
     try {
-        const novaEscala = await api.buscarEscala();
-        atualizarTabela(novaEscala);
-    } catch (erro) {
-        console.error('Erro ao recarregar escala:', erro);
+        const response = await fetch(`${API_BASE_URL}/bookings`);
+        if (!response.ok) throw new Error('Erro ao carregar escala.');
+        const data = await response.json();
+        renderScheduleTable(data);
+    } catch (error) {
+        console.error('Erro ao recarregar escala:', error);
         alert('Falha ao recarregar a escala. Tente atualizar a página.');
     }
-}
-
-
-// Função que atualiza a tabela no frontend
-function atualizarTabela(novaEscala) {
-    setEscala(novaEscala); // Supondo que você esteja usando React e o estado se chama 'escala'
-    // Se estiver usando outra abordagem, adapte para o método que atualiza a tabela.
 }
