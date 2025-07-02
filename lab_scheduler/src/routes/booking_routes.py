@@ -224,24 +224,12 @@ def get_booking_window_status():
 
 # API SIMPLIFICADA PARA VERIFICAÇÃO DE STATUS
 @bookings_bp.route("/booking-window-status", methods=["GET"])
-def get_booking_window_status_api():
-    """API simplificada que retorna se a janela está aberta ou fechada"""
     try:
         status = get_booking_window_status()
-        now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
-        now_brasilia = now_utc.astimezone(BRASILIA_TZ)
-
-        return jsonify({
-            "current_time": now_brasilia.strftime('%Y-%m-%d %H:%M:%S'),
-            "status": status
-        })
-
+        return jsonify(status)
     except Exception as e:
-        current_app.logger.error(f"Erro na verificação da janela de agendamento: {e}")
-        return jsonify({
-            'is_open': False,
-            'error': 'Erro interno no sistema'
-        }), 500
+        current_app.logger.error(f"Erro na rota booking-window-status: {str(e)}")
+        return jsonify({"error": "Erro interno do servidor"}), 500
 
 @bookings_bp.route("/booking-window-simple", methods=["GET"])
 def get_booking_window_simple():
