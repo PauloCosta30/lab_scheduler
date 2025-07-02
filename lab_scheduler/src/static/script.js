@@ -730,16 +730,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
                 
                 // Limpar slots selecionados e atualizar a tabela após o sucesso
-                selectedSlots.forEach(slot => {
-                    if (slot.cellRef) {
-                        slot.cellRef.classList.remove("selected");
-                        slot.cellRef.classList.add("booked");
-                        slot.cellRef.textContent = userName.trim();
-                        slot.cellRef.removeEventListener("click", handleSlotClick);
-                        slot.cellRef.style.cursor = "default";
-                        slot.cellRef.title = `Reservado por: ${userName.trim()}`;
-                    }
-                });
+                
+// Após agendamento bem-sucedido, recarrega a escala diretamente
+loadScheduleData(currentWeekStartDate.toISOString().split("T")[0]);
+
                 
                 selectedSlots = [];
                 updateSelectedSlotsSummary();
