@@ -319,17 +319,6 @@ document.addEventListener("DOMContentLoaded", () => {
             const slotDate = parseDateStrToUTC(dateStr);
             const todayUTC = getTodayUTC();
             
-            // Se a data já passou completamente, não permitir
-            if (slotDate < todayUTC) {
-                console.log(`Data ${dateStr} já passou completamente`);
-                return {
-                    allowed: false,
-                    displayText: "Indisponível",
-                    cssClass: "past",
-                    title: "Data já passou"
-                };
-            }
-            
             // Obter horário atual em UTC com precisão de horas/minutos
             const now = new Date();
             const currentTimeUTC = new Date(Date.UTC(
@@ -366,22 +355,46 @@ document.addEventListener("DOMContentLoaded", () => {
                 console.log(`Deadline quarta-feira: ${wednesdayDeadline.toISOString()}`);
                 console.log(`Horário atual: ${currentTimeUTC.toISOString()}`);
                 
-                if (currentTimeUTC <= wednesdayDeadline) {
-                    console.log(`Semana atual - ${dateStr}: permitido (antes do deadline)`);
-                    return {
-                        allowed: true,
-                        displayText: "Disponível",
-                        cssClass: "available",
-                        title: "Clique para selecionar"
-                    };
+                // CORREÇÃO PRINCIPAL: Para datas anteriores ao dia atual, verificar apenas o deadline
+                // Para o dia atual, permitir agendamentos independente do horário (até o deadline)
+                if (slotDate < todayUTC) {
+                    // Data já passou completamente - verificar se ainda está dentro do prazo da semana
+                    if (currentTimeUTC <= wednesdayDeadline) {
+                        console.log(`Data passada ${dateStr}: permitido (ainda dentro do prazo da semana)`);
+                        return {
+                            allowed: true,
+                            displayText: "Disponível",
+                            cssClass: "available",
+                            title: "Clique para selecionar"
+                        };
+                    } else {
+                        console.log(`Data passada ${dateStr}: fechado (após deadline)`);
+                        return {
+                            allowed: false,
+                            displayText: "Fechado",
+                            cssClass: "closed",
+                            title: "Período de agendamento fechado (após quarta 23:59)"
+                        };
+                    }
                 } else {
-                    console.log(`Semana atual - ${dateStr}: fechado (após deadline)`);
-                    return {
-                        allowed: false,
-                        displayText: "Fechado",
-                        cssClass: "closed",
-                        title: "Período de agendamento fechado (após quarta 23:59)"
-                    };
+                    // Data é hoje ou futura na semana atual
+                    if (currentTimeUTC <= wednesdayDeadline) {
+                        console.log(`Semana atual - ${dateStr}: permitido (antes do deadline)`);
+                        return {
+                            allowed: true,
+                            displayText: "Disponível",
+                            cssClass: "available",
+                            title: "Clique para selecionar"
+                        };
+                    } else {
+                        console.log(`Semana atual - ${dateStr}: fechado (após deadline)`);
+                        return {
+                            allowed: false,
+                            displayText: "Fechado",
+                            cssClass: "closed",
+                            title: "Período de agendamento fechado (após quarta 23:59)"
+                        };
+                    }
                 }
                 
             } else if (slotDate >= nextWeekMonday && slotDate < weekAfterNextMonday) {
