@@ -502,30 +502,11 @@ def create_booking():
         if not email_sent_successfully:
             response_message += " (Houve um problema ao enviar o e-mail de confirmação.)"
         
-        
-created_bookings = Booking.query.filter_by(user_name=user_name, user_email=user_email).order_by(Booking.id.desc()).limit(len(processed_slots)).all()
-
-created_bookings_response = []
-for booking in created_bookings:
-    created_bookings_response.append({
-        "id": booking.id,
-        "user_name": booking.user_name,
-        "user_email": booking.user_email,
-        "coordinator_name": booking.coordinator_name,
-        "observation": booking.observation,
-        "room_id": booking.room_id,
-        "room_name": booking.room.name if booking.room else "Observação Geral",
-        "booking_date": booking.booking_date.isoformat(),
-        "period": booking.period,
-        "created_at": booking.created_at.isoformat() if booking.created_at else None
-    })
-
-return jsonify({
-    "message": response_message,
-    "bookings_created": created_bookings_response,
-    "observation_saved": bool(observation.strip() and not processed_slots)
-}), 201
-
+        return jsonify({
+            "message": response_message,
+            "bookings_created": newly_created_bookings_details_for_email,
+            "observation_saved": bool(observation.strip() and not processed_slots)
+        }), 201
 
     except Exception as e:
         db.session.rollback()
