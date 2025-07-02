@@ -313,17 +313,24 @@ document.addEventListener("DOMContentLoaded", () => {
         console.log("Tabela renderizada com sucesso");
     }
 
+    // FUNÇÃO CORRIGIDA - Verificação precisa dos horários de agendamento
     function checkIfBookingAllowed(dateStr) {
         console.log(`Verificando se agendamento é permitido para ${dateStr}`);
         
-        if (!bookingWindowStatus) {
-            console.log("Status da janela de agendamento não disponível");
-            return false;
-        }
-
         try {
             const slotDate = parseDateStrToUTC(dateStr);
             const todayUTC = getTodayUTC();
+            
+            // Obter horário atual em UTC com precisão de horas/minutos
+            const now = new Date();
+            const currentTimeUTC = new Date(Date.UTC(
+                now.getUTCFullYear(),
+                now.getUTCMonth(),
+                now.getUTCDate(),
+                now.getUTCHours(),
+                now.getUTCMinutes(),
+                now.getUTCSeconds()
+            ));
             
             // Calcular segunda-feira da semana atual (UTC)
             const currentWeekMonday = new Date(todayUTC.valueOf());
@@ -334,14 +341,48 @@ document.addEventListener("DOMContentLoaded", () => {
 
             // Verificar se o slot é da semana atual
             if (slotDate >= currentWeekMonday && slotDate < nextWeekMonday) {
-                const allowed = bookingWindowStatus.current_week.open;
-                console.log(`Semana atual - ${dateStr}: ${allowed}`);
-                return allowed;
+                // Para semana atual: verificar se ainda não passou de quarta-feira 23:59
+                
+                // Calcular quarta-feira da semana atual
+                const currentWeekWednesday = new Date(currentWeekMonday.getTime() + 2 * 24 * 60 * 60 * 1000);
+                
+                // Criar data/hora limite: quarta-feira 23:59:59 UTC
+                const wednesdayDeadline = new Date(currentWeekWednesday.getTime());
+                wednesdayDeadline.setUTCHours(23, 59, 59, 999);
+                
+                console.log(`Semana atual - Hoje: ${currentTimeUTC.toISOString()}`);
+                console.log(`Semana atual - Deadline: ${wednesdayDeadline.toISOString()}`);
+                
+                // Se ainda não passou do deadline de quarta-feira 23:59, permitir agendamento
+                if (currentTimeUTC <= wednesdayDeadline) {
+                    console.log(`Semana atual - ${dateStr}: permitido (antes do deadline)`);
+                    return true;
+                } else {
+                    console.log(`Semana atual - ${dateStr}: fechado (após deadline de quarta 23:59)`);
+                    return false;
+                }
                 
             } else if (slotDate >= nextWeekMonday && slotDate < new Date(nextWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000)) {
-                const allowed = bookingWindowStatus.next_week.open;
-                console.log(`Próxima semana - ${dateStr}: ${allowed}`);
-                return allowed;
+                // Para próxima semana: verificar se já passou de sexta-feira 18:00
+                
+                // Calcular sexta-feira da semana atual
+                const currentWeekFriday = new Date(currentWeekMonday.getTime() + 4 * 24 * 60 * 60 * 1000);
+                
+                // Criar data/hora de liberação: sexta-feira 18:00 UTC
+                const fridayRelease = new Date(currentWeekFriday.getTime());
+                fridayRelease.setUTCHours(18, 0, 0, 0);
+                
+                console.log(`Próxima semana - Hoje: ${currentTimeUTC.toISOString()}`);
+                console.log(`Próxima semana - Liberação: ${fridayRelease.toISOString()}`);
+                
+                // Se já passou da liberação de sexta-feira 18:00, permitir agendamento
+                if (currentTimeUTC >= fridayRelease) {
+                    console.log(`Próxima semana - ${dateStr}: permitido (após liberação)`);
+                    return true;
+                } else {
+                    console.log(`Próxima semana - ${dateStr}: fechado (antes da liberação de sexta 18h)`);
+                    return false;
+                }
             }
 
             console.log(`Data fora do período permitido - ${dateStr}`);
@@ -351,6 +392,58 @@ document.addEventListener("DOMContentLoaded", () => {
             return false;
         }
     }
+
+    // Função auxiliar para debug dos horários
+    function debugBookingTimes() {
+        const todayUTC = getTodayUTC();
+        const now = new Date();
+        const currentTimeUTC = new Date(Date.UTC(
+            now.getUTCFullYear(),
+            now.getUTCMonth(),
+            now.getUTCDate(),
+            now.getUTCHours(),
+            now.getUTCMinutes(),
+            now.getUTCSeconds()
+        ));
+        
+        // Calcular segunda-feira da semana atual
+        const currentWeekMonday = new Date(todayUTC.valueOf());
+        const dayOffset = todayUTC.getUTCDay() === 0 ? 6 : todayUTC.getUTCDay() - 1;
+        currentWeekMonday.setUTCDate(todayUTC.getUTCDate() - dayOffset);
+        
+        // Calcular quarta-feira 23:59 e sexta-feira 18:00
+        const currentWeekWednesday = new Date(currentWeekMonday.getTime() + 2 * 24 * 60 * 60 * 1000);
+        const wednesdayDeadline = new Date(currentWeekWednesday.getTime());
+        wednesdayDeadline.setUTCHours(23, 59, 59, 999);
+        
+        const currentWeekFriday = new Date(currentWeekMonday.getTime() + 4 * 24 * 60 * 60 * 1000);
+        const fridayRelease = new Date(currentWeekFriday.getTime());
+        fridayRelease.setUTCHours(18, 0, 0, 0);
+        
+        console.log("=== DEBUG HORÁRIOS DE AGENDAMENTO ===");
+        console.log(`Horário atual UTC: ${currentTimeUTC.toISOString()}`);
+        console.log(`Segunda-feira da semana: ${currentWeekMonday.toISOString()}`);
+        console.log(`Deadline quarta 23:59: ${wednesdayDeadline.toISOString()}`);
+        console.log(`Liberação sexta 18:00: ${fridayRelease.toISOString()}`);
+        console.log(`Semana atual fechada? ${currentTimeUTC > wednesdayDeadline}`);
+        console.log(`Próxima semana liberada? ${currentTimeUTC >= fridayRelease}`);
+        console.log("==========================================");
+    }
+
+    // Função para forçar atualização dos horários (para debugging)
+    function forceTimeUpdate() {
+        console.log("Forçando atualização dos horários...");
+        debugBookingTimes();
+        
+        // Recarregar a escala com os novos horários
+        if (currentWeekStartDate) {
+            loadScheduleData(currentWeekStartDate.toISOString().split("T")[0]);
+        }
+    }
+
+    // Expor funções de debug para o console global (para testes)
+    window.debugBookingTimes = debugBookingTimes;
+    window.forceTimeUpdate = forceTimeUpdate;
 
     function handleSlotClick(event) {
         const cell = event.currentTarget;
@@ -411,7 +504,6 @@ document.addEventListener("DOMContentLoaded", () => {
             generatePdfButton.disabled = !currentWeekStartDate;
         }
     }
-
     // --- PDF Generation (CORRIGIDA) ---
     async function generatePdf() {
         if (!currentWeekStartDate) {
