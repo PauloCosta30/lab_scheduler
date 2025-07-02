@@ -878,12 +878,12 @@ loadScheduleData(currentWeekStartDate.toISOString().split("T")[0]);
 });
 
 
-async function aguardarAtualizacaoEscala(tentativas = 5, intervalo = 1000) {
+async function aguardarAtualizacaoEscala(slotAgendado, tentativas = 5, intervalo = 1000) {
     for (let i = 0; i < tentativas; i++) {
         await new Promise(resolve => setTimeout(resolve, intervalo)); // Aguarda 1 segundo
         await loadScheduleData(currentWeekStartDate.toISOString().split("T")[0]);
 
-        if (verificarSeEscalaFoiAtualizada()) {
+        if (verificarSeEscalaFoiAtualizada(slotAgendado)) {
             console.log("Escala atualizada com sucesso.");
             return;
         }
@@ -892,9 +892,11 @@ async function aguardarAtualizacaoEscala(tentativas = 5, intervalo = 1000) {
     console.warn("Escala pode não ter sido atualizada após múltiplas tentativas.");
 }
 
-function verificarSeEscalaFoiAtualizada() {
-    // Implementar lógica real para verificar se a escala já contém os dados agendados
-    // Exemplo: verificar se os slots recém-agendados estão presentes na tabela renderizada
-    // Para fins de exemplo, retornamos true para permitir a continuação do fluxo
-    return true;
+function verificarSeEscalaFoiAtualizada(slotAgendado) {
+    // Verificar se o slot recém-agendado está presente no currentFetchedBookings
+    return currentFetchedBookings.some(b => 
+        b.room_id === slotAgendado.room_id && 
+        b.booking_date === slotAgendado.booking_date && 
+        b.booking_period === slotAgendado.booking_period
+    );
 }
