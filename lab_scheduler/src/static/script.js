@@ -1,6 +1,8 @@
 // /home/ubuntu/lab_scheduler/src/static/script.js
 
 document.addEventListener("DOMContentLoaded", () => {
+    console.log("🚀 Lab Scheduler - Iniciando aplicação...");
+    
     // DOM Elements for Modal and New Flow
     const scheduleTableContainer = document.getElementById("scheduleTableContainer");
     const scheduleMessage = document.getElementById("scheduleMessage");
@@ -19,6 +21,18 @@ document.addEventListener("DOMContentLoaded", () => {
     const modalBookingForm = document.getElementById("modalBookingForm");
     const selectedSlotsSummaryList = document.querySelector("#selectedSlotsSummary ul");
     const modalFormMessage = document.getElementById("modalFormMessage");
+
+    // Verificar se elementos críticos existem
+    console.log("🔍 Verificando elementos do DOM:");
+    console.log("  scheduleTableContainer:", !!scheduleTableContainer);
+    console.log("  scheduleMessage:", !!scheduleMessage);
+    console.log("  weekSelector:", !!weekSelector);
+    console.log("  loadScheduleButton:", !!loadScheduleButton);
+
+    if (!scheduleTableContainer) {
+        console.error("❌ ERRO CRÍTICO: scheduleTableContainer não encontrado!");
+        return;
+    }
 
     const API_BASE_URL = "/api";
     let allRooms = [];
@@ -41,6 +55,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- Helper Functions for Messages ---
     function showModalMessage(message, type) {
+        console.log(`📝 Modal Message [${type}]: ${message}`);
         if (modalFormMessage) {
             modalFormMessage.textContent = message;
             modalFormMessage.className = `message ${type}`;
@@ -54,6 +69,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function showScheduleMessage(message, type) {
+        console.log(`📋 Schedule Message [${type}]: ${message}`);
         if (scheduleMessage) {
             scheduleMessage.textContent = message;
             scheduleMessage.className = `message ${type}`;
@@ -63,10 +79,13 @@ document.addEventListener("DOMContentLoaded", () => {
                     scheduleMessage.className = "message";
                 }, 3000);
             }
+        } else {
+            console.warn("⚠️ scheduleMessage element não encontrado");
         }
     }
 
     function showBookingStatusMessage(message, type) {
+        console.log(`📊 Status Message [${type}]: ${message}`);
         if (bookingStatusMessage) {
             bookingStatusMessage.textContent = message;
             bookingStatusMessage.className = `status-message ${type}`;
@@ -78,11 +97,11 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             // Verificar cache primeiro
             if (roomAvailabilityCache[date]) {
-                console.log(`Usando cache para disponibilidade da data ${date}`);
+                console.log(`💾 Usando cache para disponibilidade da data ${date}`);
                 return roomAvailabilityCache[date];
             }
 
-            console.log(`Verificando disponibilidade de salas para ${date}`);
+            console.log(`🔍 Verificando disponibilidade de salas para ${date}`);
             const response = await fetch(`/room-availability?date=${date}`);
             
             if (!response.ok) {
@@ -90,14 +109,14 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             const data = await response.json();
-            console.log(`Disponibilidade para ${date}:`, data);
+            console.log(`✅ Disponibilidade para ${date}:`, data);
             
             // Armazenar no cache
             roomAvailabilityCache[date] = data;
             
             return data;
         } catch (error) {
-            console.error(`Erro ao verificar disponibilidade para ${date}:`, error);
+            console.error(`❌ Erro ao verificar disponibilidade para ${date}:`, error);
             // Em caso de erro, assumir que está disponível para não bloquear desnecessariamente
             return { available: true, rooms: allRooms };
         }
@@ -106,16 +125,17 @@ document.addEventListener("DOMContentLoaded", () => {
     // --- Booking Window Status Functions ---
     async function fetchBookingWindowStatus() {
         try {
+            console.log("🔄 Buscando status da janela de agendamento...");
             const response = await fetch(`${API_BASE_URL}/booking-window-status`);
             if (!response.ok) {
                 throw new Error(`Erro ao buscar status: ${response.statusText}`);
             }
             bookingWindowStatus = await response.json();
+            console.log("✅ Status da janela de agendamento carregado:", bookingWindowStatus);
             updateBookingStatusDisplay();
-            console.log("Status da janela de agendamento carregado:", bookingWindowStatus);
             return true;
         } catch (error) {
-            console.error("Falha ao buscar status da janela de agendamento:", error);
+            console.error("❌ Falha ao buscar status da janela de agendamento:", error);
             showBookingStatusMessage("Não foi possível verificar o status do agendamento", "error");
             return false;
         }
@@ -134,24 +154,44 @@ document.addEventListener("DOMContentLoaded", () => {
     // --- Room Data --- 
     async function fetchAllRooms() {
         try {
-            console.log("Buscando salas...");
+            console.log("🏢 Buscando salas...");
             const response = await fetch(`${API_BASE_URL}/rooms`);
+            
+            console.log(`📡 Response status para /rooms: ${response.status}`);
+            
             if (!response.ok) {
-                throw new Error(`Erro ao buscar salas: ${response.statusText}`);
+                const errorText = await response.text();
+                console.error(`❌ Erro na resposta /rooms: ${response.status} - ${errorText}`);
+                throw new Error(`Erro ao buscar salas: ${response.status} ${response.statusText}`);
             }
-            allRooms = await response.json();
-            console.log(`Carregadas ${allRooms.length} salas:`, allRooms);
+            
+            const roomsData = await response.json();
+            console.log(`📄 Raw response data:`, roomsData);
+            
+            if (!Array.isArray(roomsData)) {
+                console.error("❌ Dados de salas não são um array:", roomsData);
+                throw new Error("Formato de dados de salas inválido");
+            }
+            
+            allRooms = roomsData;
+            console.log(`✅ Carregadas ${allRooms.length} salas:`, allRooms);
             return true;
         } catch (error) {
-            console.error("Falha ao buscar salas:", error);
-            showScheduleMessage("Não foi possível carregar dados das salas. Tente recarregar.", "error");
+            console.error("❌ Falha ao buscar salas:", error);
+            showScheduleMessage(`Não foi possível carregar dados das salas: ${error.message}`, "error");
             return false;
         }
     }
 
     // --- Schedule Logic (Loading and Rendering) ---
     async function loadScheduleData(inputDate = null) {
-        console.log("Iniciando carregamento da escala...");
+        console.log("🔄 Iniciando carregamento da escala...");
+        
+        // Verificar se scheduleTableContainer existe antes de continuar
+        if (!scheduleTableContainer) {
+            console.error("❌ scheduleTableContainer não encontrado - não é possível renderizar a escala");
+            return;
+        }
         
         let startDate, endDate;
         const todayUTC = getTodayUTC();
@@ -159,7 +199,7 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             let referenceDate;
             if (inputDate) {
-                console.log("Data de entrada:", inputDate);
+                console.log("📅 Data de entrada:", inputDate);
                 referenceDate = parseDateStrToUTC(inputDate);
             } else {
                 referenceDate = todayUTC;
@@ -179,13 +219,13 @@ document.addEventListener("DOMContentLoaded", () => {
             const startDateStrAPI = startDate.toISOString().split("T")[0];
             const endDateStrAPI = endDate.toISOString().split("T")[0];
             
-            showScheduleMessage("Carregando escala...", "");
+            console.log(`📅 Período calculado: ${startDateStrAPI} até ${endDateStrAPI}`);
             
-            console.log(`Carregando agendamentos de ${startDateStrAPI} até ${endDateStrAPI}`);
+            showScheduleMessage("Carregando escala...", "");
             
             // Primeiro, verificar se temos as salas carregadas
             if (allRooms.length === 0) {
-                console.log("Salas não carregadas, carregando...");
+                console.log("🏢 Salas não carregadas, carregando...");
                 const roomsLoaded = await fetchAllRooms();
                 if (!roomsLoaded) {
                     throw new Error("Não foi possível carregar as salas");
@@ -200,50 +240,64 @@ document.addEventListener("DOMContentLoaded", () => {
                 weekDates.push(currentDate.toISOString().split("T")[0]);
             }
 
+            console.log("📅 Datas da semana:", weekDates);
+
             // Pré-carregar disponibilidade para todas as datas da semana
+            console.log("🔄 Pré-carregando disponibilidade...");
             const availabilityPromises = weekDates.map(date => checkRoomAvailability(date));
             await Promise.all(availabilityPromises);
+            console.log("✅ Disponibilidade pré-carregada");
             
             // Carregar agendamentos
+            console.log(`📡 Buscando agendamentos de ${startDateStrAPI} até ${endDateStrAPI}`);
             const response = await fetch(`${API_BASE_URL}/bookings?start_date=${startDateStrAPI}&end_date=${endDateStrAPI}`);
-            if (!response.ok) {
-                throw new Error(`Erro ao buscar agendamentos: ${response.statusText}`);
-            }
-            currentFetchedBookings = await response.json();
-            console.log(`Carregados ${currentFetchedBookings.length} agendamentos:`, currentFetchedBookings);
             
-            renderScheduleTable(currentFetchedBookings, allRooms, currentWeekStartDate);
+            console.log(`📡 Response status para /bookings: ${response.status}`);
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`❌ Erro na resposta /bookings: ${response.status} - ${errorText}`);
+                throw new Error(`Erro ao buscar agendamentos: ${response.status} ${response.statusText}`);
+            }
+            
+            currentFetchedBookings = await response.json();
+            console.log(`✅ Carregados ${currentFetchedBookings.length} agendamentos:`, currentFetchedBookings);
+            
+            await renderScheduleTable(currentFetchedBookings, allRooms, currentWeekStartDate);
             showScheduleMessage("Escala carregada.", "success");
             
         } catch (error) {
-            console.error("Falha ao carregar escala:", error);
+            console.error("❌ Falha ao carregar escala:", error);
             showScheduleMessage(`Não foi possível carregar a escala: ${error.message}`, "error");
             if (scheduleTableContainer) {
-                scheduleTableContainer.innerHTML = "<p>Erro ao carregar escala.</p>";
+                scheduleTableContainer.innerHTML = `<p style="color: red;">Erro ao carregar escala: ${error.message}</p>`;
             }
         }
     }
 
     async function renderScheduleTable(bookings, roomsData, weekStartDateObj) {
-        console.log("Renderizando tabela da escala...");
+        console.log("🎨 Renderizando tabela da escala...");
         
         if (!scheduleTableContainer) {
-            console.error("scheduleTableContainer não encontrado");
+            console.error("❌ scheduleTableContainer não encontrado");
             return;
         }
 
         // Verificar se temos dados válidos
         if (!roomsData || roomsData.length === 0) {
-            console.error("Dados de salas não encontrados ou vazios");
-            scheduleTableContainer.innerHTML = "<p>Erro: Dados de salas não disponíveis.</p>";
+            console.error("❌ Dados de salas não encontrados ou vazios");
+            scheduleTableContainer.innerHTML = "<p style='color: red;'>Erro: Dados de salas não disponíveis.</p>";
             return;
         }
 
         if (!weekStartDateObj) {
-            console.error("Data de início da semana não definida");
-            scheduleTableContainer.innerHTML = "<p>Erro: Data da semana não definida.</p>";
+            console.error("❌ Data de início da semana não definida");
+            scheduleTableContainer.innerHTML = "<p style='color: red;'>Erro: Data da semana não definida.</p>";
             return;
         }
+
+        console.log(`📊 Renderizando para ${roomsData.length} salas`);
+        console.log(`📊 Renderizando para ${bookings.length} agendamentos`);
 
         scheduleTableContainer.innerHTML = "";
         selectedSlots = [];
@@ -296,8 +350,11 @@ document.addEventListener("DOMContentLoaded", () => {
         thead.appendChild(subHeaderRow);
         table.appendChild(thead);
 
+        console.log("📅 Datas da semana para renderização:", datesOfWeek);
+
         // Corpo da tabela - NOVA LÓGICA COM VERIFICAÇÃO DE DISPONIBILIDADE
         for (const room of roomsData) {
+            console.log(`🏢 Renderizando sala: ${room.name} (ID: ${room.id})`);
             const row = document.createElement("tr");
             const roomCell = document.createElement("td");
             roomCell.textContent = room.name;
@@ -335,7 +392,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         const isRoomInAvailableList = roomAvailability.rooms && 
                             roomAvailability.rooms.some(r => r.id === room.id);
                         
-                        console.log(`Verificando disponibilidade para ${room.name} em ${dateStr}:`, {
+                        console.log(`🔍 Verificando disponibilidade para ${room.name} em ${dateStr}:`, {
                             isBasicBookingAllowed,
                             isRoomAvailable,
                             isRoomInAvailableList,
@@ -382,15 +439,15 @@ document.addEventListener("DOMContentLoaded", () => {
         table.appendChild(tbody);
         scheduleTableContainer.appendChild(table);
         
-        console.log("Tabela renderizada com sucesso");
+        console.log("✅ Tabela renderizada com sucesso");
     }
 
     // --- FUNÇÃO MELHORADA: Verificação mais precisa das regras de agendamento ---
     function checkIfBookingAllowed(dateStr) {
-        console.log(`Verificando se agendamento é permitido para ${dateStr}`);
+        console.log(`🔒 Verificando se agendamento é permitido para ${dateStr}`);
         
         if (!bookingWindowStatus) {
-            console.log("Status da janela de agendamento não disponível");
+            console.log("⚠️ Status da janela de agendamento não disponível");
             return false;
         }
 
@@ -402,9 +459,9 @@ document.addEventListener("DOMContentLoaded", () => {
             const now = new Date();
             const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000)); // UTC-3
             
-            console.log(`Data atual no Brasil: ${brazilTime.toISOString()}`);
-            console.log(`Dia da semana atual: ${brazilTime.getUTCDay()}`); // 0=domingo, 3=quarta
-            console.log(`Hora atual no Brasil: ${brazilTime.getUTCHours()}:${brazilTime.getUTCMinutes()}`);
+            console.log(`📅 Data atual no Brasil: ${brazilTime.toISOString()}`);
+            console.log(`📅 Dia da semana atual: ${brazilTime.getUTCDay()}`); // 0=domingo, 3=quarta
+            console.log(`🕐 Hora atual no Brasil: ${brazilTime.getUTCHours()}:${brazilTime.getUTCMinutes()}`);
             
             // Calcular segunda-feira da semana atual (UTC)
             const currentWeekMonday = new Date(todayUTC.valueOf());
@@ -421,18 +478,18 @@ document.addEventListener("DOMContentLoaded", () => {
                 
                 // Se é quarta após 23:59, fechar semana atual
                 if (isWednesday && isAfter2359) {
-                    console.log(`Semana atual fechada - Quarta-feira após 23:59`);
+                    console.log(`🔒 Semana atual fechada - Quarta-feira após 23:59`);
                     return false;
                 }
                 
                 // Se é quinta ou mais tarde, fechar semana atual
                 if (brazilTime.getUTCDay() > 3) {
-                    console.log(`Semana atual fechada - Após quarta-feira`);
+                    console.log(`🔒 Semana atual fechada - Após quarta-feira`);
                     return false;
                 }
                 
                 const allowed = bookingWindowStatus.current_week.open;
-                console.log(`Semana atual - ${dateStr}: ${allowed}`);
+                console.log(`📅 Semana atual - ${dateStr}: ${allowed}`);
                 return allowed;
                 
             } else if (slotDate >= nextWeekMonday && slotDate < new Date(nextWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000)) {
@@ -442,24 +499,24 @@ document.addEventListener("DOMContentLoaded", () => {
                 const isAfterFriday = brazilTime.getUTCDay() > 5 || (brazilTime.getUTCDay() === 0); // Sábado ou domingo
                 
                 if (!isFriday && !isAfterFriday) {
-                    console.log(`Próxima semana ainda não liberada - Aguardar sexta-feira às 18h`);
+                    console.log(`🔒 Próxima semana ainda não liberada - Aguardar sexta-feira às 18h`);
                     return false;
                 }
                 
                 if (isFriday && !isAfter18h) {
-                    console.log(`Próxima semana ainda não liberada - Aguardar 18h na sexta-feira`);
+                    console.log(`🔒 Próxima semana ainda não liberada - Aguardar 18h na sexta-feira`);
                     return false;
                 }
                 
                 const allowed = bookingWindowStatus.next_week.open;
-                console.log(`Próxima semana - ${dateStr}: ${allowed}`);
+                console.log(`📅 Próxima semana - ${dateStr}: ${allowed}`);
                 return allowed;
             }
 
-            console.log(`Data fora do período permitido - ${dateStr}`);
+            console.log(`❌ Data fora do período permitido - ${dateStr}`);
             return false;
         } catch (error) {
-            console.error("Erro ao verificar se agendamento é permitido:", error);
+            console.error("❌ Erro ao verificar se agendamento é permitido:", error);
             return false;
         }
     }
@@ -545,7 +602,7 @@ document.addEventListener("DOMContentLoaded", () => {
         showScheduleMessage("Gerando PDF...", "");
         
         try {
-            console.log(`Solicitando PDF para período: ${startDate} até ${endDateStr}`);
+            console.log(`📄 Solicitando PDF para período: ${startDate} até ${endDateStr}`);
             
             const response = await fetch(`${API_BASE_URL}/generate-pdf?start_date=${startDate}&end_date=${endDateStr}`, {
                 method: 'GET',
@@ -555,8 +612,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             });
             
-            console.log(`Response status: ${response.status}`);
-            console.log(`Response headers:`, response.headers);
+            console.log(`📡 Response status: ${response.status}`);
+            console.log(`📡 Response headers:`, response.headers);
             
             if (!response.ok) {
                 let errorMessage = `Erro ${response.status}: ${response.statusText}`;
@@ -575,7 +632,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         }
                     }
                 } catch (parseError) {
-                    console.error("Erro ao fazer parse da resposta de erro:", parseError);
+                    console.error("❌ Erro ao fazer parse da resposta de erro:", parseError);
                 }
                 
                 throw new Error(errorMessage);
@@ -584,7 +641,7 @@ document.addEventListener("DOMContentLoaded", () => {
             // Verificar se a resposta é realmente um PDF
             const contentType = response.headers.get('content-type');
             if (!contentType || !contentType.includes('application/pdf')) {
-                console.warn(`Tipo de conteúdo inesperado: ${contentType}`);
+                console.warn(`⚠️ Tipo de conteúdo inesperado: ${contentType}`);
             }
 
             const blob = await response.blob();
@@ -594,10 +651,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 throw new Error("PDF gerado está vazio");
             }
             
-            console.log(`PDF blob criado com tamanho: ${blob.size} bytes`);
+            console.log(`📄 PDF blob criado com tamanho: ${blob.size} bytes`);
 
             // Criar URL para download
             const url = window.URL.createObjectURL(blob);
+            
+            // Criar elemento de downloa
             
             // Criar elemento de download
             const a = document.createElement("a");
