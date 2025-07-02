@@ -237,6 +237,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function renderScheduleTable(bookings, roomsData, weekStartDateObj) {
         console.log("Renderizando tabela da escala...");
+        console.log("Agendamentos recebidos:", bookings);
         
         if (!scheduleTableContainer) {
             console.error("scheduleTableContainer não encontrado");
@@ -327,11 +328,14 @@ document.addEventListener("DOMContentLoaded", () => {
                         b.period === backendPeriod
                     );
                     
+                    console.log(`Verificando agendamento para Sala ${room.id} (${room.name}), Data ${dateStr}, Período ${backendPeriod}:`, booking);
+                    
                     if (booking) {
                         // Sala já está reservada
                         cell.textContent = booking.user_name;
                         cell.classList.add("booked");
                         cell.title = `Reservado por: ${booking.user_name}`;
+                        console.log(`Célula marcada como ocupada: ${room.name} - ${dateStr} - ${period} por ${booking.user_name}`);
                     } else {
                         // Verificar se o agendamento está permitido para esta data
                         const isBookingAllowed = checkIfBookingAllowed(dateStr);
