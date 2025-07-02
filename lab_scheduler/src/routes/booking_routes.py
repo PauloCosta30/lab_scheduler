@@ -7,20 +7,52 @@ from datetime import datetime, date, timedelta, time
 from collections import defaultdict
 from flask_mail import Message
 import re
-import pytz # Importar pytz para lidar com fusos horÃ¡rios
+import pytz # Importar pytz para lidar com fusos horários
 from functools import wraps
 from datetime import datetime, date, timedelta, time
+import unicodedata
 
-# ImportaÃ§Ã£o condicional do weasyprint
+# Importação condicional do weasyprint
 try:
     from weasyprint import HTML
     WEASYPRINT_AVAILABLE = True
 except ImportError:
     WEASYPRINT_AVAILABLE = False
-    current_app.logger.warning("WeasyPrint nÃ£o estÃ¡ disponÃ­vel. GeraÃ§Ã£o de PDF desabilitada.")
+    current_app.logger.warning("WeasyPrint não está disponível. Geração de PDF desabilitada.")
 
 bookings_bp = Blueprint("bookings_bp", __name__)
 
+# Função para normalizar texto e corrigir problemas de codificação
+def normalize_text(text):
+    """Normaliza texto para corrigir problemas de codificação"""
+    if not text:
+        return text
+    
+    # Dicionário de correções específicas para os períodos
+    corrections = {
+        'Manhã': 'Manhã',
+        'ManhÃ£': 'Manhã', 
+        'Tarde': 'Tarde',
+        'manhã': 'Manhã',
+        'manhÃ£': 'Manhã',
+        'tarde': 'Tarde'
+    }
+    
+    # Aplicar correção específica se existir
+    if text in corrections:
+        return corrections[text]
+    
+    # Normalizar unicode
+    try:
+        # Primeiro tenta decodificar se for bytes
+        if isinstance(text, bytes):
+            text = text.decode('utf-8')
+        
+        # Normalizar caracteres unicode
+        normalized = unicodedata.normalize('NFC', text)
+        return normalized
+    except:
+        return text
 
 # REGISTRO DO FILTRO date_from_string
 @bookings_bp.app_template_filter('date_from_string')
@@ -44,8 +76,8 @@ def date_from_string_filter(date_str):
 @bookings_bp.app_template_filter('format_weekday')
 def format_weekday_filter(date_obj):
     weekdays = {
-        0: 'Segunda-feira', 1: 'TerÃ§a-feira', 2: 'Quarta-feira',
-        3: 'Quinta-feira', 4: 'Sexta-feira', 5: 'SÃ¡bado', 6: 'Domingo'
+        0: 'Segunda-feira', 1: 'Terça-feira', 2: 'Quarta-feira',
+        3: 'Quinta-feira', 4: 'Sexta-feira', 5: 'Sábado', 6: 'Domingo'
     }
     if isinstance(date_obj, str):
         date_obj = date_from_string_filter(date_obj)
@@ -53,7 +85,7 @@ def format_weekday_filter(date_obj):
         return weekdays.get(date_obj.weekday(), '')
     return ''
 
-# REGISTRO DA FUNÃÃO zip para templates
+# REGISTRO DA FUNÇÃO zip para templates
 @bookings_bp.app_template_global('zip')
 def zip_template(*args):
     return zip(*args)
@@ -61,7 +93,7 @@ def zip_template(*args):
 
 MAX_BOOKINGS_PER_DAY = 3
 
-# Definir o fuso horÃ¡rio de BrasÃ­lia
+# Definir o fuso horário de Brasília
 BRASILIA_TZ = pytz.timezone("America/Sao_Paulo")
 
 # Decorator para verificar chave administrativa
@@ -72,10 +104,10 @@ def require_admin_key(f):
         expected_key = current_app.config.get("ADMIN_KEY")
         
         if not expected_key:
-            return jsonify({"error": "ConfiguraÃ§Ã£o administrativa nÃ£o encontrada"}), 500
+            return jsonify({"error": "Configuração administrativa não encontrada"}), 500
         
         if not admin_key or admin_key != expected_key:
-            return jsonify({"error": "Chave administrativa invÃ¡lida ou ausente"}), 401
+            return jsonify({"error": "Chave administrativa inválida ou ausente"}), 401
         
         return f(*args, **kwargs)
     return decorated_function
@@ -88,21 +120,21 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, obs
             current_app.logger.error("Flask-Mail (mail object) not found in current_app.extensions. Email not sent.")
             return False
             
-        # Permitir envio de email mesmo sem slots especÃ­ficos de sala
+        # Permitir envio de email mesmo sem slots específicos de sala
         if not booked_slots_details and not observation:
             current_app.logger.info("No booking details or observation to send in email.")
             return False
 
-        subject = "ConfirmaÃ§Ã£o de Agendamento de LaboratÃ³rio"
+        subject = "Confirmação de Agendamento de Laboratório"
         sender = current_app.config.get("MAIL_DEFAULT_SENDER", "noreply@example.com")
         recipients = [user_email]
 
         html_body = f"""\
-        <p>OlÃ¡ {user_name},</p>
+        <p>Olá {user_name},</p>
         """
         
         if booked_slots_details:
-            html_body += "<p>Seu agendamento de laboratÃ³rio foi confirmado com sucesso. Detalhes abaixo:</p><ul>"
+            html_body += "<p>Seu agendamento de laboratório foi confirmado com sucesso. Detalhes abaixo:</p><ul>"
             for slot in booked_slots_details:
                 booking_date_formatted = slot["booking_date"]
                 if isinstance(slot["booking_date"], date):
@@ -113,22 +145,22 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, obs
                     except ValueError:
                         pass
 
-                html_body += f"<li>Sala: {slot['room_name']} - Data: {booking_date_formatted} - PerÃ­odo: {slot['period']}</li>"
+                html_body += f"<li>Sala: {slot['room_name']} - Data: {booking_date_formatted} - Período: {slot['period']}</li>"
             html_body += "</ul>"
         
         if observation:
-            html_body += f"<p><strong>ObservaÃ§Ã£o registrada:</strong> {observation}</p>"
+            html_body += f"<p><strong>Observação registrada:</strong> {observation}</p>"
         
         if coordinator_name:
             html_body += f"<p>Coordenador: {coordinator_name}</p>"
             
-        html_body += "<p>Obrigado! ObservaÃ§Ã£o: Em caso de dÃºvidas sobre a escala, entre em contato com Ana Correa pelo e-mail: ana.correa@itv.org</p>"
+        html_body += "<p>Obrigado! Observação: Em caso de dúvidas sobre a escala, entre em contato com Ana Correa pelo e-mail: ana.correa@itv.org</p>"
 
         msg = Message(subject, sender=sender, recipients=recipients)
         msg.html = html_body
 
         mail.send(msg)
-        current_app.logger.info(f"Email de confirmaÃ§Ã£o enviado para {user_email}")
+        current_app.logger.info(f"Email de confirmação enviado para {user_email}")
         return True
     except Exception as e:
         current_app.logger.error(f"Falha ao enviar email para {user_email}: {str(e)}")
@@ -149,7 +181,7 @@ def check_booking_conflict(room_id, booking_date_obj, period):
 
 # Helper function to sort rooms with custom logic for "Geral" rooms
 def sort_rooms_custom(rooms):
-    """Ordena salas colocando as 'Geral' em ordem numÃ©rica correta"""
+    """Ordena salas colocando as 'Geral' em ordem numérica correta"""
     def room_sort_key(room):
         try:
             name = room.name
@@ -166,7 +198,7 @@ def sort_rooms_custom(rooms):
     
     return sorted(rooms, key=room_sort_key)
 
-# Rota de debug temporÃ¡ria - remover em produÃ§Ã£o
+# Rota de debug temporária - remover em produção
 @bookings_bp.route("/debug-booking-window", methods=["GET"])
 @require_admin_key
 def debug_booking_window():
@@ -204,7 +236,7 @@ def debug_booking_window():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# FunÃ§Ã£o para determinar o status da janela de agendamento
+# Função para determinar o status da janela de agendamento
 def get_booking_window_status():
     try:
         now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
@@ -214,7 +246,7 @@ def get_booking_window_status():
         today_brasilia = now_brasilia.date()
         current_week_monday = today_brasilia - timedelta(days=today_brasilia.weekday())
         
-        # Encontrar a segunda-feira da prÃ³xima semana
+        # Encontrar a segunda-feira da próxima semana
         next_week_monday = current_week_monday + timedelta(weeks=1)
         
         # Definir os pontos de corte para a semana atual
@@ -222,42 +254,42 @@ def get_booking_window_status():
         current_week_cutoff_time = time(23, 59, 59) # 23:59:59
         current_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(current_week_cutoff_date, current_week_cutoff_time))
 
-        # Definir os pontos de corte para a prÃ³xima semana
+        # Definir os pontos de corte para a próxima semana
         next_week_open_date = current_week_monday + timedelta(days=4) # Sexta-feira
         next_week_open_time = time(18, 0, 0) # 18:00
         next_week_open_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_open_date, next_week_open_time))
 
-        next_week_cutoff_date = next_week_monday + timedelta(days=2) # Quarta-feira da prÃ³xima semana
+        next_week_cutoff_date = next_week_monday + timedelta(days=2) # Quarta-feira da próxima semana
         next_week_cutoff_time = time(23, 59, 59) # 23:59:59
         next_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_cutoff_date, next_week_cutoff_time))
 
         status = {
             "current_week": {"open": False, "message": "Fechado"},
             "next_week": {"open": False, "message": "Fechado"},
-            "general_message": "As escolhas para a semana atual sempre serÃ£o encerradas Ã s 23:59 de quarta-feira, e a escala da prÃ³xima semana serÃ¡ liberada todas as sextas-feiras, Ã s 18h."
+            "general_message": "As escolhas para a semana atual sempre serão encerradas às 23:59 de quarta-feira, e a escala da próxima semana será liberada todas as sextas-feiras, às 18h."
         }
 
         # DEBUG: Log para verificar os valores
-        current_app.logger.info(f"Agora (BrasÃ­lia): {now_brasilia}")
+        current_app.logger.info(f"Agora (Brasília): {now_brasilia}")
         current_app.logger.info(f"Cutoff semana atual: {current_week_cutoff_datetime}")
-        current_app.logger.info(f"Abertura prÃ³xima semana: {next_week_open_datetime}")
-        current_app.logger.info(f"Cutoff prÃ³xima semana: {next_week_cutoff_datetime}")
+        current_app.logger.info(f"Abertura próxima semana: {next_week_open_datetime}")
+        current_app.logger.info(f"Cutoff próxima semana: {next_week_cutoff_datetime}")
 
         # Regra para a semana atual
         if now_brasilia <= current_week_cutoff_datetime:
             status["current_week"]["open"] = True
-            status["current_week"]["message"] = "Aberto atÃ© quarta-feira Ã s 23:59"
+            status["current_week"]["message"] = "Aberto até quarta-feira às 23:59"
         else:
-            status["current_week"]["message"] = "Fechado (apÃ³s quarta-feira 23:59)"
+            status["current_week"]["message"] = "Fechado (após quarta-feira 23:59)"
 
-        # Regra para a prÃ³xima semana
+        # Regra para a próxima semana
         if now_brasilia >= next_week_open_datetime and now_brasilia <= next_week_cutoff_datetime:
             status["next_week"]["open"] = True
-            status["next_week"]["message"] = "Aberto para a prÃ³xima semana"
+            status["next_week"]["message"] = "Aberto para a próxima semana"
         elif now_brasilia < next_week_open_datetime:
-            status["next_week"]["message"] = f"Abre na sexta-feira Ã s 18:00 ({next_week_open_date.strftime('%d/%m')})"
+            status["next_week"]["message"] = f"Abre na sexta-feira às 18:00 ({next_week_open_date.strftime('%d/%m')})"
         else:
-            status["next_week"]["message"] = "Fechado (apÃ³s quarta-feira 23:59 da prÃ³xima semana)"
+            status["next_week"]["message"] = "Fechado (após quarta-feira 23:59 da próxima semana)"
 
         return status
     except Exception as e:
@@ -265,7 +297,7 @@ def get_booking_window_status():
         return {
             "current_week": {"open": False, "message": "Erro no sistema"},
             "next_week": {"open": False, "message": "Erro no sistema"},
-            "general_message": "As escolhas para a semana atual sempre serÃ£o encerradas Ã s 23:59 de quarta-feira, e a escala da prÃ³xima semana serÃ¡ liberada todas as sextas-feiras, Ã s 18h."
+            "general_message": "As escolhas para a semana atual sempre serão encerradas às 23:59 de quarta-feira, e a escala da próxima semana será liberada todas as sextas-feiras, às 18h."
         }
 
 @bookings_bp.route("/booking-window-status", methods=["GET"])
@@ -300,11 +332,11 @@ def create_booking():
         observation = data.get("observation", "")
         slots_data = data.get("slots", [])
 
-        # Primeiro, verificar se hÃ¡ slots OU observaÃ§Ã£o. Se nÃ£o houver nenhum, Ã© um erro.
-        if not slots_data and not observation.strip(): # Usar .strip() para considerar observaÃ§Ãµes vazias
-            return jsonify({"error": "Ã necessÃ¡rio selecionar pelo menos uma sala ou fornecer uma observaÃ§Ã£o."}), 400
+        # Primeiro, verificar se há slots OU observação. Se não houver nenhum, é um erro.
+        if not slots_data and not observation.strip(): # Usar .strip() para considerar observações vazias
+            return jsonify({"error": "É necessário selecionar pelo menos uma sala ou fornecer uma observação."}), 400
 
-        # Agora, validar user_name e user_email, que sÃ£o obrigatÃ³rios para qualquer tipo de agendamento/observaÃ§Ã£o.
+        # Agora, validar user_name e user_email, que são obrigatórios para qualquer tipo de agendamento/observação.
         if not all([user_name, user_email]):
             return jsonify({"error": "Missing fields. Required: user_name, user_email"}), 400
         
@@ -327,36 +359,43 @@ def create_booking():
 
                 if not all([room_id, booking_date_str, period]):
                     return jsonify({"error": f"Invalid slot data: {slot_input}. Each slot needs room_id, booking_date, period"}), 400
-                if period not in ["ManhÃ£", "Tarde"]:
-                    return jsonify({"error": f"Invalid period '{period}' in slot: {slot_input}. Must be 'ManhÃ£' or 'Tarde'"}), 400
+                
+                # Normalizar o período para corrigir problemas de codificação
+                period = normalize_text(period)
+                current_app.logger.info(f"Período normalizado: '{period}'")
+                
+                # Validar período após normalização
+                if period not in ["Manhã", "Tarde"]:
+                    return jsonify({"error": f"Invalid period '{period}' in slot: {slot_input}. Must be 'Manhã' or 'Tarde'"}), 400
+                
                 try:
                     booking_date_obj = datetime.strptime(booking_date_str, "%Y-%m-%d").date()
                 except ValueError:
                     return jsonify({"error": f"Invalid date format '{booking_date_str}' in slot: {slot_input}. Use YYYY-MM-DD"}), 400
                 
-                # ValidaÃ§Ã£o da janela de agendamento
+                # Validação da janela de agendamento
                 now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
                 now_brasilia = now_utc.astimezone(BRASILIA_TZ)
                 today_brasilia = now_brasilia.date()
                 current_week_monday = today_brasilia - timedelta(days=today_brasilia.weekday())
                 next_week_monday = current_week_monday + timedelta(weeks=1)
 
-                if booking_date_obj.weekday() >= 5: # SÃ¡bado ou Domingo
-                    return jsonify({"error": f"Agendamentos para {booking_date_str} sÃ£o permitidos apenas de segunda a sexta-feira."}), 400
+                if booking_date_obj.weekday() >= 5: # Sábado ou Domingo
+                    return jsonify({"error": f"Agendamentos para {booking_date_str} são permitidos apenas de segunda a sexta-feira."}), 400
 
                 if booking_date_obj < today_brasilia:
-                    return jsonify({"error": f"Agendamento para {booking_date_str} nÃ£o pode ser no passado."}), 400
+                    return jsonify({"error": f"Agendamento para {booking_date_str} não pode ser no passado."}), 400
                 
                 if booking_date_obj >= current_week_monday and booking_date_obj < next_week_monday:
                     # Agendamento para a semana atual
                     if not booking_window["current_week"]["open"]:
-                        return jsonify({"error": f"Agendamentos para a semana atual estÃ£o fechados. {booking_window['current_week']['message']}"}), 403
+                        return jsonify({"error": f"Agendamentos para a semana atual estão fechados. {booking_window['current_week']['message']}"}), 403
                 elif booking_date_obj >= next_week_monday and booking_date_obj < (next_week_monday + timedelta(weeks=1)):
-                    # Agendamento para a prÃ³xima semana
+                    # Agendamento para a próxima semana
                     if not booking_window["next_week"]["open"]:
-                        return jsonify({"error": f"Agendamentos para a prÃ³xima semana estÃ£o fechados. {booking_window['next_week']['message']}"}), 403
+                        return jsonify({"error": f"Agendamentos para a próxima semana estão fechados. {booking_window['next_week']['message']}"}), 403
                 else:
-                    return jsonify({"error": f"Agendamentos sÃ³ sÃ£o permitidos para a semana atual ou prÃ³xima semana."}), 403
+                    return jsonify({"error": f"Agendamentos só são permitidos para a semana atual ou próxima semana."}), 403
 
                 room = Room.query.get(room_id)
                 if not room:
@@ -373,7 +412,7 @@ def create_booking():
             for booking_date_obj, count_for_this_request in daily_new_bookings_count.items():
                 existing_bookings_on_day = Booking.query.filter_by(user_name=user_name, booking_date=booking_date_obj).count()
                 if (existing_bookings_on_day + count_for_this_request) > MAX_BOOKINGS_PER_DAY:
-                    return jsonify({"error": f"Limite de {MAX_BOOKINGS_PER_DAY} agendamentos por dia para o usuÃ¡rio '{user_name}' seria excedido no dia {booking_date_obj.strftime('%Y-%m-%d')}."}), 409
+                    return jsonify({"error": f"Limite de {MAX_BOOKINGS_PER_DAY} agendamentos por dia para o usuário '{user_name}' seria excedido no dia {booking_date_obj.strftime('%Y-%m-%d')}."}), 409
 
             # Validation for "Geral" rooms - only one per period per day per user
             for booking_date_obj, _ in daily_new_bookings_count.items():
@@ -386,7 +425,7 @@ def create_booking():
                 for period, geral_rooms in geral_periods_in_request.items():
                     if len(geral_rooms) > 1:
                         return jsonify({
-                            "error": f"VocÃª sÃ³ pode agendar uma sala da categoria 'Geral' por perÃ­odo. Tentativa de agendar mÃºltiplas salas 'Geral' no perÃ­odo '{period}' do dia {booking_date_obj.strftime('%Y-%m-%d')}."
+                            "error": f"Você só pode agendar uma sala da categoria 'Geral' por período. Tentativa de agendar múltiplas salas 'Geral' no período '{period}' do dia {booking_date_obj.strftime('%Y-%m-%d')}."
                         }), 409
                     
                     existing_geral_booking = Booking.query.join(Room).filter(
@@ -398,19 +437,19 @@ def create_booking():
                     
                     if existing_geral_booking:
                         return jsonify({
-                            "error": f"VocÃª jÃ¡ possui um agendamento para uma sala da categoria 'Geral' ({existing_geral_booking.room.name}) no perÃ­odo '{period}' do dia {booking_date_obj.strftime('%Y-%m-%d')}."
+                            "error": f"Você já possui um agendamento para uma sala da categoria 'Geral' ({existing_geral_booking.room.name}) no período '{period}' do dia {booking_date_obj.strftime('%Y-%m-%d')}."
                         }), 409
 
             # Validation for booking conflicts (slot already taken)
             for slot in processed_slots:
                 if check_booking_conflict(slot["room_id"], slot["booking_date_obj"], slot["period"]):
                     return jsonify({
-                        "error": f"A sala '{slot['room_name']}' jÃ¡ estÃ¡ reservada para o perÃ­odo '{slot['period']}' no dia {slot['booking_date_str']}."
+                        "error": f"A sala '{slot['room_name']}' já está reservada para o período '{slot['period']}' no dia {slot['booking_date_str']}."
                     }), 409
         
         newly_created_bookings_details_for_email = []
         
-        # Criar agendamentos para slots especÃ­ficos
+        # Criar agendamentos para slots específicos
         for slot in processed_slots:
             new_booking = Booking(
                 user_name=user_name, 
@@ -428,9 +467,9 @@ def create_booking():
                 "period": slot["period"]
             })
         
-        # Se nÃ£o hÃ¡ slots mas hÃ¡ observaÃ§Ã£o, criar um registro de observaÃ§Ã£o geral
+        # Se não há slots mas há observação, criar um registro de observação geral
         if not processed_slots and observation.strip():
-            # Determinar a data da semana atual para a observaÃ§Ã£o geral
+            # Determinar a data da semana atual para a observação geral
             now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
             now_brasilia = now_utc.astimezone(BRASILIA_TZ)
             today_brasilia = now_brasilia.date()
@@ -441,9 +480,9 @@ def create_booking():
                 user_email=user_email,
                 coordinator_name=coordinator_name,
                 observation=observation,
-                room_id=None,  # Sem sala especÃ­fica
+                room_id=None,  # Sem sala específica
                 booking_date=current_week_monday,  # Data da segunda-feira da semana atual
-                period="ObservaÃ§Ã£o Geral"  # PerÃ­odo especial para observaÃ§Ãµes gerais
+                period="Observação Geral"  # Período especial para observações gerais
             )
             db.session.add(general_observation_booking)
         
@@ -456,12 +495,12 @@ def create_booking():
         if processed_slots:
             response_message = "Agendamento(s) criado(s) com sucesso!"
         elif observation.strip():
-            response_message = "ObservaÃ§Ã£o registrada com sucesso!"
+            response_message = "Observação registrada com sucesso!"
         else:
-            response_message = "Nenhuma aÃ§Ã£o realizada." # Caso nÃ£o haja slots nem observaÃ§Ã£o (jÃ¡ validado antes)
+            response_message = "Nenhuma ação realizada." # Caso não haja slots nem observação (já validado antes)
             
         if not email_sent_successfully:
-            response_message += " (Houve um problema ao enviar o e-mail de confirmaÃ§Ã£o.)"
+            response_message += " (Houve um problema ao enviar o e-mail de confirmação.)"
         
         return jsonify({
             "message": response_message,
@@ -501,8 +540,8 @@ def get_bookings():
         
         def booking_sort_key(booking):
             try:
-                # ObservaÃ§Ãµes gerais vÃ£o por Ãºltimo
-                if booking.period == "ObservaÃ§Ã£o Geral":
+                # Observações gerais vão por último
+                if booking.period == "Observação Geral":
                     return (999, 999)
                 
                 if booking.room:
@@ -531,7 +570,7 @@ def get_bookings():
                 "coordinator_name": booking.coordinator_name, 
                 "observation": booking.observation,
                 "room_id": booking.room_id,
-                "room_name": booking.room.name if booking.room else "ObservaÃ§Ã£o Geral", 
+                "room_name": booking.room.name if booking.room else "Observação Geral", 
                 "booking_date": booking.booking_date.isoformat(),
                 "period": booking.period, 
                 "created_at": booking.created_at.isoformat() if booking.created_at else None
