@@ -7,7 +7,7 @@ from datetime import datetime, date, timedelta, time
 from collections import defaultdict
 from flask_mail import Message
 import re
-import pytz
+import pytz # Importar pytz para lidar com fusos horários
 from functools import wraps
 
 # Importação condicional do weasyprint
@@ -20,42 +20,6 @@ except ImportError:
 
 bookings_bp = Blueprint("bookings_bp", __name__)
 
-# REGISTRO DO FILTRO date_from_string
-@bookings_bp.app_template_filter('date_from_string')
-def date_from_string_filter(date_str):
-    try:
-        if isinstance(date_str, str):
-            for fmt in ['%Y-%m-%d', '%d/%m/%Y']:
-                try:
-                    return datetime.strptime(date_str, fmt).date()
-                except ValueError:
-                    continue
-        elif isinstance(date_str, date):
-            return date_str
-        elif isinstance(date_str, datetime):
-            return date_str.date()
-    except Exception:
-        pass
-    return None
-
-# REGISTRO DO FILTRO format_weekday
-@bookings_bp.app_template_filter('format_weekday')
-def format_weekday_filter(date_obj):
-    weekdays = {
-        0: 'Segunda-feira', 1: 'Terça-feira', 2: 'Quarta-feira',
-        3: 'Quinta-feira', 4: 'Sexta-feira', 5: 'Sábado', 6: 'Domingo'
-    }
-    if isinstance(date_obj, str):
-        date_obj = date_from_string_filter(date_obj)
-    if date_obj:
-        return weekdays.get(date_obj.weekday(), '')
-    return ''
-
-# REGISTRO DA FUNÇÃO zip para templates
-@bookings_bp.app_template_global('zip')
-def zip_template(*args):
-    return zip(*args)
-
 MAX_BOOKINGS_PER_DAY = 3
 
 # Definir o fuso horário de Brasília
@@ -65,8 +29,8 @@ BRASILIA_TZ = pytz.timezone("America/Sao_Paulo")
 def require_admin_key(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        admin_key = request.headers.get("X-Admin-Key") or request.args.get("admin_key")
-        expected_key = current_app.config.get("ADMIN_KEY")
+        admin_key = request.headers.get('X-Admin-Key') or request.args.get('admin_key')
+        expected_key = current_app.config.get('ADMIN_KEY')
         
         if not expected_key:
             return jsonify({"error": "Configuração administrativa não encontrada"}), 500
@@ -85,9 +49,8 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, obs
             current_app.logger.error("Flask-Mail (mail object) not found in current_app.extensions. Email not sent.")
             return False
             
-        # Permitir envio de email mesmo sem slots específicos de sala
-        if not booked_slots_details and not observation:
-            current_app.logger.info("No booking details or observation to send in email.")
+        if not booked_slots_details:
+            current_app.logger.info("No booking details to send in email.")
             return False
 
         subject = "Confirmação de Agendamento de Laboratório"
@@ -96,29 +59,26 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, obs
 
         html_body = f"""\
         <p>Olá {user_name},</p>
+        <p>Seu agendamento de laboratório foi confirmado com sucesso. Detalhes abaixo:</p>
+        <ul>
         """
-        
-        if booked_slots_details:
-            html_body += "<p>Seu agendamento de laboratório foi confirmado com sucesso. Detalhes abaixo:</p><ul>"
-            for slot in booked_slots_details:
-                booking_date_formatted = slot["booking_date"]
-                if isinstance(slot["booking_date"], date):
-                    booking_date_formatted = slot["booking_date"].strftime("%d/%m/%Y")
-                elif isinstance(slot["booking_date"], str):
-                    try:
-                        booking_date_formatted = datetime.strptime(slot["booking_date"], "%Y-%m-%d").strftime("%d/%m/%Y")
-                    except ValueError:
-                        pass
+        for slot in booked_slots_details:
+            booking_date_formatted = slot["booking_date"]
+            if isinstance(slot["booking_date"], date):
+                booking_date_formatted = slot["booking_date"].strftime("%d/%m/%Y")
+            elif isinstance(slot["booking_date"], str):
+                try:
+                    booking_date_formatted = datetime.strptime(slot["booking_date"], "%Y-%m-%d").strftime("%d/%m/%Y")
+                except ValueError:
+                    pass
 
-                html_body += f"<li>Sala: {slot['room_name']} - Data: {booking_date_formatted} - Período: {slot['period']}</li>"
-            html_body += "</ul>"
+            html_body += f"<li>Sala: {slot['room_name']} - Data: {booking_date_formatted} - Período: {slot['period']}</li>"
         
-        if observation:
-            html_body += f"<p><strong>Observação registrada:</strong> {observation}</p>"
-        
+        html_body += "</ul>"
         if coordinator_name:
             html_body += f"<p>Coordenador: {coordinator_name}</p>"
-            
+        if observation:
+            html_body += f"<p>Observação: {observation}</p>"
         html_body += "<p>Obrigado! Observação: Em caso de dúvidas sobre a escala, entre em contato com Ana Correa pelo e-mail: ana.correa@itv.org</p>"
 
         msg = Message(subject, sender=sender, recipients=recipients)
@@ -163,7 +123,7 @@ def sort_rooms_custom(rooms):
     
     return sorted(rooms, key=room_sort_key)
 
-# FUNÇÃO ÚNICA PARA DETERMINAR STATUS DA JANELA DE AGENDAMENTO
+# Função para determinar o status da janela de agendamento
 def get_booking_window_status():
     try:
         now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
@@ -249,45 +209,39 @@ def create_booking():
 
         user_name = data.get("user_name")
         user_email = data.get("user_email")
-        coordinator_name = data.get("coordinator_name", "")
+        coordinator_name = data.get("coordinator_name")
         observation = data.get("observation", "")
-        slots_data = data.get("slots", [])
+        slots_data = data.get("slots")
 
-        # Primeiro, verificar se há slots OU observação. Se não houver nenhum, é um erro.
-        if not slots_data and not observation.strip():
-            return jsonify({"error": "É necessário selecionar pelo menos uma sala ou fornecer uma observação."}), 400
-
-        # Validar campos obrigatórios
-        if not all([user_name, user_email]):
-            return jsonify({"error": "Missing fields. Required: user_name, user_email"}), 400
+        if not all([user_name, user_email, slots_data]):
+            return jsonify({"error": "Missing fields. Required: user_name, user_email, slots"}), 400
         
-        if not re.match(r"[^@]+@[^@]+\.[^@]+", user_email):
+        if not isinstance(slots_data, list) or not slots_data:
+            return jsonify({"error": "Slots must be a non-empty list"}), 400
+
+        if "@" not in user_email or "." not in user_email.split("@")[-1]:
             return jsonify({"error": "Invalid email format"}), 400
 
         processed_slots = []
         daily_new_bookings_count = defaultdict(int)
+
         booking_window = get_booking_window_status()
 
-        # Processar slots apenas se existirem
-        if slots_data:
-            if not isinstance(slots_data, list):
-                return jsonify({"error": "Slots must be a list"}), 400
+        for slot_input in slots_data:
+            room_id = slot_input.get("room_id")
+            booking_date_str = slot_input.get("booking_date")
+            period = slot_input.get("period")
 
-            for slot_input in slots_data:
-                room_id = slot_input.get("room_id")
-                booking_date_str = slot_input.get("booking_date")
-                period = slot_input.get("period")
-
-                if not all([room_id, booking_date_str, period]):
-                    return jsonify({"error": f"Invalid slot data: {slot_input}. Each slot needs room_id, booking_date, period"}), 400
-                if period not in ["Manhã", "Tarde"]:
-                    return jsonify({"error": f"Invalid period '{period}' in slot: {slot_input}. Must be 'Manhã' or 'Tarde'"}), 400
-                try:
-                    booking_date_obj = datetime.strptime(booking_date_str, "%Y-%m-%d").date()
-                except ValueError:
-                    return jsonify({"error": f"Invalid date format '{booking_date_str}' in slot: {slot_input}. Use YYYY-MM-DD"}), 400
-                
-                # Validação da janela de agendamento
+            if not all([room_id, booking_date_str, period]):
+                return jsonify({"error": f"Invalid slot data: {slot_input}. Each slot needs room_id, booking_date, period"}), 400
+            if period not in ["Manhã", "Tarde"]:
+                return jsonify({"error": f"Invalid period '{period}' in slot: {slot_input}. Must be 'Manhã' or 'Tarde'"}), 400
+            try:
+                booking_date_obj = datetime.strptime(booking_date_str, "%Y-%m-%d").date()
+            except ValueError:
+                return jsonify({"error": f"Invalid date format '{booking_date_str}' in slot: {slot_input}. Use YYYY-MM-DD"}), 400
+            
+            # Validação da janela de agendamento
             now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
             now_brasilia = now_utc.astimezone(BRASILIA_TZ)
             today_brasilia = now_brasilia.date()
@@ -297,8 +251,8 @@ def create_booking():
             if booking_date_obj.weekday() >= 5: # Sábado ou Domingo
                 return jsonify({"error": f"Agendamentos para {booking_date_str} são permitidos apenas de segunda a sexta-feira."}), 400
 
-            #if booking_date_obj < today_brasilia:
-               # return jsonify({"error": f"Agendamento para {booking_date_str} não pode ser no passado."}), 400
+            if booking_date_obj < today_brasilia:
+                return jsonify({"error": f"Agendamento para {booking_date_str} não pode ser no passado."}), 400
             
             if booking_date_obj >= current_week_monday and booking_date_obj < next_week_monday:
                 # Agendamento para a semana atual
