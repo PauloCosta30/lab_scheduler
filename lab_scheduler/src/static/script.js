@@ -1,5 +1,3 @@
-// /home/ubuntu/lab_scheduler/src/static/script.js
-
 document.addEventListener("DOMContentLoaded", () => {
     // DOM Elements for Modal and New Flow
     const scheduleTableContainer = document.getElementById("scheduleTableContainer");
@@ -27,25 +25,9 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentWeekStartDate;
     let bookingWindowStatus = null;
 
-    // Mapeamento de períodos para o formato esperado pelo backend
-    const PERIOD_MAPPING = {
-        'Manhã': 'ManhÃ£',
-        'Tarde': 'Tarde'
-    };
-
-    // Função para converter período para o formato do backend
-    function convertPeriodToBackend(period) {
-        return PERIOD_MAPPING[period] || period;
-    }
-
-    // Função para converter período do backend para o frontend
-    function convertPeriodFromBackend(period) {
-        const reverseMapping = {
-            'ManhÃ£': 'Manhã',
-            'Tarde': 'Tarde'
-        };
-        return reverseMapping[period] || period;
-    }
+    // REMOVIDO: Mapeamento de períodos para o formato esperado pelo backend
+    // REMOVIDO: Função para converter período para o formato do backend
+    // REMOVIDO: Função para converter período do backend para o frontend
 
     // --- Helper Functions for Date Handling (UTC) ---
     function getTodayUTC() {
@@ -320,15 +302,14 @@ document.addEventListener("DOMContentLoaded", () => {
                     const cell = document.createElement("td");
                     cell.className = "schedule-cell";
                     
-                    // Converter período para o formato do backend para buscar agendamentos
-                    const backendPeriod = convertPeriodToBackend(period);
+                    // MODIFICAÇÃO: Usar 'period' diretamente, sem conversão
                     const booking = bookings.find(b => 
                         b.room_id === room.id && 
                         b.booking_date === dateStr && 
-                        b.period === backendPeriod
+                        b.period === period // Usando 'period' diretamente
                     );
                     
-                    console.log(`Verificando agendamento para Sala ${room.id} (${room.name}), Data ${dateStr}, Período ${backendPeriod}:`, booking);
+                    console.log(`Verificando agendamento para Sala ${room.id} (${room.name}), Data ${dateStr}, Período ${period}:`, booking);
                     
                     if (booking) {
                         // Sala já está reservada
@@ -675,10 +656,11 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         const bookingData = {
+            // MODIFICAÇÃO: Enviar 'period' diretamente, sem conversão
             slots: selectedSlots.map(slot => ({
                 room_id: slot.roomId,
                 booking_date: slot.date,
-                period: slot.period
+                period: slot.period // Usando 'period' diretamente
             })),
             user_name: userName.trim(),
             user_email: emailTrimmed,
@@ -832,53 +814,4 @@ document.addEventListener("DOMContentLoaded", () => {
             
             // Debug: Verificar se o formulário existe e tem elementos
             console.log("Form encontrado:", modalBookingForm);
-            console.log("Elementos do form:", modalBookingForm.elements);
-            
-            const formData = new FormData(modalBookingForm);
-            await createBooking(formData);
-        });
-    }
-
-    function updateSelectedSlotsSummary() {
-        if (!selectedSlotsSummaryList) return;
-        
-        selectedSlotsSummaryList.innerHTML = "";
-        if (selectedSlots.length === 0) {
-            const li = document.createElement("li");
-            li.innerHTML = "<em>Nenhum horário selecionado - Agendamento somente observação</em>";
-            li.style.color = "#666";
-            selectedSlotsSummaryList.appendChild(li);
-            return;
-        }
-        selectedSlots.forEach(slot => {
-            const li = document.createElement("li");
-            li.textContent = `${slot.roomName} - ${slot.date} - ${slot.period}`;
-            selectedSlotsSummaryList.appendChild(li);
-        });
-    }
-
-    // --- Event Listeners ---
-    if (weekSelector) {
-        weekSelector.value = new Date().toISOString().split("T")[0];
-    }
-    
-    if (loadScheduleButton) {
-        loadScheduleButton.addEventListener("click", () => {
-            const selectedDate = weekSelector ? weekSelector.value : null;
-            loadScheduleData(selectedDate);
-        });
-    }
-    
-    if (generatePdfButton) {
-        generatePdfButton.addEventListener("click", generatePdf);
-    }
-
-    // --- Initialization ---
-    console.log("Inicializando aplicação...");
-    
-    // Carregar status da janela de agendamento primeiro
-    fetchBookingWindowStatus().then(() => {
-        // Depois carregar a escala
-        loadScheduleData();
-    });
-});
+            console.log("
