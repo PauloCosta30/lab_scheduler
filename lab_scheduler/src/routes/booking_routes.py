@@ -205,6 +205,7 @@ def debug_booking_window():
         return jsonify({"error": str(e)}), 500
 
 # Função para determinar o status da janela de agendamento
+# Função para determinar o status da janela de agendamento (CORRIGIDA)
 def get_booking_window_status():
     try:
         now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
@@ -217,19 +218,25 @@ def get_booking_window_status():
         # Encontrar a segunda-feira da próxima semana
         next_week_monday = current_week_monday + timedelta(weeks=1)
         
-        # Definir os pontos de corte para a semana atual
-        current_week_cutoff_date = current_week_monday + timedelta(days=2) # Quarta-feira
-        current_week_cutoff_time = time(23, 59, 59) # 23:59:59
-        current_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(current_week_monday + timedelta(days=3), time(0, 0, 0))) # Cutoff: Quarta-feira 23:59:59
+        # CORREÇÃO: Definir os pontos de corte para a semana atual
+        # Cutoff: Quarta-feira às 23:59:59
+        current_week_cutoff_date = current_week_monday + timedelta(days=2)  # Quarta-feira
+        current_week_cutoff_datetime = BRASILIA_TZ.localize(
+            datetime.combine(current_week_cutoff_date, time(23, 59, 59))
+        )
 
-        # Definir os pontos de corte para a próxima semana
-        next_week_open_date = current_week_monday + timedelta(days=4) # Sexta-feira
-        next_week_open_time = time(18, 0, 0) # 18:00
-        next_week_open_datetime = BRASILIA_TZ.localize(datetime.combine(current_week_monday + timedelta(days=4), time(18, 0, 0))) # Abertura: Sexta-feira 18:00
+        # CORREÇÃO: Definir os pontos de abertura e corte para a próxima semana
+        # Abertura: Sexta-feira às 18:00
+        next_week_open_date = current_week_monday + timedelta(days=4)  # Sexta-feira
+        next_week_open_datetime = BRASILIA_TZ.localize(
+            datetime.combine(next_week_open_date, time(18, 0, 0))
+        )
 
-        next_week_cutoff_date = next_week_monday + timedelta(days=2) # Quarta-feira da próxima semana
-        next_week_cutoff_time = time(23, 59, 59) # 23:59:59
-        next_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_monday + timedelta(days=3), time(0, 0, 0))) # Cutoff: Quarta-feira 23:59:59 da próxima semana
+        # Cutoff próxima semana: Quarta-feira da próxima semana às 23:59:59
+        next_week_cutoff_date = next_week_monday + timedelta(days=2)  # Quarta-feira da próxima semana
+        next_week_cutoff_datetime = BRASILIA_TZ.localize(
+            datetime.combine(next_week_cutoff_date, time(23, 59, 59))
+        )
 
         status = {
             "current_week": {"open": False, "message": "Fechado"},
@@ -243,21 +250,21 @@ def get_booking_window_status():
         current_app.logger.info(f"Abertura próxima semana: {next_week_open_datetime}")
         current_app.logger.info(f"Cutoff próxima semana: {next_week_cutoff_datetime}")
 
-        # Regra para a semana atual
+        # CORREÇÃO: Regra para a semana atual - deve estar ABERTA até quarta-feira 23:59
         if now_brasilia <= current_week_cutoff_datetime:
             status["current_week"]["open"] = True
-            status["current_week"]["message"] = "Aberto até quarta-feira às 23:59"
+            status["current_week"]["message"] = f"Aberto até quarta-feira ({current_week_cutoff_date.strftime('%d/%m')}) às 23:59"
         else:
-            status["current_week"]["message"] = "Fechado (após quarta-feira 23:59)"
+            status["current_week"]["message"] = f"Fechado (após quarta-feira {current_week_cutoff_date.strftime('%d/%m')} 23:59)"
 
-        # Regra para a próxima semana
+        # CORREÇÃO: Regra para a próxima semana
         if now_brasilia >= next_week_open_datetime and now_brasilia <= next_week_cutoff_datetime:
             status["next_week"]["open"] = True
-            status["next_week"]["message"] = "Aberto para a próxima semana"
+            status["next_week"]["message"] = f"Aberto até quarta-feira ({next_week_cutoff_date.strftime('%d/%m')}) às 23:59"
         elif now_brasilia < next_week_open_datetime:
-            status["next_week"]["message"] = f"Abre na sexta-feira às 18:00 ({next_week_open_date.strftime('%d/%m')})"
+            status["next_week"]["message"] = f"Abre na sexta-feira ({next_week_open_date.strftime('%d/%m')}) às 18:00"
         else:
-            status["next_week"]["message"] = "Fechado (após quarta-feira 23:59 da próxima semana)"
+            status["next_week"]["message"] = f"Fechado (após quarta-feira {next_week_cutoff_date.strftime('%d/%m')} 23:59)"
 
         return status
     except Exception as e:
@@ -269,7 +276,7 @@ def get_booking_window_status():
         }
 
 @bookings_bp.route("/booking-window-status", methods=["GET"])
-def get_booking_window_status():
+def get_booking_window_status_api():
     try:
         # Obter timezone do Brasil
         brasil_tz = pytz.timezone('America/Sao_Paulo')
@@ -278,48 +285,62 @@ def get_booking_window_status():
         # Normalizar microssegundos para evitar problemas de comparação
         now_brasilia = now_brasilia.replace(microsecond=0)
         
-        # Encontrar próxima quarta-feira às 23:59
+        # CORREÇÃO: Encontrar a próxima quarta-feira às 23:59
         today = now_brasilia.date()
-        days_until_wednesday = (2 - today.weekday()) % 7  # 2 = quarta-feira
-        if days_until_wednesday == 0 and now_brasilia.time() > time(23, 59):
-            days_until_wednesday = 7
+        days_until_wednesday = (2 - today.weekday()) % 7  # 2 = quarta-feira (0=segunda, 1=terça, 2=quarta)
         
-        current_week_cutoff = today + timedelta(days=days_until_wednesday)
+        # CORREÇÃO: Se hoje É quarta-feira, verificar se ainda não passou das 23:59
+        if days_until_wednesday == 0:  # Hoje é quarta-feira
+            if now_brasilia.time() <= time(23, 59, 59):
+                # Ainda está dentro do prazo de hoje (quarta-feira)
+                current_week_cutoff = today
+            else:
+                # Já passou das 23:59 de quarta-feira, próxima quarta-feira
+                days_until_wednesday = 7
+                current_week_cutoff = today + timedelta(days=days_until_wednesday)
+        else:
+            # Não é quarta-feira, calcular próxima quarta-feira
+            current_week_cutoff = today + timedelta(days=days_until_wednesday)
+        
         current_week_cutoff_datetime = brasil_tz.localize(
-            datetime.combine(current_week_cutoff, time(23, 59))
-        ).replace(microsecond=0)  # Normalizar microssegundos
+            datetime.combine(current_week_cutoff, time(23, 59, 59))
+        ).replace(microsecond=0)
         
-        # Encontrar próxima sexta-feira às 18:00
+        # CORREÇÃO: Encontrar próxima sexta-feira às 18:00 para abertura da próxima semana
         days_until_friday = (4 - today.weekday()) % 7  # 4 = sexta-feira
-        if days_until_friday <= days_until_wednesday:
-            days_until_friday += 7
+        if days_until_friday == 0 and now_brasilia.time() >= time(18, 0, 0):
+            # É sexta-feira e já passou das 18:00, próxima sexta-feira
+            days_until_friday = 7
+        elif days_until_friday == 0:
+            # É sexta-feira mas ainda não são 18:00
+            pass
         
         next_opening = today + timedelta(days=days_until_friday)
         next_opening_datetime = brasil_tz.localize(
-            datetime.combine(next_opening, time(18, 0))
-        ).replace(microsecond=0)  # Normalizar microssegundos
+            datetime.combine(next_opening, time(18, 0, 0))
+        ).replace(microsecond=0)
         
-        # Log para debug (mantenha temporariamente)
-        current_app.logger.info(f"Debug - Agora: {now_brasilia}")
-        current_app.logger.info(f"Debug - Cutoff: {current_week_cutoff_datetime}")
-        current_app.logger.info(f"Debug - Comparação: {now_brasilia <= current_week_cutoff_datetime}")
+        # Log para debug
+        current_app.logger.info(f"Debug API - Agora: {now_brasilia}")
+        current_app.logger.info(f"Debug API - Cutoff: {current_week_cutoff_datetime}")
+        current_app.logger.info(f"Debug API - Comparação (aberto?): {now_brasilia <= current_week_cutoff_datetime}")
         
-        # Verificar se está dentro da janela de agendamento
+        # CORREÇÃO: Verificar se está dentro da janela de agendamento
         is_open = now_brasilia <= current_week_cutoff_datetime
         
-        return {
+        return jsonify({
             'is_open': is_open,
             'current_time': now_brasilia.strftime('%Y-%m-%d %H:%M:%S'),
             'closes_at': current_week_cutoff_datetime.strftime('%Y-%m-%d %H:%M:%S'),
             'reopens_at': next_opening_datetime.strftime('%Y-%m-%d %H:%M:%S')
-        }
+        })
         
     except Exception as e:
         current_app.logger.error(f"Erro na verificação da janela de agendamento: {e}")
-        return {
+        return jsonify({
             'is_open': False,
             'error': 'Erro interno no sistema'
-        }
+        }), 500
 
 
 @bookings_bp.route("/rooms", methods=["GET"])
