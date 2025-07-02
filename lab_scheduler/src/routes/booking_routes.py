@@ -220,16 +220,16 @@ def get_booking_window_status():
         # Definir os pontos de corte para a semana atual
         current_week_cutoff_date = current_week_monday + timedelta(days=2) # Quarta-feira
         current_week_cutoff_time = time(23, 59, 59) # 23:59:59
-        current_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(current_week_cutoff_date, current_week_cutoff_time))
+        current_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(current_week_monday + timedelta(days=3), time(0, 0, 0))) # Cutoff: Quarta-feira 23:59:59
 
         # Definir os pontos de corte para a próxima semana
         next_week_open_date = current_week_monday + timedelta(days=4) # Sexta-feira
         next_week_open_time = time(18, 0, 0) # 18:00
-        next_week_open_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_open_date, next_week_open_time))
+        next_week_open_datetime = BRASILIA_TZ.localize(datetime.combine(current_week_monday + timedelta(days=4), time(18, 0, 0))) # Abertura: Sexta-feira 18:00
 
         next_week_cutoff_date = next_week_monday + timedelta(days=2) # Quarta-feira da próxima semana
         next_week_cutoff_time = time(23, 59, 59) # 23:59:59
-        next_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_cutoff_date, next_week_cutoff_time))
+        next_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_monday + timedelta(days=3), time(0, 0, 0))) # Cutoff: Quarta-feira 23:59:59 da próxima semana
 
         status = {
             "current_week": {"open": False, "message": "Fechado"},
