@@ -205,7 +205,6 @@ document.addEventListener("DOMContentLoaded", () => {
         scheduleTableContainer.innerHTML = "";
         selectedSlots = [];
         updateButtonStates();
-        const todayUTC = getTodayUTC();
 
         // Adicionar aviso sobre agendamentos somente observação
         const infoDiv = document.createElement("div");
@@ -262,9 +261,6 @@ document.addEventListener("DOMContentLoaded", () => {
             row.appendChild(roomCell);
 
             datesOfWeek.forEach(dateStr => {
-                const slotDateUTC = parseDateStrToUTC(dateStr);
-                const isPastDate = slotDateUTC < todayUTC;
-
                 periods.forEach(period => {
                     const cell = document.createElement("td");
                     cell.className = "schedule-cell";
@@ -276,16 +272,16 @@ document.addEventListener("DOMContentLoaded", () => {
                     );
                     
                     if (booking) {
+                        // Sala já está reservada
                         cell.textContent = booking.user_name;
                         cell.classList.add("booked");
                         cell.title = `Reservado por: ${booking.user_name}`;
-                    } else if (isPastDate) {
-                        cell.textContent = "Indisponível";
-                        cell.classList.add("past");
                     } else {
                         // Verificar se o agendamento está permitido para esta data
                         const isBookingAllowed = checkIfBookingAllowed(dateStr);
+                        
                         if (isBookingAllowed) {
+                            // Disponível para agendamento
                             cell.textContent = "Disponível";
                             cell.classList.add("available");
                             cell.dataset.roomId = room.id;
@@ -296,6 +292,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             cell.style.cursor = "pointer";
                             cell.title = "Clique para selecionar";
                         } else {
+                            // Período de agendamento fechado
                             cell.textContent = "Fechado";
                             cell.classList.add("closed");
                             cell.title = "Período de agendamento fechado";
@@ -335,17 +332,19 @@ document.addEventListener("DOMContentLoaded", () => {
             // Verificar se o slot é da semana atual
             if (slotDate >= currentWeekMonday && slotDate < nextWeekMonday) {
                 const allowed = bookingWindowStatus.current_week.open;
-                console.log(`Semana atual - ${dateStr}: ${allowed}`);
+                console.log(`Semana atual - ${dateStr}: ${allowed ? 'PERMITIDO' : 'FECHADO'}`);
                 return allowed;
                 
             } else if (slotDate >= nextWeekMonday && slotDate < new Date(nextWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000)) {
                 const allowed = bookingWindowStatus.next_week.open;
-                console.log(`Próxima semana - ${dateStr}: ${allowed}`);
+                console.log(`Próxima semana - ${dateStr}: ${allowed ? 'PERMITIDO' : 'FECHADO'}`);
                 return allowed;
             }
 
-            console.log(`Data fora do período permitido - ${dateStr}`);
+            // Se não é da semana atual nem da próxima, não permitir
+            console.log(`Data fora do período permitido - ${dateStr}: FECHADO`);
             return false;
+            
         } catch (error) {
             console.error("Erro ao verificar se agendamento é permitido:", error);
             return false;
@@ -690,7 +689,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 updateSelectedSlotsSummary();
                 updateButtonStates(); // Atualizar texto do botão
                 modalBookingForm.reset();
-                
                 // Recarregar a escala para garantir consistência
                 setTimeout(() => {
                     loadScheduleData(currentWeekStartDate.toISOString().split("T")[0]);
