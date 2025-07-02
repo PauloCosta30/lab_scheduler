@@ -355,46 +355,23 @@ document.addEventListener("DOMContentLoaded", () => {
                 console.log(`Deadline quarta-feira: ${wednesdayDeadline.toISOString()}`);
                 console.log(`Horário atual: ${currentTimeUTC.toISOString()}`);
                 
-                // CORREÇÃO PRINCIPAL: Para datas anteriores ao dia atual, verificar apenas o deadline
-                // Para o dia atual, permitir agendamentos independente do horário (até o deadline)
-                if (slotDate < todayUTC) {
-                    // Data já passou completamente - verificar se ainda está dentro do prazo da semana
-                    if (currentTimeUTC <= wednesdayDeadline) {
-                        console.log(`Data passada ${dateStr}: permitido (ainda dentro do prazo da semana)`);
-                        return {
-                            allowed: true,
-                            displayText: "Disponível",
-                            cssClass: "available",
-                            title: "Clique para selecionar"
-                        };
-                    } else {
-                        console.log(`Data passada ${dateStr}: fechado (após deadline)`);
-                        return {
-                            allowed: false,
-                            displayText: "Fechado",
-                            cssClass: "closed",
-                            title: "Período de agendamento fechado (após quarta 23:59)"
-                        };
-                    }
+                // CORREÇÃO PRINCIPAL: Verificar apenas se ainda está dentro do prazo da semana atual
+                if (currentTimeUTC <= wednesdayDeadline) {
+                    console.log(`Semana atual - ${dateStr}: permitido (antes do deadline)`);
+                    return {
+                        allowed: true,
+                        displayText: "Disponível",
+                        cssClass: "available",
+                        title: "Clique para selecionar"
+                    };
                 } else {
-                    // Data é hoje ou futura na semana atual
-                    if (currentTimeUTC <= wednesdayDeadline) {
-                        console.log(`Semana atual - ${dateStr}: permitido (antes do deadline)`);
-                        return {
-                            allowed: true,
-                            displayText: "Disponível",
-                            cssClass: "available",
-                            title: "Clique para selecionar"
-                        };
-                    } else {
-                        console.log(`Semana atual - ${dateStr}: fechado (após deadline)`);
-                        return {
-                            allowed: false,
-                            displayText: "Fechado",
-                            cssClass: "closed",
-                            title: "Período de agendamento fechado (após quarta 23:59)"
-                        };
-                    }
+                    console.log(`Semana atual - ${dateStr}: fechado (após deadline)`);
+                    return {
+                        allowed: false,
+                        displayText: "Fechado",
+                        cssClass: "closed",
+                        title: "Período de agendamento fechado (após quarta 23:59)"
+                    };
                 }
                 
             } else if (slotDate >= nextWeekMonday && slotDate < weekAfterNextMonday) {
@@ -446,6 +423,29 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // Função adicional para validar antes de enviar o agendamento
+    function validateBookingDates(selectedSlots) {
+        const todayUTC = getTodayUTC();
+        const invalidSlots = [];
+        
+        for (const slot of selectedSlots) {
+            const slotDate = parseDateStrToUTC(slot.date);
+            const bookingStatus = checkIfBookingAllowed(slot.date);
+            
+            if (!bookingStatus.allowed) {
+                invalidSlots.push({
+                    slot: slot,
+                    reason: bookingStatus.title
+                });
+            }
+        }
+        
+        return {
+            isValid: invalidSlots.length === 0,
+            invalidSlots: invalidSlots
+        };
+    }
+
     // Função auxiliar para debug dos horários
     function debugBookingTimes() {
         const todayUTC = getTodayUTC();
@@ -476,7 +476,7 @@ document.addEventListener("DOMContentLoaded", () => {
         console.log("=== DEBUG HORÁRIOS DE AGENDAMENTO ===");
         console.log(`Horário atual UTC: ${currentTimeUTC.toISOString()}`);
         console.log(`Segunda-feira da semana: ${currentWeekMonday.toISOString()}`);
-        console.log(`Deadline quarta 23:59: ${wednesdayDeadline.toISOString()}`);
+        console.log(`Deadline quarta 23:59: ${wednesdyDeadline.toISOString()}`);
         console.log(`Liberação sexta 18:00: ${fridayRelease.toISOString()}`);
         console.log(`Semana atual fechada? ${currentTimeUTC > wednesdayDeadline}`);
         console.log(`Próxima semana liberada? ${currentTimeUTC >= fridayRelease}`);
