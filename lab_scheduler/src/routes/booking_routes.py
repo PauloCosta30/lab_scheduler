@@ -207,12 +207,14 @@ def get_booking_window_status():
         }
         
         # Status da semana atual: aberta até quarta-feira 23:59
-        if now_brasilia < current_week_cutoff_datetime:            status["current_week"]["open"] = True
+        if now_brasilia < current_week_cutoff_datetime:
+            status["current_week"]["open"] = True
             status["current_week"]["message"] = f"Aberto até quarta-feira ({current_week_cutoff_date.strftime('%d/%m')}) às 23:59"
         else:
             status["current_week"]["message"] = f"Fechado (após quarta-feira {current_week_cutoff_date.strftime('%d/%m')} 23:59)"
         
-        # Status da próxima semana: abre sexta 18:00, fecha quarta 23:59        if now_brasilia >= next_week_open_datetime and now_brasilia < next_week_cutoff_datetime:
+        # Status da próxima semana: abre sexta 18:00, fecha quarta 23:59
+        if now_brasilia >= next_week_open_datetime and now_brasilia < next_week_cutoff_datetime:
             status["next_week"]["open"] = True
             status["next_week"]["message"] = f"Aberto até quarta-feira ({next_week_cutoff_date.strftime('%d/%m')}) às 23:59"
         elif now_brasilia < next_week_open_datetime:
@@ -256,6 +258,9 @@ def get_booking_window_status_api():
             'is_open': False,
             'error': 'Erro interno no sistema'
         }), 500
+
+@bookings_bp.route("/booking-window-simple", methods=["GET"])
+def get_booking_window_simple():
     """API simplificada que retorna se a janela está aberta ou fechada"""
     try:
         # Obter horário atual em Brasília
