@@ -27,6 +27,26 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentWeekStartDate;
     let bookingWindowStatus = null;
 
+    // Mapeamento de períodos para o formato esperado pelo backend
+    const PERIOD_MAPPING = {
+        'Manhã': 'ManhÃ£',
+        'Tarde': 'Tarde'
+    };
+
+    // Função para converter período para o formato do backend
+    function convertPeriodToBackend(period) {
+        return PERIOD_MAPPING[period] || period;
+    }
+
+    // Função para converter período do backend para o frontend
+    function convertPeriodFromBackend(period) {
+        const reverseMapping = {
+            'ManhÃ£': 'Manhã',
+            'Tarde': 'Tarde'
+        };
+        return reverseMapping[period] || period;
+    }
+
     // --- Helper Functions for Date Handling (UTC) ---
     function getTodayUTC() {
         const today = new Date();
@@ -299,10 +319,12 @@ document.addEventListener("DOMContentLoaded", () => {
                     const cell = document.createElement("td");
                     cell.className = "schedule-cell";
                     
+                    // Converter período para o formato do backend para buscar agendamentos
+                    const backendPeriod = convertPeriodToBackend(period);
                     const booking = bookings.find(b => 
                         b.room_id === room.id && 
                         b.booking_date === dateStr && 
-                        b.period === period
+                        b.period === backendPeriod
                     );
                     
                     if (booking) {
@@ -321,7 +343,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             cell.dataset.roomId = room.id;
                             cell.dataset.roomName = room.name;
                             cell.dataset.date = dateStr;
-                            cell.dataset.period = period;
+                            cell.dataset.period = period; // Mantém o período no formato frontend
                             cell.addEventListener("click", handleSlotClick);
                             cell.style.cursor = "pointer";
                             cell.title = "Clique para selecionar";
@@ -403,7 +425,7 @@ document.addEventListener("DOMContentLoaded", () => {
             roomId: parseInt(cell.dataset.roomId),
             roomName: cell.dataset.roomName,
             date: slotDateStr,
-            period: cell.dataset.period,
+            period: cell.dataset.period, // Mantém o período no formato frontend
             cellRef: cell
         };
 
