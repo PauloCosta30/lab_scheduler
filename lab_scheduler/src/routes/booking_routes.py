@@ -269,13 +269,58 @@ def get_booking_window_status():
         }
 
 @bookings_bp.route("/booking-window-status", methods=["GET"])
-def booking_window_status():
+def get_booking_window_status():
     try:
-        status = get_booking_window_status()
-        return jsonify(status)
+        # Obter timezone do Brasil
+        brasil_tz = pytz.timezone('America/Sao_Paulo')
+        now_brasilia = datetime.now(brasil_tz)
+        
+        # Normalizar microssegundos para evitar problemas de comparação
+        now_brasilia = now_brasilia.replace(microsecond=0)
+        
+        # Encontrar próxima quarta-feira às 23:59
+        today = now_brasilia.date()
+        days_until_wednesday = (2 - today.weekday()) % 7  # 2 = quarta-feira
+        if days_until_wednesday == 0 and now_brasilia.time() > time(23, 59):
+            days_until_wednesday = 7
+        
+        current_week_cutoff = today + timedelta(days=days_until_wednesday)
+        current_week_cutoff_datetime = brasil_tz.localize(
+            datetime.combine(current_week_cutoff, time(23, 59))
+        ).replace(microsecond=0)  # Normalizar microssegundos
+        
+        # Encontrar próxima sexta-feira às 18:00
+        days_until_friday = (4 - today.weekday()) % 7  # 4 = sexta-feira
+        if days_until_friday <= days_until_wednesday:
+            days_until_friday += 7
+        
+        next_opening = today + timedelta(days=days_until_friday)
+        next_opening_datetime = brasil_tz.localize(
+            datetime.combine(next_opening, time(18, 0))
+        ).replace(microsecond=0)  # Normalizar microssegundos
+        
+        # Log para debug (mantenha temporariamente)
+        current_app.logger.info(f"Debug - Agora: {now_brasilia}")
+        current_app.logger.info(f"Debug - Cutoff: {current_week_cutoff_datetime}")
+        current_app.logger.info(f"Debug - Comparação: {now_brasilia <= current_week_cutoff_datetime}")
+        
+        # Verificar se está dentro da janela de agendamento
+        is_open = now_brasilia <= current_week_cutoff_datetime
+        
+        return {
+            'is_open': is_open,
+            'current_time': now_brasilia.strftime('%Y-%m-%d %H:%M:%S'),
+            'closes_at': current_week_cutoff_datetime.strftime('%Y-%m-%d %H:%M:%S'),
+            'reopens_at': next_opening_datetime.strftime('%Y-%m-%d %H:%M:%S')
+        }
+        
     except Exception as e:
-        current_app.logger.error(f"Erro na rota booking-window-status: {str(e)}")
-        return jsonify({"error": "Erro interno do servidor"}), 500
+        current_app.logger.error(f"Erro na verificação da janela de agendamento: {e}")
+        return {
+            'is_open': False,
+            'error': 'Erro interno no sistema'
+        }
+
 
 @bookings_bp.route("/rooms", methods=["GET"])
 def get_rooms():
