@@ -181,6 +181,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // FUNÇÃO CORRIGIDA - Renderizar tabela da escala
     function renderScheduleTable(bookings, roomsData, weekStartDateObj) {
         console.log("Renderizando tabela da escala...");
         
@@ -205,7 +206,6 @@ document.addEventListener("DOMContentLoaded", () => {
         scheduleTableContainer.innerHTML = "";
         selectedSlots = [];
         updateButtonStates();
-        const todayUTC = getTodayUTC();
 
         // Adicionar aviso sobre agendamentos somente observação
         const infoDiv = document.createElement("div");
@@ -262,9 +262,6 @@ document.addEventListener("DOMContentLoaded", () => {
             row.appendChild(roomCell);
 
             datesOfWeek.forEach(dateStr => {
-                const slotDateUTC = parseDateStrToUTC(dateStr);
-                const isPastDate = slotDateUTC < todayUTC;
-
                 periods.forEach(period => {
                     const cell = document.createElement("td");
                     cell.className = "schedule-cell";
@@ -276,16 +273,16 @@ document.addEventListener("DOMContentLoaded", () => {
                     );
                     
                     if (booking) {
+                        // Slot já está reservado
                         cell.textContent = booking.user_name;
                         cell.classList.add("booked");
                         cell.title = `Reservado por: ${booking.user_name}`;
-                    } else if (isPastDate) {
-                        cell.textContent = "Indisponível";
-                        cell.classList.add("past");
                     } else {
-                        // Verificar se o agendamento está permitido para esta data
+                        // Slot não está reservado - verificar se o agendamento está permitido
                         const isBookingAllowed = checkIfBookingAllowed(dateStr);
+                        
                         if (isBookingAllowed) {
+                            // Agendamento permitido
                             cell.textContent = "Disponível";
                             cell.classList.add("available");
                             cell.dataset.roomId = room.id;
@@ -296,9 +293,21 @@ document.addEventListener("DOMContentLoaded", () => {
                             cell.style.cursor = "pointer";
                             cell.title = "Clique para selecionar";
                         } else {
-                            cell.textContent = "Fechado";
-                            cell.classList.add("closed");
-                            cell.title = "Período de agendamento fechado";
+                            // Agendamento não permitido - verificar se é porque já passou do prazo
+                            const slotDate = parseDateStrToUTC(dateStr);
+                            const todayUTC = getTodayUTC();
+                            
+                            if (slotDate < todayUTC) {
+                                // Data já passou completamente
+                                cell.textContent = "Indisponível";
+                                cell.classList.add("past");
+                                cell.title = "Data já passou";
+                            } else {
+                                // Período de agendamento fechado (mas data ainda não passou)
+                                cell.textContent = "Fechado";
+                                cell.classList.add("closed");
+                                cell.title = "Período de agendamento fechado";
+                            }
                         }
                     }
                     row.appendChild(cell);
@@ -352,10 +361,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 
                 console.log(`Semana atual - Hoje: ${currentTimeUTC.toISOString()}`);
                 console.log(`Semana atual - Deadline: ${wednesdayDeadline.toISOString()}`);
+                console.log(`Semana atual - Slot: ${slotDate.toISOString()}`);
                 
-                // Se ainda não passou do deadline de quarta-feira 23:59, permitir agendamento
+                // CORREÇÃO PRINCIPAL: Permitir agendamento até quarta 23:59, mesmo para dias que já passaram
+                // desde que estejamos ainda dentro do prazo de quarta-feira 23:59
                 if (currentTimeUTC <= wednesdayDeadline) {
-                    console.log(`Semana atual - ${dateStr}: permitido (antes do deadline)`);
+                    console.log(`Semana atual - ${dateStr}: permitido (antes do deadline de quarta 23:59)`);
                     return true;
                 } else {
                     console.log(`Semana atual - ${dateStr}: fechado (após deadline de quarta 23:59)`);
