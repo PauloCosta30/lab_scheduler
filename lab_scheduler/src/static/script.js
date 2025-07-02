@@ -1,3 +1,5 @@
+// /home/ubuntu/lab_scheduler/src/static/script.js
+
 document.addEventListener("DOMContentLoaded", () => {
     // DOM Elements for Modal and New Flow
     const scheduleTableContainer = document.getElementById("scheduleTableContainer");
@@ -34,40 +36,6 @@ document.addEventListener("DOMContentLoaded", () => {
     function parseDateStrToUTC(dateStr) {
         const [year, month, day] = dateStr.split("-").map(Number);
         return new Date(Date.UTC(year, month - 1, day));
-    }
-
-    // Nova função para verificar se ainda está dentro do prazo de agendamento (até quarta 23:59)
-    function isWithinBookingDeadline(slotDateStr) {
-        try {
-            const slotDate = parseDateStrToUTC(slotDateStr);
-            const now = new Date(); // Data/hora atual local
-            
-            // Calcular a segunda-feira da semana do slot
-            const slotDayOfWeek = slotDate.getUTCDay();
-            const diffToMonday = slotDayOfWeek === 0 ? -6 : 1 - slotDayOfWeek;
-            const slotWeekMonday = new Date(slotDate.valueOf());
-            slotWeekMonday.setUTCDate(slotDate.getUTCDate() + diffToMonday);
-            
-            // Calcular a quarta-feira da mesma semana às 23:59:59
-            const slotWeekWednesday = new Date(slotWeekMonday.valueOf());
-            slotWeekWednesday.setUTCDate(slotWeekMonday.getUTCDate() + 2); // +2 dias = quarta
-            slotWeekWednesday.setUTCHours(23, 59, 59, 999); // 23:59:59.999
-            
-            // Converter para horário local do usuário para comparação
-            const deadlineLocal = new Date(slotWeekWednesday.getTime());
-            
-            console.log(`Verificando prazo para ${slotDateStr}:`);
-            console.log(`  Slot date: ${slotDate.toISOString()}`);
-            console.log(`  Deadline (quarta 23:59): ${deadlineLocal.toISOString()}`);
-            console.log(`  Now: ${now.toISOString()}`);
-            console.log(`  Dentro do prazo: ${now <= deadlineLocal}`);
-            
-            return now <= deadlineLocal;
-            
-        } catch (error) {
-            console.error("Erro ao verificar prazo de agendamento:", error);
-            return false;
-        }
     }
 
     // --- Helper Functions for Messages ---
@@ -215,7 +183,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function renderScheduleTable(bookings, roomsData, weekStartDateObj) {
         console.log("Renderizando tabela da escala...");
-        console.log("Agendamentos recebidos:", bookings);
         
         if (!scheduleTableContainer) {
             console.error("scheduleTableContainer não encontrado");
@@ -238,6 +205,7 @@ document.addEventListener("DOMContentLoaded", () => {
         scheduleTableContainer.innerHTML = "";
         selectedSlots = [];
         updateButtonStates();
+        const todayUTC = getTodayUTC();
 
         // Adicionar aviso sobre agendamentos somente observação
         const infoDiv = document.createElement("div");
@@ -294,31 +262,30 @@ document.addEventListener("DOMContentLoaded", () => {
             row.appendChild(roomCell);
 
             datesOfWeek.forEach(dateStr => {
+                const slotDateUTC = parseDateStrToUTC(dateStr);
+                const isPastDate = slotDateUTC < todayUTC;
+
                 periods.forEach(period => {
                     const cell = document.createElement("td");
                     cell.className = "schedule-cell";
                     
-                    // Buscar agendamento para esta sala, data e período
                     const booking = bookings.find(b => 
                         b.room_id === room.id && 
                         b.booking_date === dateStr && 
                         b.period === period
                     );
                     
-                    console.log(`Verificando agendamento para Sala ${room.id} (${room.name}), Data ${dateStr}, Período ${period}:`, booking);
-                    
                     if (booking) {
-                        // Sala já está reservada
                         cell.textContent = booking.user_name;
                         cell.classList.add("booked");
                         cell.title = `Reservado por: ${booking.user_name}`;
-                        console.log(`Célula marcada como ocupada: ${room.name} - ${dateStr} - ${period} por ${booking.user_name}`);
+                    } else if (isPastDate) {
+                        cell.textContent = "Indisponível";
+                        cell.classList.add("past");
                     } else {
                         // Verificar se o agendamento está permitido para esta data
                         const isBookingAllowed = checkIfBookingAllowed(dateStr);
-                        
                         if (isBookingAllowed) {
-                            // Disponível para agendamento
                             cell.textContent = "Disponível";
                             cell.classList.add("available");
                             cell.dataset.roomId = room.id;
@@ -329,112 +296,477 @@ document.addEventListener("DOMContentLoaded", () => {
                             cell.style.cursor = "pointer";
                             cell.title = "Clique para selecionar";
                         } else {
-                            // Período de agendamento fechado
                             cell.textContent = "Fechado";
                             cell.classList.add("closed");
                             cell.title = "Período de agendamento fechado";
                         }
                     }
+                    row.appendChild(cell);
                 });
             });
             tbody.appendChild(row);
         });
+        
         table.appendChild(tbody);
         scheduleTableContainer.appendChild(table);
+        
+        console.log("Tabela renderizada com sucesso");
     }
 
     function checkIfBookingAllowed(dateStr) {
-        const today = getTodayUTC();
-        const slotDate = parseDateStrToUTC(dateStr);
-
-        // Agendamentos só podem ser feitos para datas futuras ou o dia atual
-        if (slotDate < today) {
+        console.log(`Verificando se agendamento é permitido para ${dateStr}`);
+        
+        if (!bookingWindowStatus) {
+            console.log("Status da janela de agendamento não disponível");
             return false;
         }
 
-        // Verificar se está dentro do prazo de agendamento (até quarta 23:59 da semana do agendamento)
-        return isWithinBookingDeadline(dateStr);
-    }
+        try {
+            const slotDate = parseDateStrToUTC(dateStr);
+            const todayUTC = getTodayUTC();
+            
+            // Calcular segunda-feira da semana atual (UTC)
+            const currentWeekMonday = new Date(todayUTC.valueOf());
+            const dayOffset = todayUTC.getUTCDay() === 0 ? 6 : todayUTC.getUTCDay() - 1;
+            currentWeekMonday.setUTCDate(todayUTC.getUTCDate() - dayOffset);
+            
+            const nextWeekMonday = new Date(currentWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    // --- Slot Selection and Modal Logic ---
-    function handleSlotClick(event) {
-        const cell = event.target;
-        if (cell.classList.contains("available")) {
-            const roomId = cell.dataset.roomId;
-            const roomName = cell.dataset.roomName;
-            const date = cell.dataset.date;
-            const period = cell.dataset.period;
-
-            const existingIndex = selectedSlots.findIndex(slot => 
-                slot.roomId === roomId && 
-                slot.date === date && 
-                slot.period === period
-            );
-
-            if (existingIndex > -1) {
-                // Remover seleção
-                selectedSlots.splice(existingIndex, 1);
-                cell.classList.remove("selected");
-            } else {
-                // Adicionar seleção
-                selectedSlots.push({ roomId, roomName, date, period });
-                cell.classList.add("selected");
+            // Verificar se o slot é da semana atual
+            if (slotDate >= currentWeekMonday && slotDate < nextWeekMonday) {
+                const allowed = bookingWindowStatus.current_week.open;
+                console.log(`Semana atual - ${dateStr}: ${allowed}`);
+                return allowed;
+                
+            } else if (slotDate >= nextWeekMonday && slotDate < new Date(nextWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000)) {
+                const allowed = bookingWindowStatus.next_week.open;
+                console.log(`Próxima semana - ${dateStr}: ${allowed}`);
+                return allowed;
             }
-            updateButtonStates();
-            updateSelectedSlotsSummary();
+
+            console.log(`Data fora do período permitido - ${dateStr}`);
+            return false;
+        } catch (error) {
+            console.error("Erro ao verificar se agendamento é permitido:", error);
+            return false;
         }
     }
 
-    function updateSelectedSlotsSummary() {
-        if (!selectedSlotsSummaryList) return;
-        
-        selectedSlotsSummaryList.innerHTML = "";
-        if (selectedSlots.length === 0) {
-            selectedSlotsSummaryList.innerHTML = "<li>Nenhum horário selecionado. Você pode prosseguir para fazer um agendamento de observação.</li>";
-        } else {
-            selectedSlots.forEach(slot => {
-                const li = document.createElement("li");
-                li.textContent = `${slot.roomName} - ${new Date(slot.date + 'T00:00:00Z').toLocaleDateString('pt-BR', { timeZone: 'UTC' })} - ${slot.period}`;
-                selectedSlotsSummaryList.appendChild(li);
-            });
+    function handleSlotClick(event) {
+        const cell = event.currentTarget;
+        if (cell.classList.contains("booked") || cell.classList.contains("past") || cell.classList.contains("closed")) return;
+
+        const slotDateStr = cell.dataset.date;
+        const slotDateUTC = parseDateStrToUTC(slotDateStr);
+        const todayUTC = getTodayUTC();
+
+        if (slotDateUTC < todayUTC) {
+            showScheduleMessage("Não é possível selecionar datas/horários passados.", "error");
+            return;
         }
+
+        if (!checkIfBookingAllowed(slotDateStr)) {
+            showScheduleMessage("Agendamentos estão fechados para esta data.", "error");
+            return;
+        }
+
+        const slotData = {
+            roomId: parseInt(cell.dataset.roomId),
+            roomName: cell.dataset.roomName,
+            date: slotDateStr,
+            period: cell.dataset.period,
+            cellRef: cell
+        };
+
+        const existingIndex = selectedSlots.findIndex(s => 
+            s.roomId === slotData.roomId && 
+            s.date === slotData.date && 
+            s.period === slotData.period
+        );
+
+        if (existingIndex > -1) {
+            selectedSlots.splice(existingIndex, 1);
+            cell.classList.remove("selected");
+            cell.textContent = "Disponível";
+        } else {
+            selectedSlots.push(slotData);
+            cell.classList.add("selected");
+            cell.textContent = "Selecionado";
+        }
+        updateButtonStates();
     }
 
     function updateButtonStates() {
+        // Botão "Prosseguir com o agendamento" sempre habilitado (permite apenas observações)
         if (proceedToBookingButton) {
-            proceedToBookingButton.disabled = false; // Sempre habilitado para permitir agendamento de observação
+            proceedToBookingButton.disabled = false;
+            // Atualizar texto do botão dependendo da situação
+            if (selectedSlots.length > 0) {
+                proceedToBookingButton.textContent = "Prosseguir com o agendamento";
+            } else {
+                proceedToBookingButton.textContent = "Fazer agendamento (somente observação)";
+            }
         }
         if (generatePdfButton) {
-            generatePdfButton.disabled = currentFetchedBookings.length === 0;
+            generatePdfButton.disabled = !currentWeekStartDate;
         }
     }
 
-    // Event Listeners
+    // --- PDF Generation (CORRIGIDA) ---
+    async function generatePdf() {
+        if (!currentWeekStartDate) {
+            showScheduleMessage("Carregue uma escala primeiro antes de gerar o PDF.", "error");
+            return;
+        }
+
+        const startDate = currentWeekStartDate.toISOString().split("T")[0];
+        const endDate = new Date(currentWeekStartDate.valueOf());
+        endDate.setUTCDate(currentWeekStartDate.getUTCDate() + 4);
+        const endDateStr = endDate.toISOString().split("T")[0];
+
+        // Desabilitar o botão durante a geração
+        if (generatePdfButton) {
+            generatePdfButton.disabled = true;
+            generatePdfButton.textContent = "Gerando PDF...";
+        }
+
+        showScheduleMessage("Gerando PDF...", "");
+        
+        try {
+            console.log(`Solicitando PDF para período: ${startDate} até ${endDateStr}`);
+            
+            const response = await fetch(`${API_BASE_URL}/generate-pdf?start_date=${startDate}&end_date=${endDateStr}`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/pdf',
+                    'Cache-Control': 'no-cache'
+                }
+            });
+            
+            console.log(`Response status: ${response.status}`);
+            console.log(`Response headers:`, response.headers);
+            
+            if (!response.ok) {
+                let errorMessage = `Erro ${response.status}: ${response.statusText}`;
+                
+                try {
+                    // Tentar ler como JSON para obter mensagem de erro detalhada
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        const errorData = await response.json();
+                        errorMessage = errorData.error || errorData.message || errorMessage;
+                    } else {
+                        // Se não for JSON, ler como texto
+                        const errorText = await response.text();
+                        if (errorText.trim()) {
+                            errorMessage = errorText;
+                        }
+                    }
+                } catch (parseError) {
+                    console.error("Erro ao fazer parse da resposta de erro:", parseError);
+                }
+                
+                throw new Error(errorMessage);
+            }
+
+            // Verificar se a resposta é realmente um PDF
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/pdf')) {
+                console.warn(`Tipo de conteúdo inesperado: ${contentType}`);
+            }
+
+            const blob = await response.blob();
+            
+            // Verificar se o blob tem conteúdo
+            if (blob.size === 0) {
+                throw new Error("PDF gerado está vazio");
+            }
+            
+            console.log(`PDF blob criado com tamanho: ${blob.size} bytes`);
+
+            // Criar URL para download
+            const url = window.URL.createObjectURL(blob);
+            
+            // Criar elemento de download
+            const a = document.createElement("a");
+            a.style.display = "none";
+            a.href = url;
+            
+            // Nome do arquivo com data formatada
+            const startDateFormatted = new Date(startDate).toLocaleDateString('pt-BR').replace(/\//g, '-');
+            const endDateFormatted = new Date(endDateStr).toLocaleDateString('pt-BR').replace(/\//g, '-');
+            a.download = `escala_agendamentos_${startDateFormatted}_a_${endDateFormatted}.pdf`;
+            
+            // Adicionar ao DOM, clicar e remover
+            document.body.appendChild(a);
+            a.click();
+            
+            // Limpar recursos
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            showScheduleMessage("PDF gerado e baixado com sucesso!", "success");
+            console.log("PDF baixado com sucesso");
+            
+        } catch (error) {
+            console.error("Falha ao gerar PDF:", error);
+            
+            let userMessage = "Não foi possível gerar o PDF.";
+            
+            if (error.message.includes('Failed to fetch')) {
+                userMessage = "Erro de conexão: Não foi possível conectar ao servidor para gerar o PDF.";
+            } else if (error.message.includes('NetworkError')) {
+                userMessage = "Erro de rede: Verifique sua conexão com a internet.";
+            } else if (error.message.includes('timeout')) {
+                userMessage = "Timeout: A geração do PDF demorou muito tempo. Tente novamente.";
+            } else if (error.message) {
+                userMessage = `Erro: ${error.message}`;
+            }
+            
+            showScheduleMessage(userMessage, "error");
+            
+        } finally {
+            // Re-habilitar o botão
+            if (generatePdfButton) {
+                generatePdfButton.disabled = false;
+                generatePdfButton.textContent = "Gerar PDF";
+            }
+        }
+    }
+
+    // Função auxiliar para debug do endpoint PDF
+    async function testPdfEndpoint() {
+        if (!currentWeekStartDate) {
+            console.error("Nenhuma data de semana definida");
+            return;
+        }
+
+        const startDate = currentWeekStartDate.toISOString().split("T")[0];
+        const endDate = new Date(currentWeekStartDate.valueOf());
+        endDate.setUTCDate(currentWeekStartDate.getUTCDate() + 4);
+        const endDateStr = endDate.toISOString().split("T")[0];
+        
+        const testUrl = `${API_BASE_URL}/generate-pdf?start_date=${startDate}&end_date=${endDateStr}`;
+        
+        console.log("=== TESTE DO ENDPOINT PDF ===");
+        console.log(`URL: ${testUrl}`);
+        console.log(`Período: ${startDate} até ${endDateStr}`);
+        
+        try {
+            const response = await fetch(testUrl, {
+                method: 'HEAD' // Usar HEAD para testar sem baixar o conteúdo
+            });
+            
+            console.log(`Status: ${response.status}`);
+            console.log(`Status Text: ${response.statusText}`);
+            console.log(`Headers:`, [...response.headers.entries()]);
+            
+            if (response.ok) {
+                console.log("✅ Endpoint PDF está respondendo corretamente");
+            } else {
+                console.log("❌ Endpoint PDF retornou erro");
+            }
+            
+        } catch (error) {
+            console.error("❌ Erro ao testar endpoint PDF:", error);
+        }
+    }
+
+    // --- Booking Creation ---
+    async function createBooking(formData) {
+        console.log("=== DEBUG: Iniciando createBooking ===");
+        
+        // Debug: Listar todos os campos do FormData
+        console.log("Campos do FormData:");
+        for (let [key, value] of formData.entries()) {
+            console.log(`  ${key}: "${value}"`);
+        }
+
+        const userName = formData.get("userName");
+        const userEmail = formData.get("userEmail");
+        const coordinatorName = formData.get("coordinatorName") || "";
+        const observation = formData.get("observation") || "";
+
+        console.log("Valores extraídos:");
+        console.log(`  userName: "${userName}"`);
+        console.log(`  userEmail: "${userEmail}"`);
+        console.log(`  coordinatorName: "${coordinatorName}"`);
+        console.log(`  observation: "${observation}"`);
+        console.log(`  selectedSlots: ${selectedSlots.length} slots`);
+
+        // Validação de campos obrigatórios no frontend
+        if (!userName || userName.trim() === "") {
+            showModalMessage("Nome é obrigatório para o agendamento.", "error");
+            return;
+        }
+
+        if (!userEmail || userEmail.trim() === "") {
+            showModalMessage("E-mail é obrigatório para o agendamento.", "error");
+            return;
+        }
+
+        // Validação de formato de e-mail no frontend
+        const emailTrimmed = userEmail.trim();
+        if (!emailTrimmed.includes("@") || !emailTrimmed.includes(".")) {
+            showModalMessage("Por favor, insira um e-mail válido.", "error");
+            return;
+        }
+
+        // REMOVIDA A VALIDAÇÃO QUE IMPEDIA AGENDAMENTOS SEM SLOTS
+        // Agora permite agendamentos somente com observação
+        if (selectedSlots.length === 0 && !observation.trim()) {
+            showModalMessage("É necessário fornecer uma observação quando não há salas selecionadas (ex: solicitação de encaixe).", "error");
+            return;
+        }
+
+        const bookingData = {
+            slots: selectedSlots.map(slot => ({
+                room_id: slot.roomId,
+                booking_date: slot.date,
+                period: slot.period
+            })),
+            user_name: userName.trim(),
+            user_email: emailTrimmed,
+            coordinator_name: coordinatorName.trim(),
+            observation: observation.trim()
+        };
+
+        console.log("=== DEBUG: Dados finais do agendamento ===");
+        console.log(JSON.stringify(bookingData, null, 2));
+        console.log(`URL da requisição: ${API_BASE_URL}/bookings`);
+
+        // Mostrar mensagem diferente para agendamentos somente observação
+        if (selectedSlots.length === 0) {
+            showModalMessage("Enviando solicitação de encaixe...", "");
+        } else {
+            showModalMessage("Enviando agendamento...", "");
+        }
+
+        try {
+            console.log("=== DEBUG: Fazendo requisição POST ===");
+            const response = await fetch(`${API_BASE_URL}/bookings`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(bookingData)
+            });
+
+            console.log(`=== DEBUG: Response Status: ${response.status} ===`);
+            console.log(`=== DEBUG: Response OK: ${response.ok} ===`);
+
+            let result;
+            try {
+                result = await response.json();
+                console.log("=== DEBUG: Response JSON ===");
+                console.log(JSON.stringify(result, null, 2));
+            } catch (jsonError) {
+                console.error("=== DEBUG: Erro ao fazer parse do JSON ===", jsonError);
+                const textResponse = await response.text();
+                console.log("=== DEBUG: Response Text ===", textResponse);
+                throw new Error(`Resposta inválida do servidor (Status: ${response.status})`);
+            }
+
+            if (response.ok) {
+                if (selectedSlots.length === 0) {
+                    showModalMessage("Solicitação de encaixe registrada com sucesso!", "success");
+                } else {
+                    showModalMessage("Agendamento realizado com sucesso!", "success");
+                }
+                
+                // Limpar slots selecionados e atualizar a tabela após o sucesso
+                selectedSlots.forEach(slot => {
+                    if (slot.cellRef) {
+                        slot.cellRef.classList.remove("selected");
+                        slot.cellRef.classList.add("booked");
+                        slot.cellRef.textContent = userName.trim();
+                        slot.cellRef.removeEventListener("click", handleSlotClick);
+                        slot.cellRef.style.cursor = "default";
+                        slot.cellRef.title = `Reservado por: ${userName.trim()}`;
+                    }
+                });
+                
+                selectedSlots = [];
+                updateSelectedSlotsSummary();
+                updateButtonStates(); // Atualizar texto do botão
+                modalBookingForm.reset();
+                
+                // Recarregar a escala para garantir consistência
+                setTimeout(() => {
+                    loadScheduleData(currentWeekStartDate.toISOString().split("T")[0]);
+                }, 1000);
+                
+            } else {
+                // Tratar diferentes tipos de erro do servidor
+                let errorMessage = "Erro desconhecido do servidor";
+                
+                if (result && result.error) {
+                    errorMessage = result.error;
+                } else if (result && result.message) {
+                    errorMessage = result.message;
+                } else if (result && result.detail) {
+                    errorMessage = result.detail;
+                } else {
+                    errorMessage = `Erro ${response.status}: ${response.statusText}`;
+                }
+                
+                console.error("=== DEBUG: Erro do servidor ===", {
+                    status: response.status,
+                    statusText: response.statusText,
+                    result: result,
+                    errorMessage: errorMessage
+                });
+                
+                showModalMessage(`Falha ao criar agendamento: ${errorMessage}`, "error");
+            }
+        } catch (error) {
+            console.error("=== DEBUG: Erro na requisição ===", error)
+            
+            if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                showModalMessage("Erro de conexão: Não foi possível conectar ao servidor. Verifique sua conexão.", "error");
+            } else if (error.message.includes('JSON')) {
+                showModalMessage("Erro de comunicação: Resposta inválida do servidor.", "error");
+            } else {
+                showModalMessage(`Erro de conexão: ${error.message}`, "error");
+            }
+        }
+    }
+
+    // --- Modal and Form Handling ---
     if (proceedToBookingButton) {
         proceedToBookingButton.addEventListener("click", () => {
-            if (bookingModal) {
-                bookingModal.style.display = "block";
-                updateSelectedSlotsSummary();
-                if (modalFormMessage) {
-                    modalFormMessage.textContent = "";
-                    modalFormMessage.className = "message";
-                }
+            updateSelectedSlotsSummary();
+            bookingModal.style.display = "block";
+            
+            // Focar no campo de observação se não há slots selecionados
+            if (selectedSlots.length === 0) {
+                setTimeout(() => {
+                    const observationField = document.querySelector('#modalBookingForm textarea[name="observation"]');
+                    if (observationField) {
+                        observationField.focus();
+                        observationField.placeholder = "Descreva sua solicitação de encaixe (ex: 'Preciso de uma sala na sexta à tarde para reunião urgente')";
+                    }
+                }, 100);
             }
         });
     }
 
     if (closeModalButton) {
         closeModalButton.addEventListener("click", () => {
-            if (bookingModal) {
-                bookingModal.style.display = "none";
+            bookingModal.style.display = "none";
+            if (modalFormMessage) {
+                modalFormMessage.textContent = "";
+                modalFormMessage.className = "message";
             }
         });
     }
 
     window.addEventListener("click", (event) => {
         if (event.target === bookingModal) {
-            if (bookingModal) {
-                bookingModal.style.display = "none";
+            bookingModal.style.display = "none";
+            if (modalFormMessage) {
+                modalFormMessage.textContent = "";
+                modalFormMessage.className = "message";
             }
         }
     });
@@ -442,148 +774,57 @@ document.addEventListener("DOMContentLoaded", () => {
     if (modalBookingForm) {
         modalBookingForm.addEventListener("submit", async (event) => {
             event.preventDefault();
-
-            const userName = document.getElementById("userName")?.value;
-            const userEmail = document.getElementById("userEmail")?.value;
-            const userPhone = document.getElementById("userPhone")?.value;
-            const observation = document.getElementById("observation")?.value;
-
-            if (!userName || !userEmail || !userPhone) {
-                showModalMessage("Por favor, preencha nome, e-mail e telefone.", "error");
-                return;
-            }
-
-            const bookingData = {
-                user_name: userName,
-                user_email: userEmail,
-                user_phone: userPhone,
-                observation: observation || "",
-                slots: selectedSlots.map(slot => ({
-                    room_id: slot.roomId,
-                    booking_date: slot.date,
-                    period: slot.period
-                })),
-            };
-
-            console.log("Enviando dados de agendamento:", bookingData);
-
-            try {
-                const response = await fetch(`${API_BASE_URL}/bookings`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify(bookingData),
-                });
-
-                const result = await response.json();
-
-                if (response.ok) {
-                    showModalMessage(result.message || "Agendamento realizado com sucesso!", "success");
-                    modalBookingForm.reset();
-                    selectedSlots = [];
-                    updateSelectedSlotsSummary();
-                    // Recarregar a escala para refletir o novo agendamento
-                    if (currentWeekStartDate) {
-                        loadScheduleData(currentWeekStartDate.toISOString().split("T")[0]);
-                    }
-                } else {
-                    showModalMessage(result.message || "Erro ao agendar. Tente novamente.", "error");
-                }
-            } catch (error) {
-                console.error("Erro na requisição de agendamento:", error);
-                showModalMessage("Erro de conexão. Tente novamente.", "error");
-            }
+            console.log("=== DEBUG: Form submit ===");
+            
+            // Debug: Verificar se o formulário existe e tem elementos
+            console.log("Form encontrado:", modalBookingForm);
+            console.log("Elementos do form:", modalBookingForm.elements);
+            
+            const formData = new FormData(modalBookingForm);
+            await createBooking(formData);
         });
     }
 
-    // --- PDF Generation ---
-    if (generatePdfButton) {
-        generatePdfButton.addEventListener("click", async () => {
-            if (currentFetchedBookings.length === 0) {
-                showScheduleMessage("Nenhum agendamento para gerar PDF.", "info");
-                return;
-            }
-
-            showScheduleMessage("Gerando PDF...", "");
-            try {
-                const startDateStr = currentWeekStartDate.toISOString().split("T")[0];
-                const endDate = new Date(currentWeekStartDate.valueOf());
-                endDate.setUTCDate(currentWeekStartDate.getUTCDate() + 4);
-                const endDateStr = endDate.toISOString().split("T")[0];
-
-                const response = await fetch(`${API_BASE_URL}/generate-pdf?start_date=${startDateStr}&end_date=${endDateStr}`);
-                if (!response.ok) {
-                    throw new Error(`Erro ao gerar PDF: ${response.statusText}`);
-                }
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `escala_${startDateStr}_${endDateStr}.pdf`;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                window.URL.revokeObjectURL(url);
-                showScheduleMessage("PDF gerado com sucesso!", "success");
-            } catch (error) {
-                console.error("Falha ao gerar PDF:", error);
-                showScheduleMessage(`Não foi possível gerar o PDF: ${error.message}`, "error");
-            }
-        });
-    }
-
-    // --- Week Selector Logic ---
-    function populateWeekSelector() {
-        if (!weekSelector) return;
+    function updateSelectedSlotsSummary() {
+        if (!selectedSlotsSummaryList) return;
         
-        const today = getTodayUTC();
-        const options = [];
-
-        // Adicionar a semana atual
-        let currentWeekMonday = new Date(today.valueOf());
-        const dayOfWeek = currentWeekMonday.getUTCDay();
-        const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-        currentWeekMonday.setUTCDate(currentWeekMonday.getUTCDate() + diffToMonday);
-        options.push({ date: currentWeekMonday, text: "Semana Atual" });
-
-        // Adicionar as próximas 3 semanas
-        for (let i = 1; i <= 3; i++) {
-            const nextWeekMonday = new Date(currentWeekMonday.valueOf());
-            nextWeekMonday.setUTCDate(currentWeekMonday.getUTCDate() + (i * 7));
-            options.push({
-                date: nextWeekMonday,
-                text: `Próxima Semana ${i} (${nextWeekMonday.toLocaleDateString("pt-BR", {day:"2-digit", month:"2-digit", timeZone: "UTC"})})`
-            });
+        selectedSlotsSummaryList.innerHTML = "";
+        if (selectedSlots.length === 0) {
+            const li = document.createElement("li");
+            li.innerHTML = "<em>Nenhum horário selecionado - Agendamento somente observação</em>";
+            li.style.color = "#666";
+            selectedSlotsSummaryList.appendChild(li);
+            return;
         }
-
-        weekSelector.innerHTML = "";
-        options.forEach((opt, index) => {
-            const optionElement = document.createElement("option");
-            optionElement.value = opt.date.toISOString().split("T")[0];
-            optionElement.textContent = opt.text;
-            if (index === 0) {
-                optionElement.selected = true; // Selecionar a semana atual por padrão
-            }
-            weekSelector.appendChild(optionElement);
+        selectedSlots.forEach(slot => {
+            const li = document.createElement("li");
+            li.textContent = `${slot.roomName} - ${slot.date} - ${slot.period}`;
+            selectedSlotsSummaryList.appendChild(li);
         });
     }
 
+    // --- Event Listeners ---
+    if (weekSelector) {
+        weekSelector.value = new Date().toISOString().split("T")[0];
+    }
+    
     if (loadScheduleButton) {
         loadScheduleButton.addEventListener("click", () => {
-            const selectedDate = weekSelector?.value;
-            if (selectedDate) {
-                loadScheduleData(selectedDate);
-            }
+            const selectedDate = weekSelector ? weekSelector.value : null;
+            loadScheduleData(selectedDate);
         });
     }
-
-    // --- Initial Load ---
-    async function initializePage() {
-        populateWeekSelector();
-        await fetchBookingWindowStatus();
-        await loadScheduleData();
+    
+    if (generatePdfButton) {
+        generatePdfButton.addEventListener("click", generatePdf);
     }
 
-    initializePage();
+    // --- Initialization ---
+    console.log("Inicializando aplicação...");
+    
+    // Carregar status da janela de agendamento primeiro
+    fetchBookingWindowStatus().then(() => {
+        // Depois carregar a escala
+        loadScheduleData();
+    });
 });
