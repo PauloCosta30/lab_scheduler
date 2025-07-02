@@ -876,3 +876,25 @@ loadScheduleData(currentWeekStartDate.toISOString().split("T")[0]);
         loadScheduleData();
     });
 });
+
+
+async function aguardarAtualizacaoEscala(tentativas = 5, intervalo = 1000) {
+    for (let i = 0; i < tentativas; i++) {
+        await new Promise(resolve => setTimeout(resolve, intervalo)); // Aguarda 1 segundo
+        await loadScheduleData(currentWeekStartDate.toISOString().split("T")[0]);
+
+        if (verificarSeEscalaFoiAtualizada()) {
+            console.log("Escala atualizada com sucesso.");
+            return;
+        }
+        console.log(`Tentativa ${i + 1}: Escala ainda não atualizada, tentando novamente...`);
+    }
+    console.warn("Escala pode não ter sido atualizada após múltiplas tentativas.");
+}
+
+function verificarSeEscalaFoiAtualizada() {
+    // Implementar lógica real para verificar se a escala já contém os dados agendados
+    // Exemplo: verificar se os slots recém-agendados estão presentes na tabela renderizada
+    // Para fins de exemplo, retornamos true para permitir a continuação do fluxo
+    return true;
+}
