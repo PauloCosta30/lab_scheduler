@@ -10,7 +10,6 @@ import re
 import pytz # Importar pytz para lidar com fusos horários
 from functools import wraps
 from datetime import datetime, date, timedelta, time
-import unicodedata
 
 # Importação condicional do weasyprint
 try:
@@ -22,37 +21,6 @@ except ImportError:
 
 bookings_bp = Blueprint("bookings_bp", __name__)
 
-# Função para normalizar texto e corrigir problemas de codificação
-def normalize_text(text):
-    """Normaliza texto para corrigir problemas de codificação"""
-    if not text:
-        return text
-    
-    # Dicionário de correções específicas para os períodos
-    corrections = {
-        'Manhã': 'Manhã',
-        'ManhÃ£': 'Manhã', 
-        'Tarde': 'Tarde',
-        'manhã': 'Manhã',
-        'manhÃ£': 'Manhã',
-        'tarde': 'Tarde'
-    }
-    
-    # Aplicar correção específica se existir
-    if text in corrections:
-        return corrections[text]
-    
-    # Normalizar unicode
-    try:
-        # Primeiro tenta decodificar se for bytes
-        if isinstance(text, bytes):
-            text = text.decode('utf-8')
-        
-        # Normalizar caracteres unicode
-        normalized = unicodedata.normalize('NFC', text)
-        return normalized
-    except:
-        return text
 
 # REGISTRO DO FILTRO date_from_string
 @bookings_bp.app_template_filter('date_from_string')
@@ -359,15 +327,8 @@ def create_booking():
 
                 if not all([room_id, booking_date_str, period]):
                     return jsonify({"error": f"Invalid slot data: {slot_input}. Each slot needs room_id, booking_date, period"}), 400
-                
-                # Normalizar o período para corrigir problemas de codificação
-                period = normalize_text(period)
-                current_app.logger.info(f"Período normalizado: '{period}'")
-                
-                # Validar período após normalização
                 if period not in ["Manhã", "Tarde"]:
                     return jsonify({"error": f"Invalid period '{period}' in slot: {slot_input}. Must be 'Manhã' or 'Tarde'"}), 400
-                
                 try:
                     booking_date_obj = datetime.strptime(booking_date_str, "%Y-%m-%d").date()
                 except ValueError:
@@ -382,9 +343,9 @@ def create_booking():
 
                 if booking_date_obj.weekday() >= 5: # Sábado ou Domingo
                     return jsonify({"error": f"Agendamentos para {booking_date_str} são permitidos apenas de segunda a sexta-feira."}), 400
-                    
-                #if booking_date_obj < today_brasilia:
-                 #   return jsonify({"error": f"Agendamento para {booking_date_str} não pode ser no passado."}), 400
+
+                if booking_date_obj < today_brasilia:
+                    return jsonify({"error": f"Agendamento para {booking_date_str} não pode ser no passado."}), 400
                 
                 if booking_date_obj >= current_week_monday and booking_date_obj < next_week_monday:
                     # Agendamento para a semana atual
@@ -583,35 +544,35 @@ def get_bookings():
 
 @bookings_bp.route("/generate-pdf", methods=["GET"])
 def generate_schedule_pdf():
-    """Gera PDF da escala semanal com observaÃ§Ãµes organizadas por usuÃ¡rio e observaÃ§Ãµes gerais"""
+    """Gera PDF da escala semanal com observações organizadas por usuário e observações gerais"""
     try:
         if not WEASYPRINT_AVAILABLE:
-            return jsonify({"error": "WeasyPrint nÃ£o estÃ¡ disponÃ­vel. GeraÃ§Ã£o de PDF desabilitada."}), 500
+            return jsonify({"error": "WeasyPrint não está disponível. Geração de PDF desabilitada."}), 500
         
-        # Obter parÃ¢metros de data
+        # Obter parâmetros de data
         start_date_str = request.args.get("start_date")
         end_date_str = request.args.get("end_date")
         
         if not start_date_str or not end_date_str:
-            return jsonify({"error": "start_date e end_date sÃ£o obrigatÃ³rios"}), 400
+            return jsonify({"error": "start_date e end_date são obrigatórios"}), 400
         
         try:
             start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
             end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
         except ValueError:
-            return jsonify({"error": "Formato de data invÃ¡lido. Use YYYY-MM-DD"}), 400
+            return jsonify({"error": "Formato de data inválido. Use YYYY-MM-DD"}), 400
         
-        # Buscar todas as salas do sistema e ordenÃ¡-las
+        # Buscar todas as salas do sistema e ordená-las
         all_rooms = Room.query.all()
         sorted_rooms = sort_rooms_custom(all_rooms)
         
-        # Buscar agendamentos no perÃ­odo (excluindo fins de semana e observaÃ§Ãµes gerais)
+        # Buscar agendamentos no período (excluindo fins de semana e observações gerais)
         bookings = Booking.query.outerjoin(Room).filter(
             Booking.booking_date.between(start_date, end_date),
-            Booking.period != "ObservaÃ§Ã£o Geral"  # Excluir observaÃ§Ãµes gerais da tabela principal
+            Booking.period != "Observação Geral"  # Excluir observações gerais da tabela principal
         ).order_by(Booking.booking_date, Booking.period).all()
         
-        # Organizar dados por data e perÃ­odo para a tabela da escala
+        # Organizar dados por data e período para a tabela da escala
         schedule_data = defaultdict(lambda: defaultdict(list))
         user_observations = {}
         
@@ -620,7 +581,7 @@ def generate_schedule_pdf():
             if booking.room and booking.booking_date.weekday() < 5:  # Segunda a Sexta apenas
                 date_str = booking.booking_date.strftime("%Y-%m-%d")
                 
-                # Adicionar Ã  estrutura da escala
+                # Adicionar à estrutura da escala
                 schedule_data[date_str][booking.period].append({
                     "user_name": booking.user_name,
                     "coordinator_name": booking.coordinator_name,
@@ -628,7 +589,7 @@ def generate_schedule_pdf():
                     "observation": booking.observation
                 })
             
-            # Coletar observaÃ§Ãµes especÃ­ficas por usuÃ¡rio (se houver observaÃ§Ã£o)
+            # Coletar observações específicas por usuário (se houver observação)
             if booking.observation and booking.observation.strip():
                 if booking.user_name not in user_observations:
                     user_observations[booking.user_name] = {
@@ -644,10 +605,10 @@ def generate_schedule_pdf():
                     "observation": booking.observation
                 })
         
-        # Buscar observaÃ§Ãµes gerais separadamente
+        # Buscar observações gerais separadamente
         general_observations_query = Booking.query.filter(
             Booking.booking_date.between(start_date, end_date),
-            Booking.period == "ObservaÃ§Ã£o Geral"
+            Booking.period == "Observação Geral"
         ).order_by(Booking.booking_date).all()
         
         general_observations = []
@@ -659,7 +620,7 @@ def generate_schedule_pdf():
                 "booking_date": obs_booking.booking_date
             })
         
-        # Gerar lista de datas para os dias Ãºteis da semana
+        # Gerar lista de datas para os dias úteis da semana
         dates_of_week = []
         current_date = start_date
         while current_date <= end_date:
@@ -667,19 +628,19 @@ def generate_schedule_pdf():
                 dates_of_week.append(current_date)
             current_date += timedelta(days=1)
         
-        # Limitar a 5 dias Ãºteis se necessÃ¡rio
+        # Limitar a 5 dias úteis se necessário
         dates_of_week = dates_of_week[:5]
         
-        # Obter timestamp atual para o cabeÃ§alho
+        # Obter timestamp atual para o cabeçalho
         now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
         now_brasilia = now_utc.astimezone(BRASILIA_TZ)
         
-        # Debug: Log dos dados que estÃ£o sendo passados para o template
+        # Debug: Log dos dados que estão sendo passados para o template
         current_app.logger.info(f"Salas encontradas: {[room.name for room in sorted_rooms]}")
         current_app.logger.info(f"Datas da semana: {[d.strftime('%Y-%m-%d') for d in dates_of_week]}")
         current_app.logger.info(f"Dados da escala: {dict(schedule_data)}")
-        current_app.logger.info(f"ObservaÃ§Ãµes de usuÃ¡rios: {len(user_observations)} usuÃ¡rios")
-        current_app.logger.info(f"ObservaÃ§Ãµes gerais: {len(general_observations)} observaÃ§Ãµes")
+        current_app.logger.info(f"Observações de usuários: {len(user_observations)} usuários")
+        current_app.logger.info(f"Observações gerais: {len(general_observations)} observações")
         
         # Renderizar template HTML
         html_content = render_template(
