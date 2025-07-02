@@ -288,39 +288,39 @@ def create_booking():
                     return jsonify({"error": f"Invalid date format '{booking_date_str}' in slot: {slot_input}. Use YYYY-MM-DD"}), 400
                 
                 # Validação da janela de agendamento
-                now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
-                now_brasilia = now_utc.astimezone(BRASILIA_TZ)
-                today_brasilia = now_brasilia.date()
-                current_week_monday = today_brasilia - timedelta(days=today_brasilia.weekday())
-                next_week_monday = current_week_monday + timedelta(weeks=1)
+            now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
+            now_brasilia = now_utc.astimezone(BRASILIA_TZ)
+            today_brasilia = now_brasilia.date()
+            current_week_monday = today_brasilia - timedelta(days=today_brasilia.weekday())
+            next_week_monday = current_week_monday + timedelta(weeks=1)
 
-                if booking_date_obj.weekday() >= 5:  # Sábado ou Domingo
-                    return jsonify({"error": f"Agendamentos para {booking_date_str} são permitidos apenas de segunda a sexta-feira."}), 400
+            if booking_date_obj.weekday() >= 5: # Sábado ou Domingo
+                return jsonify({"error": f"Agendamentos para {booking_date_str} são permitidos apenas de segunda a sexta-feira."}), 400
 
-                if booking_date_obj < today_brasilia:
-                    return jsonify({"error": f"Agendamento para {booking_date_str} não pode ser no passado."}), 400
-                
-                if booking_date_obj >= current_week_monday and booking_date_obj < next_week_monday:
-                    # Agendamento para a semana atual
-                    if not booking_window["current_week"]["open"]:
-                        return jsonify({"error": f"Agendamentos para a semana atual estão fechados. {booking_window['current_week']['message']}"}), 403
-                elif booking_date_obj >= next_week_monday and booking_date_obj < (next_week_monday + timedelta(weeks=1)):
-                    # Agendamento para a próxima semana
-                    if not booking_window["next_week"]["open"]:
-                        return jsonify({"error": f"Agendamentos para a próxima semana estão fechados. {booking_window['next_week']['message']}"}), 403
-                else:
-                    return jsonify({"error": f"Agendamentos só são permitidos para a semana atual ou próxima semana."}), 403
+            if booking_date_obj < today_brasilia:
+                return jsonify({"error": f"Agendamento para {booking_date_str} não pode ser no passado."}), 400
+            
+            if booking_date_obj >= current_week_monday and booking_date_obj < next_week_monday:
+                # Agendamento para a semana atual
+                if not booking_window["current_week"]["open"]:
+                    return jsonify({"error": f"Agendamentos para a semana atual estão fechados. {booking_window['current_week']['message']}"}), 403
+            elif booking_date_obj >= next_week_monday and booking_date_obj < (next_week_monday + timedelta(weeks=1)):
+                # Agendamento para a próxima semana
+                if not booking_window["next_week"]["open"]:
+                    return jsonify({"error": f"Agendamentos para a próxima semana estão fechados. {booking_window['next_week']['message']}"}), 403
+            else:
+                return jsonify({"error": f"Agendamentos só são permitidos para a semana atual ou próxima semana."}), 403
 
-                room = Room.query.get(room_id)
-                if not room:
-                    return jsonify({"error": f"Room ID {room_id} in slot: {slot_input} not found"}), 404
-                
-                processed_slots.append({
-                    "room_id": room_id, "room_name": room.name,
-                    "booking_date_obj": booking_date_obj, "booking_date_str": booking_date_str,
-                    "period": period
-                })
-                daily_new_bookings_count[booking_date_obj] += 1
+            room = Room.query.get(room_id)
+            if not room:
+                return jsonify({"error": f"Room ID {room_id} in slot: {slot_input} not found"}), 404
+            
+            processed_slots.append({
+                "room_id": room_id, "room_name": room.name,
+                "booking_date_obj": booking_date_obj, "booking_date_str": booking_date_str,
+                "period": period
+            })
+            daily_new_bookings_count[booking_date_obj] += 1
 
             # Validation for max 3 bookings per day per user
             for booking_date_obj, count_for_this_request in daily_new_bookings_count.items():
