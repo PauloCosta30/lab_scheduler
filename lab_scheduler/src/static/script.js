@@ -876,27 +876,3 @@ loadScheduleData(currentWeekStartDate.toISOString().split("T")[0]);
         loadScheduleData();
     });
 });
-
-
-async function aguardarAtualizacaoEscala(slotAgendado, tentativas = 5, intervalo = 1000) {
-    for (let i = 0; i < tentativas; i++) {
-        await new Promise(resolve => setTimeout(resolve, intervalo)); // Aguarda 1 segundo
-        await loadScheduleData(currentWeekStartDate.toISOString().split("T")[0]);
-
-        if (verificarSeEscalaFoiAtualizada(slotAgendado)) {
-            console.log("Escala atualizada com sucesso.");
-            return;
-        }
-        console.log(`Tentativa ${i + 1}: Escala ainda não atualizada, tentando novamente...`);
-    }
-    console.warn("Escala pode não ter sido atualizada após múltiplas tentativas.");
-}
-
-function verificarSeEscalaFoiAtualizada(slotAgendado) {
-    // Verificar se o slot recém-agendado está presente no currentFetchedBookings
-    return currentFetchedBookings.some(b => 
-        b.room_id === slotAgendado.room_id && 
-        b.booking_date === slotAgendado.booking_date && 
-        b.booking_period === slotAgendado.booking_period
-    );
-}
