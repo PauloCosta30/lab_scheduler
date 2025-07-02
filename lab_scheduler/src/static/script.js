@@ -38,6 +38,40 @@ document.addEventListener("DOMContentLoaded", () => {
         return new Date(Date.UTC(year, month - 1, day));
     }
 
+    // Nova função para verificar se ainda está dentro do prazo de agendamento (até quarta 23:59)
+    function isWithinBookingDeadline(slotDateStr) {
+        try {
+            const slotDate = parseDateStrToUTC(slotDateStr);
+            const now = new Date(); // Data/hora atual local
+            
+            // Calcular a segunda-feira da semana do slot
+            const slotDayOfWeek = slotDate.getUTCDay();
+            const diffToMonday = slotDayOfWeek === 0 ? -6 : 1 - slotDayOfWeek;
+            const slotWeekMonday = new Date(slotDate.valueOf());
+            slotWeekMonday.setUTCDate(slotDate.getUTCDate() + diffToMonday);
+            
+            // Calcular a quarta-feira da mesma semana às 23:59:59
+            const slotWeekWednesday = new Date(slotWeekMonday.valueOf());
+            slotWeekWednesday.setUTCDate(slotWeekMonday.getUTCDate() + 2); // +2 dias = quarta
+            slotWeekWednesday.setUTCHours(23, 59, 59, 999); // 23:59:59.999
+            
+            // Converter para horário local do usuário para comparação
+            const deadlineLocal = new Date(slotWeekWednesday.getTime());
+            
+            console.log(`Verificando prazo para ${slotDateStr}:`);
+            console.log(`  Slot date: ${slotDate.toISOString()}`);
+            console.log(`  Deadline (quarta 23:59): ${deadlineLocal.toISOString()}`);
+            console.log(`  Now: ${now.toISOString()}`);
+            console.log(`  Dentro do prazo: ${now <= deadlineLocal}`);
+            
+            return now <= deadlineLocal;
+            
+        } catch (error) {
+            console.error("Erro ao verificar prazo de agendamento:", error);
+            return false;
+        }
+    }
+
     // --- Helper Functions for Messages ---
     function showModalMessage(message, type) {
         if (modalFormMessage) {
@@ -331,8 +365,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
             // Verificar se o slot é da semana atual
             if (slotDate >= currentWeekMonday && slotDate < nextWeekMonday) {
-                const allowed = bookingWindowStatus.current_week.open;
-                console.log(`Semana atual - ${dateStr}: ${allowed ? 'PERMITIDO' : 'FECHADO'}`);
+                // Para semana atual, verificar se ainda está dentro do prazo (até quarta 23:59)
+                const withinDeadline = isWithinBookingDeadline(dateStr);
+                const allowed = bookingWindowStatus.current_week.open && withinDeadline;
+                console.log(`Semana atual - ${dateStr}: janela=${bookingWindowStatus.current_week.open}, prazo=${withinDeadline}, permitido=${allowed}`);
                 return allowed;
                 
             } else if (slotDate >= nextWeekMonday && slotDate < new Date(nextWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000)) {
@@ -353,19 +389,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function handleSlotClick(event) {
         const cell = event.currentTarget;
-        if (cell.classList.contains("booked") || cell.classList.contains("past") || cell.classList.contains("closed")) return;
+        if (cell.classList.contains("booked") || cell.classList.contains("closed")) return;
 
         const slotDateStr = cell.dataset.date;
-        const slotDateUTC = parseDateStrToUTC(slotDateStr);
-        const todayUTC = getTodayUTC();
 
-        if (slotDateUTC < todayUTC) {
-            showScheduleMessage("Não é possível selecionar datas/horários passados.", "error");
-            return;
-        }
-
+        // REMOVIDA a verificação de data passada - agora só verifica se está dentro do prazo
         if (!checkIfBookingAllowed(slotDateStr)) {
-            showScheduleMessage("Agendamentos estão fechados para esta data.", "error");
+            showScheduleMessage("Agendamentos estão fechados para esta data (prazo: até quarta-feira 23:59).", "error");
             return;
         }
 
