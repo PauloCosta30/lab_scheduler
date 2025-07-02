@@ -221,104 +221,14 @@ def get_booking_window_status():
             "general_message": "As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 18h, e a escala da próxima semana será liberada todas as sextas-feiras, às 18h."
         }
 
-
-# API SIMPLIFICADA PARA VERIFICAÇÃO DE STATUS
 @bookings_bp.route("/booking-window-status", methods=["GET"])
+def booking_window_status():
     try:
         status = get_booking_window_status()
         return jsonify(status)
     except Exception as e:
         current_app.logger.error(f"Erro na rota booking-window-status: {str(e)}")
         return jsonify({"error": "Erro interno do servidor"}), 500
-
-@bookings_bp.route("/booking-window-simple", methods=["GET"])
-def get_booking_window_simple():
-    """API simplificada que retorna se a janela está aberta ou fechada"""
-    try:
-        # Obter horário atual em Brasília
-        now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
-        now_brasilia = now_utc.astimezone(BRASILIA_TZ)
-        today_brasilia = now_brasilia.date()
-        
-        # Encontrar a próxima quarta-feira 23:59 (ou a atual se ainda não passou)
-        days_to_wednesday = (2 - today_brasilia.weekday()) % 7  # 2 = quarta-feira
-        
-        if days_to_wednesday == 0:  # Hoje é quarta-feira
-            # Verificar se ainda está dentro do horário (antes das 23:59)
-            if now_brasilia.time() <= time(23, 59, 59):
-                closes_at_date = today_brasilia  # Fecha hoje
-            else:
-                # Já passou das 23:59, próxima quarta-feira
-                closes_at_date = today_brasilia + timedelta(days=7)
-        else:
-            # Próxima quarta-feira
-            closes_at_date = today_brasilia + timedelta(days=days_to_wednesday)
-        
-        # Criar datetime completo para o fechamento
-        closes_at_datetime = BRASILIA_TZ.localize(
-            datetime.combine(closes_at_date, time(23, 59, 59))
-        )
-        
-        # Verificar se está aberto
-        is_open = now_brasilia <= closes_at_datetime
-        
-        # Calcular próxima abertura (sexta-feira 18:00)
-        if is_open:
-            # Se está aberto, próxima abertura será após o fechamento
-            days_to_friday = (4 - closes_at_date.weekday()) % 7
-            if days_to_friday == 0:  # Se quarta é sexta (impossível, mas safety)
-                days_to_friday = 7
-            reopens_at_date = closes_at_date + timedelta(days=days_to_friday)
-        else:
-            # Se está fechado, calcular próxima sexta-feira 18:00
-            days_to_friday = (4 - today_brasilia.weekday()) % 7
-            if days_to_friday == 0 and now_brasilia.time() >= time(18, 0, 0):
-                days_to_friday = 7  # Próxima sexta-feira
-            reopens_at_date = today_brasilia + timedelta(days=days_to_friday)
-        
-        reopens_at_datetime = BRASILIA_TZ.localize(
-            datetime.combine(reopens_at_date, time(18, 0, 0))
-        )
-        
-        # Log para debug
-        current_app.logger.info(f"[API] Agora: {now_brasilia}")
-        current_app.logger.info(f"[API] Fecha em: {closes_at_datetime}")
-        current_app.logger.info(f"[API] Está aberto: {is_open}")
-        
-        return jsonify({
-            'is_open': is_open,
-            'current_time': now_brasilia.strftime('%Y-%m-%d %H:%M:%S'),
-            'closes_at': closes_at_datetime.strftime('%Y-%m-%d %H:%M:%S'),
-            'reopens_at': reopens_at_datetime.strftime('%Y-%m-%d %H:%M:%S')
-        })
-        
-    except Exception as e:
-        current_app.logger.error(f"Erro na verificação da janela de agendamento: {e}")
-        return jsonify({
-            'is_open': False,
-            'error': 'Erro interno no sistema'
-        }), 500
-
-# Rota de debug
-@bookings_bp.route("/debug-booking-window", methods=["GET"])
-@require_admin_key
-def debug_booking_window():
-    try:
-        status = get_booking_window_status()
-        now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
-        now_brasilia = now_utc.astimezone(BRASILIA_TZ)
-        
-        return jsonify({
-            "agora_brasilia": now_brasilia.strftime("%Y-%m-%d %H:%M:%S %Z"),
-            "status_completo": status,
-            "debug_info": {
-                "hoje": now_brasilia.date().strftime("%Y-%m-%d"),
-                "dia_da_semana": now_brasilia.date().weekday(),  # 0=segunda, 2=quarta
-                "hora_atual": now_brasilia.time().strftime("%H:%M:%S")
-            }
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 @bookings_bp.route("/rooms", methods=["GET"])
 def get_rooms():
