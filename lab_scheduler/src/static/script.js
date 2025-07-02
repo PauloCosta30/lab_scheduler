@@ -181,7 +181,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // FUNÇÃO CORRIGIDA - Renderizar tabela da escala
     function renderScheduleTable(bookings, roomsData, weekStartDateObj) {
         console.log("Renderizando tabela da escala...");
         
@@ -206,6 +205,7 @@ document.addEventListener("DOMContentLoaded", () => {
         scheduleTableContainer.innerHTML = "";
         selectedSlots = [];
         updateButtonStates();
+        const todayUTC = getTodayUTC();
 
         // Adicionar aviso sobre agendamentos somente observação
         const infoDiv = document.createElement("div");
@@ -262,6 +262,9 @@ document.addEventListener("DOMContentLoaded", () => {
             row.appendChild(roomCell);
 
             datesOfWeek.forEach(dateStr => {
+                const slotDateUTC = parseDateStrToUTC(dateStr);
+                const isPastDate = slotDateUTC < todayUTC;
+
                 periods.forEach(period => {
                     const cell = document.createElement("td");
                     cell.className = "schedule-cell";
@@ -273,16 +276,16 @@ document.addEventListener("DOMContentLoaded", () => {
                     );
                     
                     if (booking) {
-                        // Slot já está reservado
                         cell.textContent = booking.user_name;
                         cell.classList.add("booked");
                         cell.title = `Reservado por: ${booking.user_name}`;
+                    } else if (isPastDate) {
+                        cell.textContent = "Indisponível";
+                        cell.classList.add("past");
                     } else {
-                        // Slot não está reservado - verificar se o agendamento está permitido
-                        const bookingStatus = checkIfBookingAllowed(dateStr);
-                        
-                        if (bookingStatus.allowed) {
-                            // Agendamento permitido
+                        // Verificar se o agendamento está permitido para esta data
+                        const isBookingAllowed = checkIfBookingAllowed(dateStr);
+                        if (isBookingAllowed) {
                             cell.textContent = "Disponível";
                             cell.classList.add("available");
                             cell.dataset.roomId = room.id;
@@ -293,10 +296,9 @@ document.addEventListener("DOMContentLoaded", () => {
                             cell.style.cursor = "pointer";
                             cell.title = "Clique para selecionar";
                         } else {
-                            // Agendamento não permitido
-                            cell.textContent = bookingStatus.displayText;
-                            cell.classList.add(bookingStatus.cssClass);
-                            cell.title = bookingStatus.title;
+                            cell.textContent = "Fechado";
+                            cell.classList.add("closed");
+                            cell.title = "Período de agendamento fechado";
                         }
                     }
                     row.appendChild(cell);
@@ -311,24 +313,17 @@ document.addEventListener("DOMContentLoaded", () => {
         console.log("Tabela renderizada com sucesso");
     }
 
-    // FUNÇÃO CORRIGIDA - Verificação precisa dos horários de agendamento
     function checkIfBookingAllowed(dateStr) {
         console.log(`Verificando se agendamento é permitido para ${dateStr}`);
         
+        if (!bookingWindowStatus) {
+            console.log("Status da janela de agendamento não disponível");
+            return false;
+        }
+
         try {
             const slotDate = parseDateStrToUTC(dateStr);
             const todayUTC = getTodayUTC();
-            
-            // Obter horário atual em UTC com precisão de horas/minutos
-            const now = new Date();
-            const currentTimeUTC = new Date(Date.UTC(
-                now.getUTCFullYear(),
-                now.getUTCMonth(),
-                now.getUTCDate(),
-                now.getUTCHours(),
-                now.getUTCMinutes(),
-                now.getUTCSeconds()
-            ));
             
             // Calcular segunda-feira da semana atual (UTC)
             const currentWeekMonday = new Date(todayUTC.valueOf());
@@ -336,189 +331,39 @@ document.addEventListener("DOMContentLoaded", () => {
             currentWeekMonday.setUTCDate(todayUTC.getUTCDate() - dayOffset);
             
             const nextWeekMonday = new Date(currentWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000);
-            const weekAfterNextMonday = new Date(nextWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000);
-
-            console.log(`Data atual: ${todayUTC.toISOString().split("T")[0]}`);
-            console.log(`Segunda da semana atual: ${currentWeekMonday.toISOString().split("T")[0]}`);
-            console.log(`Segunda da próxima semana: ${nextWeekMonday.toISOString().split("T")[0]}`);
-            console.log(`Data do slot: ${dateStr}`);
 
             // Verificar se o slot é da semana atual
             if (slotDate >= currentWeekMonday && slotDate < nextWeekMonday) {
-                console.log(`Slot ${dateStr} é da semana atual`);
+                const allowed = bookingWindowStatus.current_week.open;
+                console.log(`Semana atual - ${dateStr}: ${allowed}`);
+                return allowed;
                 
-                // Para semana atual: verificar se ainda não passou de quarta-feira 23:59
-                const currentWeekWednesday = new Date(currentWeekMonday.getTime() + 2 * 24 * 60 * 60 * 1000);
-                const wednesdayDeadline = new Date(currentWeekWednesday.getTime());
-                wednesdayDeadline.setUTCHours(23, 59, 59, 999);
-                
-                console.log(`Deadline quarta-feira: ${wednesdayDeadline.toISOString()}`);
-                console.log(`Horário atual: ${currentTimeUTC.toISOString()}`);
-                
-                // CORREÇÃO PRINCIPAL: Verificar apenas se ainda está dentro do prazo da semana atual
-                if (currentTimeUTC <= wednesdayDeadline) {
-                    console.log(`Semana atual - ${dateStr}: permitido (antes do deadline)`);
-                    return {
-                        allowed: true,
-                        displayText: "Disponível",
-                        cssClass: "available",
-                        title: "Clique para selecionar"
-                    };
-                } else {
-                    console.log(`Semana atual - ${dateStr}: fechado (após deadline)`);
-                    return {
-                        allowed: false,
-                        displayText: "Fechado",
-                        cssClass: "closed",
-                        title: "Período de agendamento fechado (após quarta 23:59)"
-                    };
-                }
-                
-            } else if (slotDate >= nextWeekMonday && slotDate < weekAfterNextMonday) {
-                console.log(`Slot ${dateStr} é da próxima semana`);
-                
-                // Para próxima semana: verificar se já passou de sexta-feira 18:00
-                const currentWeekFriday = new Date(currentWeekMonday.getTime() + 4 * 24 * 60 * 60 * 1000);
-                const fridayRelease = new Date(currentWeekFriday.getTime());
-                fridayRelease.setUTCHours(18, 0, 0, 0);
-                
-                console.log(`Liberação sexta-feira: ${fridayRelease.toISOString()}`);
-                console.log(`Horário atual: ${currentTimeUTC.toISOString()}`);
-                
-                if (currentTimeUTC >= fridayRelease) {
-                    console.log(`Próxima semana - ${dateStr}: permitido (após liberação)`);
-                    return {
-                        allowed: true,
-                        displayText: "Disponível",
-                        cssClass: "available",
-                        title: "Clique para selecionar"
-                    };
-                } else {
-                    console.log(`Próxima semana - ${dateStr}: fechado (antes da liberação)`);
-                    return {
-                        allowed: false,
-                        displayText: "Fechado",
-                        cssClass: "closed",
-                        title: "Aguardando liberação (sexta-feira 18:00)"
-                    };
-                }
+            } else if (slotDate >= nextWeekMonday && slotDate < new Date(nextWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000)) {
+                const allowed = bookingWindowStatus.next_week.open;
+                console.log(`Próxima semana - ${dateStr}: ${allowed}`);
+                return allowed;
             }
 
             console.log(`Data fora do período permitido - ${dateStr}`);
-            return {
-                allowed: false,
-                displayText: "Indisponível",
-                cssClass: "unavailable",
-                title: "Fora do período de agendamento"
-            };
-            
+            return false;
         } catch (error) {
             console.error("Erro ao verificar se agendamento é permitido:", error);
-            return {
-                allowed: false,
-                displayText: "Erro",
-                cssClass: "error",
-                title: "Erro ao verificar disponibilidade"
-            };
+            return false;
         }
     }
 
-    // Função adicional para validar antes de enviar o agendamento
-    function validateBookingDates(selectedSlots) {
-        const todayUTC = getTodayUTC();
-        const invalidSlots = [];
-        
-        for (const slot of selectedSlots) {
-            const slotDate = parseDateStrToUTC(slot.date);
-            const bookingStatus = checkIfBookingAllowed(slot.date);
-            
-            if (!bookingStatus.allowed) {
-                invalidSlots.push({
-                    slot: slot,
-                    reason: bookingStatus.title
-                });
-            }
-        }
-        
-        return {
-            isValid: invalidSlots.length === 0,
-            invalidSlots: invalidSlots
-        };
-    }
-
-    // Função auxiliar para debug dos horários
-    function debugBookingTimes() {
-        const todayUTC = getTodayUTC();
-        const now = new Date();
-        const currentTimeUTC = new Date(Date.UTC(
-            now.getUTCFullYear(),
-            now.getUTCMonth(),
-            now.getUTCDate(),
-            now.getUTCHours(),
-            now.getUTCMinutes(),
-            now.getUTCSeconds()
-        ));
-        
-        // Calcular segunda-feira da semana atual
-        const currentWeekMonday = new Date(todayUTC.valueOf());
-        const dayOffset = todayUTC.getUTCDay() === 0 ? 6 : todayUTC.getUTCDay() - 1;
-        currentWeekMonday.setUTCDate(todayUTC.getUTCDate() - dayOffset);
-        
-        // Calcular quarta-feira 23:59 e sexta-feira 18:00
-        const currentWeekWednesday = new Date(currentWeekMonday.getTime() + 2 * 24 * 60 * 60 * 1000);
-        const wednesdayDeadline = new Date(currentWeekWednesday.getTime());
-        wednesdayDeadline.setUTCHours(23, 59, 59, 999);
-        
-        const currentWeekFriday = new Date(currentWeekMonday.getTime() + 4 * 24 * 60 * 60 * 1000);
-        const fridayRelease = new Date(currentWeekFriday.getTime());
-        fridayRelease.setUTCHours(18, 0, 0, 0);
-        
-        console.log("=== DEBUG HORÁRIOS DE AGENDAMENTO ===");
-        console.log(`Horário atual UTC: ${currentTimeUTC.toISOString()}`);
-        console.log(`Segunda-feira da semana: ${currentWeekMonday.toISOString()}`);
-        console.log(`Deadline quarta 23:59: ${wednesdyDeadline.toISOString()}`);
-        console.log(`Liberação sexta 18:00: ${fridayRelease.toISOString()}`);
-        console.log(`Semana atual fechada? ${currentTimeUTC > wednesdayDeadline}`);
-        console.log(`Próxima semana liberada? ${currentTimeUTC >= fridayRelease}`);
-        console.log("==========================================");
-    }
-
-    // Função para forçar atualização dos horários (para debugging)
-    function forceTimeUpdate() {
-        console.log("Forçando atualização dos horários...");
-        debugBookingTimes();
-        
-        // Recarregar a escala com os novos horários
-        if (currentWeekStartDate) {
-            loadScheduleData(currentWeekStartDate.toISOString().split("T")[0]);
-        }
-    }
-
-    // Expor funções de debug para o console global (para testes)
-    window.debugBookingTimes = debugBookingTimes;
-    window.forceTimeUpdate = forceTimeUpdate;
-
-    // FUNÇÃO CORRIGIDA - Manipular clique no slot
     function handleSlotClick(event) {
         const cell = event.currentTarget;
-        
-        // Verificar se a célula pode ser clicada
-        if (cell.classList.contains("booked") || 
-            cell.classList.contains("past") || 
-            cell.classList.contains("closed") ||
-            cell.classList.contains("unavailable")) {
-            console.log("Célula não pode ser clicada:", cell.className);
-            return;
-        }
+        if (cell.classList.contains("booked") || cell.classList.contains("past") || cell.classList.contains("closed")) return;
 
         const slotDateStr = cell.dataset.date;
-        console.log(`Clique no slot: ${slotDateStr}`);
-        
-        // Verificar novamente se o agendamento é permitido
-        const bookingStatus = checkIfBookingAllowed(slotDateStr);
-        if (!bookingStatus.allowed) {
-            console.log(`Agendamento não permitido para ${slotDateStr}:`, bookingStatus);
-            showScheduleMessage(bookingStatus.title || "Agendamentos estão fechados para esta data.", "error");
+        const slotDateUTC = parseDateStrToUTC(slotDateStr);
+        const todayUTC = getTodayUTC();
+
+
+
+        if (!checkIfBookingAllowed(slotDateStr)) {
+            showScheduleMessage("Agendamentos estão fechados para esta data.", "error");
             return;
         }
 
@@ -537,19 +382,14 @@ document.addEventListener("DOMContentLoaded", () => {
         );
 
         if (existingIndex > -1) {
-            // Desselecionar
             selectedSlots.splice(existingIndex, 1);
             cell.classList.remove("selected");
             cell.textContent = "Disponível";
-            console.log(`Slot desmarcado: ${slotDateStr} - ${slotData.roomName} - ${slotData.period}`);
         } else {
-            // Selecionar
             selectedSlots.push(slotData);
             cell.classList.add("selected");
             cell.textContent = "Selecionado";
-            console.log(`Slot selecionado: ${slotDateStr} - ${slotData.roomName} - ${slotData.period}`);
         }
-        
         updateButtonStates();
     }
 
@@ -568,6 +408,7 @@ document.addEventListener("DOMContentLoaded", () => {
             generatePdfButton.disabled = !currentWeekStartDate;
         }
     }
+
     // --- PDF Generation (CORRIGIDA) ---
     async function generatePdf() {
         if (!currentWeekStartDate) {
