@@ -330,6 +330,10 @@ document.addEventListener("DOMContentLoaded", () => {
             const dayOffset = todayUTC.getUTCDay() === 0 ? 6 : todayUTC.getUTCDay() - 1;
             currentWeekMonday.setUTCDate(todayUTC.getUTCDate() - dayOffset);
             
+            const currentWeekWednesday = new Date(currentWeekMonday.valueOf());
+            currentWeekWednesday.setUTCDate(currentWeekMonday.getUTCDate() + 2); // Segunda + 2 dias = Quarta
+            currentWeekWednesday.setUTCHours(23, 59, 59, 999); // 23:59:59.999 UTC
+
             const nextWeekMonday = new Date(currentWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000);
             const currentWeekFriday18h = new Date(currentWeekMonday.valueOf());
             currentWeekFriday18h.setUTCDate(currentWeekMonday.getUTCDate() + 4); // Segunda + 4 dias = Sexta
@@ -370,12 +374,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 console.log(`Data fora do período de agendamento definido (além da próxima semana) - ${dateStr}: false`);
                 return false;
             }
-        } catch (error) {
-            console.error("Erro ao verificar se agendamento é permitido:", error);
-            return false;
-        }
-
-
         } catch (error) {
             console.error("Erro ao verificar se agendamento é permitido:", error);
             return false;
