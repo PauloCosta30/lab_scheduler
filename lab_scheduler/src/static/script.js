@@ -38,6 +38,14 @@ document.addEventListener("DOMContentLoaded", () => {
         return new Date(Date.UTC(year, month - 1, day));
     }
 
+    function getCurrentBrazilTime() {
+        // Retorna a data/hora atual no fuso horário do Brasil (UTC-3)
+        const now = new Date();
+        const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+        const brazilTime = new Date(utc + (-3 * 3600000)); // UTC-3
+        return brazilTime;
+    }
+
     // --- Helper Functions for Messages ---
     function showModalMessage(message, type) {
         if (modalFormMessage) {
@@ -73,31 +81,138 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // --- Booking Window Status Functions ---
+    function calculateBookingWindowStatus() {
+        const now = getCurrentBrazilTime();
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+        const currentDay = now.getDay(); // 0 = domingo, 1 = segunda, ..., 6 = sábado
+        
+        console.log(`Calculando status da janela - Agora: ${now.toLocaleString('pt-BR')} (Dia: ${currentDay}, Hora: ${currentHour}:${currentMinute})`);
+        
+        // Calcular segunda-feira da semana atual
+        const currentWeekMonday = new Date(now);
+        const dayOffset = currentDay === 0 ? 6 : currentDay - 1; // Se domingo, offset é 6; senão, dia - 1
+        currentWeekMonday.setDate(now.getDate() - dayOffset);
+        currentWeekMonday.setHours(0, 0, 0, 0);
+        
+        // Calcular quarta-feira da semana atual
+        const currentWeekWednesday = new Date(currentWeekMonday);
+        currentWeekWednesday.setDate(currentWeekMonday.getDate() + 2);
+        currentWeekWednesday.setHours(23, 59, 59, 999);
+        
+        // Calcular sexta-feira da semana atual
+        const currentWeekFriday = new Date(currentWeekMonday);
+        currentWeekFriday.setDate(currentWeekMonday.getDate() + 4);
+        currentWeekFriday.setHours(18, 0, 0, 0);
+        
+        // Calcular segunda-feira da próxima semana
+        const nextWeekMonday = new Date(currentWeekMonday);
+        nextWeekMonday.setDate(currentWeekMonday.getDate() + 7);
+        
+        // Calcular quarta-feira da próxima semana
+        const nextWeekWednesday = new Date(nextWeekMonday);
+        nextWeekWednesday.setDate(nextWeekMonday.getDate() + 2);
+        nextWeekWednesday.setHours(23, 59, 59, 999);
+        
+        console.log(`Segunda atual: ${currentWeekMonday.toLocaleString('pt-BR')}`);
+        console.log(`Quarta atual 23:59: ${currentWeekWednesday.toLocaleString('pt-BR')}`);
+        console.log(`Sexta atual 18:00: ${currentWeekFriday.toLocaleString('pt-BR')}`);
+        console.log(`Segunda próxima: ${nextWeekMonday.toLocaleString('pt-BR')}`);
+        console.log(`Quarta próxima 23:59: ${nextWeekWednesday.toLocaleString('pt-BR')}`);
+        
+        // Determinar status da semana atual
+        let currentWeekOpen = false;
+        let currentWeekMessage = "";
+        
+        if (now <= currentWeekWednesday) {
+            // Ainda não passou da quarta-feira 23:59
+            currentWeekOpen = true;
+            currentWeekMessage = `Aberto até quarta-feira às 23:59 (${currentWeekWednesday.toLocaleDateString('pt-BR')})`;
+        } else {
+            // Já passou da quarta-feira 23:59
+            currentWeekOpen = false;
+            currentWeekMessage = `Fechado (encerrou em ${currentWeekWednesday.toLocaleDateString('pt-BR')} às 23:59)`;
+        }
+        
+        // Determinar status da próxima semana
+        let nextWeekOpen = false;
+        let nextWeekMessage = "";
+        
+        if (now >= currentWeekFriday && now <= nextWeekWednesday) {
+            // Está entre sexta-feira 18:00 e quarta-feira 23:59 da próxima semana
+            nextWeekOpen = true;
+            nextWeekMessage = `Aberto até quarta-feira às 23:59 (${nextWeekWednesday.toLocaleDateString('pt-BR')})`;
+        } else if (now < currentWeekFriday) {
+            // Ainda não chegou na sexta-feira 18:00
+            nextWeekOpen = false;
+            nextWeekMessage = `Abre sexta-feira às 18:00 (${currentWeekFriday.toLocaleDateString('pt-BR')})`;
+        } else {
+            // Já passou da quarta-feira 23:59 da próxima semana
+            nextWeekOpen = false;
+            nextWeekMessage = `Fechado (encerrou em ${nextWeekWednesday.toLocaleDateString('pt-BR')} às 23:59)`;
+        }
+        
+        const status = {
+            current_week: {
+                open: currentWeekOpen,
+                message: currentWeekMessage
+            },
+            next_week: {
+                open: nextWeekOpen,
+                message: nextWeekMessage
+            },
+            calculated_at: now.toISOString()
+        };
+        
+        console.log("Status calculado:", status);
+        return status;
+    }
+
     async function fetchBookingWindowStatus() {
         try {
+            // Primeiro tentar buscar do servidor
             const response = await fetch(`${API_BASE_URL}/booking-window-status`);
-            if (!response.ok) {
-                throw new Error(`Erro ao buscar status: ${response.statusText}`);
+            if (response.ok) {
+                bookingWindowStatus = await response.json();
+                console.log("Status da janela de agendamento do servidor:", bookingWindowStatus);
+            } else {
+                // Se falhar, calcular localmente
+                console.log("Servidor não retornou status, calculando localmente...");
+                bookingWindowStatus = calculateBookingWindowStatus();
             }
-            bookingWindowStatus = await response.json();
-            updateBookingStatusDisplay();
-            console.log("Status da janela de agendamento carregado:", bookingWindowStatus);
-            return true;
         } catch (error) {
-            console.error("Falha ao buscar status da janela de agendamento:", error);
-            showBookingStatusMessage("Não foi possível verificar o status do agendamento", "error");
-            return false;
+            // Se houver erro de conexão, calcular localmente
+            console.log("Erro ao buscar status do servidor, calculando localmente:", error);
+            bookingWindowStatus = calculateBookingWindowStatus();
         }
+        
+        updateBookingStatusDisplay();
+        return true;
     }
 
     function updateBookingStatusDisplay() {
         if (!bookingWindowStatus) return;
 
-        showBookingStatusMessage("As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 23:59, e a escala da próxima semana será liberada todas as sextas-feiras, às 18h.", "info");
+        // Mensagem principal sobre as regras
+        const mainMessage = "Regras de agendamento: A escala fica aberta de segunda a sexta-feira até às 23:59 de quarta-feira. Depois fecha e reabre sexta-feira às 18:00 para a próxima semana.";
+        
+        // Mensagens específicas sobre o status atual
+        const currentWeekMsg = `Semana atual: ${bookingWindowStatus.current_week.message}`;
+        const nextWeekMsg = `Próxima semana: ${bookingWindowStatus.next_week.message}`;
+        
+        const fullMessage = `${mainMessage}\n\n${currentWeekMsg}\n${nextWeekMsg}`;
+        
+        showBookingStatusMessage(fullMessage, "info");
 
-        // Ocultar os status individuais da semana atual e próxima semana, pois a mensagem é fixa
-        if (currentWeekStatus) currentWeekStatus.style.display = "none";
-        if (nextWeekStatus) nextWeekStatus.style.display = "none";
+        // Atualizar elementos individuais se existirem
+        if (currentWeekStatus) {
+            currentWeekStatus.textContent = currentWeekMsg;
+            currentWeekStatus.style.display = "block";
+        }
+        if (nextWeekStatus) {
+            nextWeekStatus.textContent = nextWeekMsg;
+            nextWeekStatus.style.display = "block";
+        }
     }
 
     // --- Room Data --- 
@@ -335,12 +450,12 @@ document.addEventListener("DOMContentLoaded", () => {
             // Verificar se o slot é da semana atual
             if (slotDate >= currentWeekMonday && slotDate < nextWeekMonday) {
                 const allowed = bookingWindowStatus.current_week.open;
-                console.log(`Semana atual - ${dateStr}: ${allowed}`);
+                console.log(`Semana atual - ${dateStr}: ${allowed ? 'PERMITIDO' : 'BLOQUEADO'}`);
                 return allowed;
                 
             } else if (slotDate >= nextWeekMonday && slotDate < new Date(nextWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000)) {
                 const allowed = bookingWindowStatus.next_week.open;
-                console.log(`Próxima semana - ${dateStr}: ${allowed}`);
+                console.log(`Próxima semana - ${dateStr}: ${allowed ? 'PERMITIDO' : 'BLOQUEADO'}`);
                 return allowed;
             }
 
