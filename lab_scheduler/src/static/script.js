@@ -334,9 +334,29 @@ document.addEventListener("DOMContentLoaded", () => {
 
             // Verificar se o slot é da semana atual
             if (slotDate >= currentWeekMonday && slotDate < nextWeekMonday) {
-                const allowed = bookingWindowStatus.current_week.open;
-                console.log(`Semana atual - ${dateStr}: ${allowed}`);
-                return allowed;
+                // Calcular a quarta-feira da semana atual
+                const currentWeekWednesday = new Date(currentWeekMonday.valueOf());
+                currentWeekWednesday.setUTCDate(currentWeekMonday.getUTCDate() + 2); // Segunda + 2 dias = Quarta
+                currentWeekWednesday.setUTCHours(23, 59, 59, 999); // 23:59:59.999 UTC
+
+                // Se a data do slot for anterior ou igual à quarta-feira da semana atual, e a janela estiver aberta
+                // OU se a data do slot for posterior à quarta-feira da semana atual, mas ainda dentro da semana, e a janela estiver aberta
+                // A lógica principal é que a janela fecha na quarta-feira às 23:59.
+                // Se o slot for na quarta-feira ou antes, e a data atual for antes da quarta-feira 23:59, permite.
+                // Se o slot for depois da quarta-feira, não permite (mesmo que a janela 'geral' da semana esteja aberta, pois já passou o prazo).
+
+                const nowUTC = new Date(); // Data e hora atual em UTC
+
+                if (nowUTC <= currentWeekWednesday) {
+                    // Se ainda não passou da quarta-feira 23:59 da semana atual
+                    const allowed = bookingWindowStatus.current_week.open;
+                    console.log(`Semana atual (antes da quarta 23:59) - ${dateStr}: ${allowed}`);
+                    return allowed;
+                } else {
+                    // Se já passou da quarta-feira 23:59 da semana atual
+                    console.log(`Semana atual (depois da quarta 23:59) - ${dateStr}: false (prazo encerrado)`);
+                    return false;
+                }
                 
             } else if (slotDate >= nextWeekMonday && slotDate < new Date(nextWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000)) {
                 const allowed = bookingWindowStatus.next_week.open;
