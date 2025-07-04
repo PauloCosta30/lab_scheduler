@@ -144,10 +144,10 @@ document.addEventListener("DOMContentLoaded", () => {
             currentWeekOpen = false;
             nextWeekOpen = false;
             statusMessage = "Agendamentos da semana atual estão fechados. Próxima semana abrirá sexta-feira às 18:00.";
-        } else if (currentDayOfWeek === 5) {
+        } else if (currentDayOfWeek === 4) {
             // Sexta-feira: verificar se já são 18:00 ou mais
             currentWeekOpen = false;
-            if (currentHour >= 18) {
+            if (currentHour >= 5) {
                 nextWeekOpen = true;
                 statusMessage = "Agendamentos para a próxima semana estão abertos até quarta-feira às 23:59.";
             } else {
