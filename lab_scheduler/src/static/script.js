@@ -76,6 +76,37 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // --- Week Display Logic ---
+    function getWeekToDisplay() {
+        const now = getCurrentDateTime();
+        const currentDayOfWeek = now.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+        const currentHour = now.getHours();
+        
+        console.log(`=== DETERMINANDO SEMANA PARA EXIBIR ===`);
+        console.log(`Dia da semana: ${currentDayOfWeek} (0=Dom, 1=Seg, ..., 6=Sab)`);
+        console.log(`Hora atual: ${currentHour}:${now.getMinutes().toString().padStart(2, '0')}`);
+        
+        // Se for sexta-feira (5) após as 18h, ou fim de semana (6=sábado, 0=domingo)
+        // mostrar a próxima semana
+        if ((currentDayOfWeek === 5 && currentHour >= 18) || 
+            currentDayOfWeek === 6 || 
+            currentDayOfWeek === 0) {
+            
+            // Retornar data da próxima semana (próxima segunda-feira)
+            const nextWeek = new Date(now);
+            const daysUntilNextMonday = currentDayOfWeek === 0 ? 1 : 8 - currentDayOfWeek;
+            nextWeek.setDate(now.getDate() + daysUntilNextMonday);
+            const nextWeekDate = nextWeek.toISOString().split("T")[0];
+            
+            console.log(`EXIBINDO PRÓXIMA SEMANA: ${nextWeekDate}`);
+            return nextWeekDate;
+        }
+        
+        // Caso contrário, mostrar semana atual
+        console.log(`EXIBINDO SEMANA ATUAL`);
+        return null; // null = usa a lógica atual (semana atual)
+    }
+
     // --- Booking Window Status Functions ---
     function calculateBookingWindowStatus() {
         const now = getCurrentDateTime();
@@ -211,11 +242,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
         try {
             let referenceDate;
+            
             if (inputDate) {
                 console.log("Data de entrada:", inputDate);
                 referenceDate = parseDateStrToUTC(inputDate);
             } else {
-                referenceDate = todayUTC;
+                // NOVA LÓGICA: Verificar qual semana deve ser exibida
+                const weekToDisplay = getWeekToDisplay();
+                if (weekToDisplay) {
+                    console.log("Carregando próxima semana automaticamente:", weekToDisplay);
+                    referenceDate = parseDateStrToUTC(weekToDisplay);
+                } else {
+                    referenceDate = todayUTC;
+                }
             }
 
             // Calcular segunda-feira da semana
