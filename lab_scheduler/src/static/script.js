@@ -76,7 +76,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // --- Booking Window Status Functions (NOVA IMPLEMENTAÇÃO) ---
+    // --- Booking Window Status Functions ---
     function calculateBookingWindowStatus() {
         const now = getCurrentDateTime();
         const currentDayOfWeek = now.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
@@ -345,6 +345,8 @@ document.addEventListener("DOMContentLoaded", () => {
             roomCell.className = "room-name";
             row.appendChild(roomCell);
 
+            // CORREÇÃO: Adicionar loop para cada data da semana
+            datesOfWeek.forEach(dateStr => {
                 periods.forEach(period => {
                     const cell = document.createElement("td");
                     cell.className = "schedule-cell";
@@ -394,10 +396,14 @@ document.addEventListener("DOMContentLoaded", () => {
     function checkIfBookingAllowed(dateStr) {
         console.log(`=== VERIFICANDO AGENDAMENTO PARA ${dateStr} ===`);
         
-        if (!bookingWindowStatus) {
-            console.log("Status da janela de agendamento não disponível");
-            return false;
-        }
+        try {
+            if (!bookingWindowStatus) {
+                console.log("Status da janela de agendamento não disponível");
+                return false;
+            }
+
+            const slotDate = parseDateStrToUTC(dateStr);
+            const todayUTC = getTodayUTC();
             
             // Calcular segunda-feira da semana atual (UTC)
             const currentWeekMonday = new Date(todayUTC.valueOf());
@@ -425,6 +431,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             console.log(`DATA FORA DO PERÍODO PERMITIDO - ${dateStr}`);
             return false;
+
         } catch (error) {
             console.error("Erro ao verificar se agendamento é permitido:", error);
             return false;
