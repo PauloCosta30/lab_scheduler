@@ -345,10 +345,6 @@ document.addEventListener("DOMContentLoaded", () => {
             roomCell.className = "room-name";
             row.appendChild(roomCell);
 
-            datesOfWeek.forEach(dateStr => {
-                const slotDateUTC = parseDateStrToUTC(dateStr);
-                const isPastDate = slotDateUTC < todayUTC;
-
                 periods.forEach(period => {
                     const cell = document.createElement("td");
                     cell.className = "schedule-cell";
@@ -363,9 +359,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         cell.textContent = booking.user_name;
                         cell.classList.add("booked");
                         cell.title = `Reservado por: ${booking.user_name}`;
-                    } else if (isPastDate) {
-                        cell.textContent = "Indisponível";
-                        cell.classList.add("past");
+                    
                     } else {
                         // Verificar se o agendamento está permitido para esta data
                         const isBookingAllowed = checkIfBookingAllowed(dateStr);
@@ -404,10 +398,6 @@ document.addEventListener("DOMContentLoaded", () => {
             console.log("Status da janela de agendamento não disponível");
             return false;
         }
-
-        try {
-            const slotDate = parseDateStrToUTC(dateStr);
-            const todayUTC = getTodayUTC();
             
             // Calcular segunda-feira da semana atual (UTC)
             const currentWeekMonday = new Date(todayUTC.valueOf());
@@ -448,11 +438,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const slotDateStr = cell.dataset.date;
         const slotDateUTC = parseDateStrToUTC(slotDateStr);
         const todayUTC = getTodayUTC();
-
-        if (slotDateUTC < todayUTC) {
-            showScheduleMessage("Não é possível selecionar datas/horários passados.", "error");
-            return;
-        }
 
         if (!checkIfBookingAllowed(slotDateStr)) {
             showScheduleMessage("Agendamentos estão fechados para esta data.", "error");
