@@ -126,7 +126,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Regra: Semana atual fica aberta de segunda a sexta até quarta-feira às 23:59
         // Próxima semana abre sexta-feira às 18:00
         
-        if (currentDayOfWeek >= 1 && currentDayOfWeek <= 3) {
+        if (currentDayOfWeek >= 1 && currentDayOfWeek <= 2) {
             // Segunda (1), Terça (2), Quarta (3)
             if (currentDayOfWeek === 3) {
                 // Quarta-feira: aberta até 23:59
@@ -139,7 +139,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 nextWeekOpen = false;
                 statusMessage = "Agendamentos da semana atual estão abertos até quarta-feira às 23:59.";
             }
-        } else if (currentDayOfWeek === 4) {
+        } else if (currentDayOfWeek === 3) {
             // Quinta-feira: semana atual fechada, próxima semana ainda não abriu
             currentWeekOpen = false;
             nextWeekOpen = false;
