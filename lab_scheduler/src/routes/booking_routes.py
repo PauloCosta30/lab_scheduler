@@ -49,36 +49,42 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, obs
             current_app.logger.error("Flask-Mail (mail object) not found in current_app.extensions. Email not sent.")
             return False
             
-        if not booked_slots_details:
-            current_app.logger.info("No booking details to send in email.")
+        # Permitir envio de email mesmo sem slots se houver observação
+        if not booked_slots_details and not observation:
+            current_app.logger.info("No booking details or observation to send in email.")
             return False
 
         subject = "Confirmação de Agendamento de Laboratório"
         sender = current_app.config.get("MAIL_DEFAULT_SENDER", "noreply@example.com")
         recipients = [user_email]
 
-        html_body = f"""\
-        <p>Olá {user_name},</p>
-        <p>Seu agendamento de laboratório foi confirmado com sucesso. Detalhes abaixo:</p>
-        <ul>
-        """
-        for slot in booked_slots_details:
-            booking_date_formatted = slot["booking_date"]
-            if isinstance(slot["booking_date"], date):
-                booking_date_formatted = slot["booking_date"].strftime("%d/%m/%Y")
-            elif isinstance(slot["booking_date"], str):
-                try:
-                    booking_date_formatted = datetime.strptime(slot["booking_date"], "%Y-%m-%d").strftime("%d/%m/%Y")
-                except ValueError:
-                    pass
-
-            html_body += f"<li>Sala: {slot['room_name']} - Data: {booking_date_formatted} - Período: {slot['period']}</li>"
+        html_body = f"<p>Olá {user_name},</p>"
         
-        html_body += "</ul>"
+        if booked_slots_details:
+            html_body += "<p>Seu agendamento de laboratório foi confirmado com sucesso. Detalhes abaixo:</p><ul>"
+            for slot in booked_slots_details:
+                booking_date_formatted = slot["booking_date"]
+                if isinstance(slot["booking_date"], date):
+                    booking_date_formatted = slot["booking_date"].strftime("%d/%m/%Y")
+                elif isinstance(slot["booking_date"], str):
+                    try:
+                        booking_date_formatted = datetime.strptime(slot["booking_date"], "%Y-%m-%d").strftime("%d/%m/%Y")
+                    except ValueError:
+                        pass
+
+                html_body += f"<li>Sala: {slot['room_name']} - Data: {booking_date_formatted} - Período: {slot['period']}</li>"
+            html_body += "</ul>"
+        
+        if observation:
+            if booked_slots_details:
+                html_body += f"<p>Observação: {observation}</p>"
+            else:
+                html_body += "<p>Sua observação foi registrada com sucesso.</p>"
+                html_body += f"<p>Observação: {observation}</p>"
+        
         if coordinator_name:
             html_body += f"<p>Coordenador: {coordinator_name}</p>"
-        if observation:
-            html_body += f"<p>Observação: {observation}</p>"
+        
         html_body += "<p>Obrigado! Observação: Em caso de dúvidas sobre a escala, entre em contato com Ana Correa pelo e-mail: ana.correa@itv.org</p>"
 
         msg = Message(subject, sender=sender, recipients=recipients)
@@ -211,109 +217,120 @@ def create_booking():
         user_email = data.get("user_email")
         coordinator_name = data.get("coordinator_name")
         observation = data.get("observation", "")
-        slots_data = data.get("slots")
+        slots_data = data.get("slots", [])  # Permitir lista vazia
 
-        if not all([user_name, user_email, slots_data]):
-            return jsonify({"error": "Missing fields. Required: user_name, user_email, slots"}), 400
+        # Validação básica - requer pelo menos nome, email e (slots OU observação)
+        if not user_name or not user_email:
+            return jsonify({"error": "Missing fields. Required: user_name, user_email"}), 400
         
-        if not isinstance(slots_data, list) or not slots_data:
-            return jsonify({"error": "Slots must be a non-empty list"}), 400
-
+        # Validar se há pelo menos slots ou observação
+        if not slots_data and not observation.strip():
+            return jsonify({"error": "É necessário fornecer pelo menos slots para agendamento ou uma observação"}), 400
+        
+        # Validar formato do email
         if "@" not in user_email or "." not in user_email.split("@")[-1]:
             return jsonify({"error": "Invalid email format"}), 400
+
+        # Validar slots apenas se fornecidos
+        if slots_data and not isinstance(slots_data, list):
+            return jsonify({"error": "Slots must be a list"}), 400
 
         processed_slots = []
         daily_new_bookings_count = defaultdict(int)
 
         booking_window = get_booking_window_status()
 
-        for slot_input in slots_data:
-            room_id = slot_input.get("room_id")
-            booking_date_str = slot_input.get("booking_date")
-            period = slot_input.get("period")
+        # Processar slots apenas se fornecidos
+        if slots_data:
+            for slot_input in slots_data:
+                room_id = slot_input.get("room_id")
+                booking_date_str = slot_input.get("booking_date")
+                period = slot_input.get("period")
 
-            if not all([room_id, booking_date_str, period]):
-                return jsonify({"error": f"Invalid slot data: {slot_input}. Each slot needs room_id, booking_date, period"}), 400
-            if period not in ["Manhã", "Tarde"]:
-                return jsonify({"error": f"Invalid period '{period}' in slot: {slot_input}. Must be 'Manhã' or 'Tarde'"}), 400
-            try:
-                booking_date_obj = datetime.strptime(booking_date_str, "%Y-%m-%d").date()
-            except ValueError:
-                return jsonify({"error": f"Invalid date format '{booking_date_str}' in slot: {slot_input}. Use YYYY-MM-DD"}), 400
-            
-            # Validação da janela de agendamento
-            now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
-            now_brasilia = now_utc.astimezone(BRASILIA_TZ)
-            today_brasilia = now_brasilia.date()
-            current_week_monday = today_brasilia - timedelta(days=today_brasilia.weekday())
-            next_week_monday = current_week_monday + timedelta(weeks=1)
-
-            if booking_date_obj.weekday() >= 5: # Sábado ou Domingo
-                return jsonify({"error": f"Agendamentos para {booking_date_str} são permitidos apenas de segunda a sexta-feira."}), 400
-
-            if booking_date_obj < today_brasilia:
-                return jsonify({"error": f"Agendamento para {booking_date_str} não pode ser no passado."}), 400
-            
-            if booking_date_obj >= current_week_monday and booking_date_obj < next_week_monday:
-                # Agendamento para a semana atual
-                if not booking_window["current_week"]["open"]:
-                    return jsonify({"error": f"Agendamentos para a semana atual estão fechados. {booking_window['current_week']['message']}"}), 403
-            elif booking_date_obj >= next_week_monday and booking_date_obj < (next_week_monday + timedelta(weeks=1)):
-                # Agendamento para a próxima semana
-                if not booking_window["next_week"]["open"]:
-                    return jsonify({"error": f"Agendamentos para a próxima semana estão fechados. {booking_window['next_week']['message']}"}), 403
-            else:
-                return jsonify({"error": f"Agendamentos só são permitidos para a semana atual ou próxima semana."}), 403
-
-            room = Room.query.get(room_id)
-            if not room:
-                return jsonify({"error": f"Room ID {room_id} in slot: {slot_input} not found"}), 404
-            
-            processed_slots.append({
-                "room_id": room_id, "room_name": room.name,
-                "booking_date_obj": booking_date_obj, "booking_date_str": booking_date_str,
-                "period": period
-            })
-            daily_new_bookings_count[booking_date_obj] += 1
-
-            # Validation for max 3 bookings per day per user
-            for booking_date_obj, count_for_this_request in daily_new_bookings_count.items():
-                existing_bookings_on_day = Booking.query.filter_by(user_name=user_name, booking_date=booking_date_obj).count()
-                if (existing_bookings_on_day + count_for_this_request) > MAX_BOOKINGS_PER_DAY:
-                    return jsonify({"error": f"Limite de {MAX_BOOKINGS_PER_DAY} agendamentos por dia para o usuário '{user_name}' seria excedido no dia {booking_date_obj.strftime('%Y-%m-%d')}."}), 409
-
-            # Validation for "Geral" rooms - only one per period per day per user
-            for booking_date_obj, _ in daily_new_bookings_count.items():
-                geral_periods_in_request = defaultdict(list)
+                if not all([room_id, booking_date_str, period]):
+                    return jsonify({"error": f"Invalid slot data: {slot_input}. Each slot needs room_id, booking_date, period"}), 400
+                if period not in ["Manhã", "Tarde"]:
+                    return jsonify({"error": f"Invalid period '{period}' in slot: {slot_input}. Must be 'Manhã' or 'Tarde'"}), 400
+                try:
+                    booking_date_obj = datetime.strptime(booking_date_str, "%Y-%m-%d").date()
+                except ValueError:
+                    return jsonify({"error": f"Invalid date format '{booking_date_str}' in slot: {slot_input}. Use YYYY-MM-DD"}), 400
                 
+                # Validação da janela de agendamento
+                now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
+                now_brasilia = now_utc.astimezone(BRASILIA_TZ)
+                today_brasilia = now_brasilia.date()
+                current_week_monday = today_brasilia - timedelta(days=today_brasilia.weekday())
+                next_week_monday = current_week_monday + timedelta(weeks=1)
+
+                if booking_date_obj.weekday() >= 5: # Sábado ou Domingo
+                    return jsonify({"error": f"Agendamentos para {booking_date_str} são permitidos apenas de segunda a sexta-feira."}), 400
+
+                if booking_date_obj < today_brasilia:
+                    return jsonify({"error": f"Agendamento para {booking_date_str} não pode ser no passado."}), 400
+                
+                if booking_date_obj >= current_week_monday and booking_date_obj < next_week_monday:
+                    # Agendamento para a semana atual
+                    if not booking_window["current_week"]["open"]:
+                        return jsonify({"error": f"Agendamentos para a semana atual estão fechados. {booking_window['current_week']['message']}"}), 403
+                elif booking_date_obj >= next_week_monday and booking_date_obj < (next_week_monday + timedelta(weeks=1)):
+                    # Agendamento para a próxima semana
+                    if not booking_window["next_week"]["open"]:
+                        return jsonify({"error": f"Agendamentos para a próxima semana estão fechados. {booking_window['next_week']['message']}"}), 403
+                else:
+                    return jsonify({"error": f"Agendamentos só são permitidos para a semana atual ou próxima semana."}), 403
+
+                room = Room.query.get(room_id)
+                if not room:
+                    return jsonify({"error": f"Room ID {room_id} in slot: {slot_input} not found"}), 404
+                
+                processed_slots.append({
+                    "room_id": room_id, "room_name": room.name,
+                    "booking_date_obj": booking_date_obj, "booking_date_str": booking_date_str,
+                    "period": period
+                })
+                daily_new_bookings_count[booking_date_obj] += 1
+
+            # Validações adicionais apenas se há slots
+            if processed_slots:
+                # Validation for max 3 bookings per day per user
+                for booking_date_obj, count_for_this_request in daily_new_bookings_count.items():
+                    existing_bookings_on_day = Booking.query.filter_by(user_name=user_name, booking_date=booking_date_obj).count()
+                    if (existing_bookings_on_day + count_for_this_request) > MAX_BOOKINGS_PER_DAY:
+                        return jsonify({"error": f"Limite de {MAX_BOOKINGS_PER_DAY} agendamentos por dia para o usuário '{user_name}' seria excedido no dia {booking_date_obj.strftime('%Y-%m-%d')}."}), 409
+
+                # Validation for "Geral" rooms - only one per period per day per user
+                for booking_date_obj, _ in daily_new_bookings_count.items():
+                    geral_periods_in_request = defaultdict(list)
+                    
+                    for slot in processed_slots:
+                        if slot["booking_date_obj"] == booking_date_obj and slot["room_name"].startswith("Geral "):
+                            geral_periods_in_request[slot["period"]].append(slot["room_name"])
+                    
+                    for period, geral_rooms in geral_periods_in_request.items():
+                        if len(geral_rooms) > 1:
+                            return jsonify({
+                                "error": f"Você só pode agendar uma sala da categoria 'Geral' por período. Tentativa de agendar múltiplas salas 'Geral' no período '{period}' do dia {booking_date_obj.strftime('%Y-%m-%d')}."
+                            }), 409
+                        
+                        existing_geral_booking = Booking.query.join(Room).filter(
+                            Booking.user_name == user_name,
+                            Booking.booking_date == booking_date_obj,
+                            Booking.period == period,
+                            Room.name.startswith("Geral ")
+                        ).first()
+                        
+                        if existing_geral_booking:
+                            return jsonify({
+                                "error": f"Você já possui um agendamento para uma sala da categoria 'Geral' ({existing_geral_booking.room.name}) no período '{period}' do dia {booking_date_obj.strftime('%Y-%m-%d')}."
+                            }), 409
+
+                # Validation for booking conflicts (slot already taken)
                 for slot in processed_slots:
-                    if slot["booking_date_obj"] == booking_date_obj and slot["room_name"].startswith("Geral "):
-                        geral_periods_in_request[slot["period"]].append(slot["room_name"])
-                
-                for period, geral_rooms in geral_periods_in_request.items():
-                    if len(geral_rooms) > 1:
+                    if check_booking_conflict(slot["room_id"], slot["booking_date_obj"], slot["period"]):
                         return jsonify({
-                            "error": f"Você só pode agendar uma sala da categoria 'Geral' por período. Tentativa de agendar múltiplas salas 'Geral' no período '{period}' do dia {booking_date_obj.strftime('%Y-%m-%d')}."
+                            "error": f"A sala '{slot['room_name']}' já está reservada para o período '{slot['period']}' no dia {slot['booking_date_str']}."
                         }), 409
-                    
-                    existing_geral_booking = Booking.query.join(Room).filter(
-                        Booking.user_name == user_name,
-                        Booking.booking_date == booking_date_obj,
-                        Booking.period == period,
-                        Room.name.startswith("Geral ")
-                    ).first()
-                    
-                    if existing_geral_booking:
-                        return jsonify({
-                            "error": f"Você já possui um agendamento para uma sala da categoria 'Geral' ({existing_geral_booking.room.name}) no período '{period}' do dia {booking_date_obj.strftime('%Y-%m-%d')}."
-                        }), 409
-
-            # Validation for booking conflicts (slot already taken)
-            for slot in processed_slots:
-                if check_booking_conflict(slot["room_id"], slot["booking_date_obj"], slot["period"]):
-                    return jsonify({
-                        "error": f"A sala '{slot['room_name']}' já está reservada para o período '{slot['period']}' no dia {slot['booking_date_str']}."
-                    }), 409
         
         newly_created_bookings_details_for_email = []
         
@@ -365,7 +382,7 @@ def create_booking():
         elif observation.strip():
             response_message = "Observação registrada com sucesso!"
         else:
-            response_message = "Nenhuma ação realizada." # Caso não haja slots nem observação (já validado antes)
+            response_message = "Nenhuma ação realizada."
             
         if not email_sent_successfully:
             response_message += " (Houve um problema ao enviar o e-mail de confirmação.)"
