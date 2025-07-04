@@ -38,6 +38,10 @@ document.addEventListener("DOMContentLoaded", () => {
         return new Date(Date.UTC(year, month - 1, day));
     }
 
+    function getCurrentDateTime() {
+        return new Date();
+    }
+
     // --- Helper Functions for Messages ---
     function showModalMessage(message, type) {
         if (modalFormMessage) {
@@ -72,30 +76,110 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // --- Booking Window Status Functions ---
+    // --- Booking Window Status Functions (NOVA IMPLEMENTAÇÃO) ---
+    function calculateBookingWindowStatus() {
+        const now = getCurrentDateTime();
+        const currentDayOfWeek = now.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+
+        console.log(`=== CALCULANDO STATUS DA JANELA DE AGENDAMENTO ===`);
+        console.log(`Data/Hora atual: ${now.toLocaleString('pt-BR')}`);
+        console.log(`Dia da semana: ${currentDayOfWeek} (0=Dom, 1=Seg, ..., 6=Sab)`);
+        console.log(`Hora: ${currentHour}:${currentMinute.toString().padStart(2, '0')}`);
+
+        let currentWeekOpen = false;
+        let nextWeekOpen = false;
+        let statusMessage = "";
+
+        // Regra: Semana atual fica aberta de segunda a sexta até quarta-feira às 23:59
+        // Próxima semana abre sexta-feira às 18:00
+        
+        if (currentDayOfWeek >= 1 && currentDayOfWeek <= 3) {
+            // Segunda (1), Terça (2), Quarta (3)
+            if (currentDayOfWeek === 3) {
+                // Quarta-feira: aberta até 23:59
+                currentWeekOpen = true;
+                nextWeekOpen = false;
+                statusMessage = "Agendamentos da semana atual fecham hoje às 23:59. Próxima semana abrirá sexta-feira às 18:00.";
+            } else {
+                // Segunda e Terça: sempre aberta
+                currentWeekOpen = true;
+                nextWeekOpen = false;
+                statusMessage = "Agendamentos da semana atual estão abertos até quarta-feira às 23:59.";
+            }
+        } else if (currentDayOfWeek === 4) {
+            // Quinta-feira: semana atual fechada, próxima semana ainda não abriu
+            currentWeekOpen = false;
+            nextWeekOpen = false;
+            statusMessage = "Agendamentos da semana atual estão fechados. Próxima semana abrirá sexta-feira às 18:00.";
+        } else if (currentDayOfWeek === 5) {
+            // Sexta-feira: verificar se já são 18:00 ou mais
+            currentWeekOpen = false;
+            if (currentHour >= 18) {
+                nextWeekOpen = true;
+                statusMessage = "Agendamentos para a próxima semana estão abertos até quarta-feira às 23:59.";
+            } else {
+                nextWeekOpen = false;
+                statusMessage = `Agendamentos para a próxima semana abrem hoje às 18:00 (faltam ${18 - currentHour} hora(s)).`;
+            }
+        } else if (currentDayOfWeek === 6 || currentDayOfWeek === 0) {
+            // Sábado (6) ou Domingo (0): próxima semana continua aberta
+            currentWeekOpen = false;
+            nextWeekOpen = true;
+            statusMessage = "Agendamentos para a próxima semana estão abertos até quarta-feira às 23:59.";
+        }
+
+        const status = {
+            current_week: {
+                open: currentWeekOpen,
+                message: currentWeekOpen ? "Aberta" : "Fechada"
+            },
+            next_week: {
+                open: nextWeekOpen,
+                message: nextWeekOpen ? "Aberta" : "Fechada"
+            },
+            general_message: statusMessage
+        };
+
+        console.log(`=== STATUS CALCULADO ===`);
+        console.log(`Semana atual: ${status.current_week.message}`);
+        console.log(`Próxima semana: ${status.next_week.message}`);
+        console.log(`Mensagem: ${status.general_message}`);
+
+        return status;
+    }
+
     async function fetchBookingWindowStatus() {
         try {
+            // Primeiro tenta buscar do servidor
             const response = await fetch(`${API_BASE_URL}/booking-window-status`);
-            if (!response.ok) {
-                throw new Error(`Erro ao buscar status: ${response.statusText}`);
+            if (response.ok) {
+                bookingWindowStatus = await response.json();
+                console.log("Status da janela de agendamento carregado do servidor:", bookingWindowStatus);
+            } else {
+                throw new Error("Servidor não disponível");
             }
-            bookingWindowStatus = await response.json();
-            updateBookingStatusDisplay();
-            console.log("Status da janela de agendamento carregado:", bookingWindowStatus);
-            return true;
         } catch (error) {
-            console.error("Falha ao buscar status da janela de agendamento:", error);
-            showBookingStatusMessage("Não foi possível verificar o status do agendamento", "error");
-            return false;
+            console.warn("Falha ao buscar status do servidor, usando cálculo local:", error);
+            // Se falhar, usa o cálculo local
+            bookingWindowStatus = calculateBookingWindowStatus();
         }
+        
+        updateBookingStatusDisplay();
+        return true;
     }
 
     function updateBookingStatusDisplay() {
         if (!bookingWindowStatus) return;
 
-        showBookingStatusMessage("As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 23:59, e a escala da próxima semana será liberada todas as sextas-feiras, às 18h.", "info");
+        // Usar a mensagem personalizada se disponível, senão usar a padrão
+        const message = bookingWindowStatus.general_message || 
+                       "Agendamentos da semana atual fecham às quartas-feiras às 23:59. Próxima semana abre sexta-feira às 18:00.";
+        
+        showBookingStatusMessage(message, "info");
 
-        // Ocultar os status individuais da semana atual e próxima semana, pois a mensagem é fixa
+        // Ocultar os status individuais já que temos uma mensagem unificada
         if (currentWeekStatus) currentWeekStatus.style.display = "none";
         if (nextWeekStatus) nextWeekStatus.style.display = "none";
     }
@@ -314,7 +398,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function checkIfBookingAllowed(dateStr) {
-        console.log(`Verificando se agendamento é permitido para ${dateStr}`);
+        console.log(`=== VERIFICANDO AGENDAMENTO PARA ${dateStr} ===`);
         
         if (!bookingWindowStatus) {
             console.log("Status da janela de agendamento não disponível");
@@ -332,19 +416,24 @@ document.addEventListener("DOMContentLoaded", () => {
             
             const nextWeekMonday = new Date(currentWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000);
 
+            console.log(`Data do slot: ${dateStr}`);
+            console.log(`Hoje (UTC): ${todayUTC.toISOString().split('T')[0]}`);
+            console.log(`Segunda da semana atual: ${currentWeekMonday.toISOString().split('T')[0]}`);
+            console.log(`Segunda da próxima semana: ${nextWeekMonday.toISOString().split('T')[0]}`);
+
             // Verificar se o slot é da semana atual
             if (slotDate >= currentWeekMonday && slotDate < nextWeekMonday) {
                 const allowed = bookingWindowStatus.current_week.open;
-                console.log(`Semana atual - ${dateStr}: ${allowed}`);
+                console.log(`SEMANA ATUAL - ${dateStr}: ${allowed ? 'PERMITIDO' : 'FECHADO'}`);
                 return allowed;
                 
             } else if (slotDate >= nextWeekMonday && slotDate < new Date(nextWeekMonday.getTime() + 7 * 24 * 60 * 60 * 1000)) {
                 const allowed = bookingWindowStatus.next_week.open;
-                console.log(`Próxima semana - ${dateStr}: ${allowed}`);
+                console.log(`PRÓXIMA SEMANA - ${dateStr}: ${allowed ? 'PERMITIDO' : 'FECHADO'}`);
                 return allowed;
             }
 
-            console.log(`Data fora do período permitido - ${dateStr}`);
+            console.log(`DATA FORA DO PERÍODO PERMITIDO - ${dateStr}`);
             return false;
         } catch (error) {
             console.error("Erro ao verificar se agendamento é permitido:", error);
@@ -411,7 +500,6 @@ document.addEventListener("DOMContentLoaded", () => {
             generatePdfButton.disabled = !currentWeekStartDate;
         }
     }
-
     // --- PDF Generation (CORRIGIDA) ---
     async function generatePdf() {
         if (!currentWeekStartDate) {
