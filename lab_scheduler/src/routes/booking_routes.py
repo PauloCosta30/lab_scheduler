@@ -467,6 +467,7 @@ def get_bookings():
         return jsonify({"error": "Erro ao carregar agendamentos"}), 500
 
 @bookings_bp.route("/generate-pdf", methods=["GET"])
+@bookings_bp.route("/generate-pdf", methods=["GET"])
 def generate_schedule_pdf():
     """Gera PDF da escala semanal com observações organizadas por usuário e observações gerais"""
     try:
@@ -524,21 +525,34 @@ def generate_schedule_pdf():
                     "observation": booking.observation
                 })
             
-            # Coletar observações específicas por usuário (se houver observação)
+            # CORREÇÃO: Coletar observações específicas por usuário (independente se tem observação ou não)
+            # Inicializar usuário se não existir
+            if booking.user_name not in user_observations:
+                user_observations[booking.user_name] = {
+                    "email": booking.user_email,
+                    "coordinator": booking.coordinator_name,
+                    "bookings": [],
+                    "has_observations": False
+                }
+            
+            # Adicionar o agendamento à lista do usuário
+            user_observations[booking.user_name]["bookings"].append({
+                "room_name": booking.room.name if booking.room else "N/A",
+                "date": booking.booking_date,
+                "period": booking.period,
+                "observation": booking.observation if booking.observation else ""
+            })
+            
+            # Marcar se este usuário tem observações
             if booking.observation and booking.observation.strip():
-                if booking.user_name not in user_observations:
-                    user_observations[booking.user_name] = {
-                        "email": booking.user_email,
-                        "coordinator": booking.coordinator_name,
-                        "bookings": []
-                    }
-
-                user_observations[booking.user_name]["bookings"].append({
-                    "room_name": booking.room.name if booking.room else "N/A",
-                    "date": booking.booking_date,
-                    "period": booking.period,
-                    "observation": booking.observation
-                })
+                user_observations[booking.user_name]["has_observations"] = True
+        
+        # CORREÇÃO: Filtrar apenas usuários que realmente têm observações
+        filtered_user_observations = {
+            user_name: user_data 
+            for user_name, user_data in user_observations.items() 
+            if user_data["has_observations"]
+        }
         
         # Gerar lista de datas para os dias úteis da semana
         dates_of_week = []
@@ -559,21 +573,28 @@ def generate_schedule_pdf():
         current_app.logger.info(f"Salas encontradas: {[room.name for room in sorted_rooms]}")
         current_app.logger.info(f"Datas da semana: {[d.strftime('%Y-%m-%d') for d in dates_of_week]}")
         current_app.logger.info(f"Dados da escala: {dict(schedule_data)}")
-        current_app.logger.info(f"Observações de usuários: {len(user_observations)} usuários")
+        current_app.logger.info(f"Observações de usuários: {len(filtered_user_observations)} usuários com observações")
         current_app.logger.info(f"Observações gerais: {len(general_observations)} observações")
+        
+        # CORREÇÃO: Adicionar debug detalhado das observações
+        for user_name, user_data in filtered_user_observations.items():
+            current_app.logger.info(f"Usuário {user_name}: {len(user_data['bookings'])} agendamentos")
+            for booking in user_data['bookings']:
+                if booking['observation']:
+                    current_app.logger.info(f"  - {booking['room_name']} ({booking['date']}, {booking['period']}): {booking['observation']}")
         
         # Renderizar template HTML
         html_content = render_template(
             "schedule_pdf_template.html",
             schedule_data=dict(schedule_data),
-            user_observations=dict(user_observations),
+            user_observations=filtered_user_observations,  # CORREÇÃO: Usar a versão filtrada
             general_observations=general_observations,
             start_date=start_date,
             end_date=end_date,
             generated_at=now_brasilia,
             dates_of_week=dates_of_week,
-            all_rooms=sorted_rooms,  # Adicionar todas as salas para o template
-            timedelta=timedelta  # Disponibilizar timedelta para o template
+            all_rooms=sorted_rooms,
+            timedelta=timedelta
         )
         
         # Gerar PDF
