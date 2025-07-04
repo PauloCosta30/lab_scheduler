@@ -398,6 +398,73 @@ def create_booking():
         current_app.logger.error(f"Falha ao criar agendamento(s) no servidor: {str(e)}")
         return jsonify({"error": "Falha ao criar agendamento(s) no servidor.", "details": str(e)}), 500
 
+@bookings_bp.route("/bookings", methods=["GET"])
+def get_bookings():
+    try:
+        target_date_str = request.args.get("date")
+        start_date_str = request.args.get("start_date")
+        end_date_str = request.args.get("end_date")
+        
+        query = Booking.query.outerjoin(Room).order_by(Booking.booking_date, Booking.period)
+        
+        if target_date_str:
+            try:
+                target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
+                query = query.filter(Booking.booking_date == target_date)
+            except ValueError:
+                return jsonify({"error": "Invalid date format for 'date'. Use YYYY-MM-DD"}), 400
+        elif start_date_str and end_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                query = query.filter(Booking.booking_date.between(start_date, end_date))
+            except ValueError:
+                return jsonify({"error": "Invalid date format for 'start_date' or 'end_date'. Use YYYY-MM-DD"}), 400
+        
+        bookings = query.all()
+        
+        def booking_sort_key(booking):
+            try:
+                # Observações gerais vão por último
+                if booking.period == "Observação Geral":
+                    return (999, 999)
+                
+                if booking.room:
+                    room_name = booking.room.name
+                    if room_name.startswith("Geral "):
+                        try:
+                            number = int(re.findall(r'\d+', room_name)[0])
+                            return (0, number)
+                        except (IndexError, ValueError):
+                            return (0, 999)
+                    else:
+                        return (1, booking.room.id)
+                else:
+                    return (999, 999)
+            except Exception:
+                return (999, 999)
+        
+        bookings.sort(key=booking_sort_key)
+        
+        result = []
+        for booking in bookings:
+            result.append({
+                "id": booking.id, 
+                "user_name": booking.user_name, 
+                "user_email": booking.user_email,
+                "coordinator_name": booking.coordinator_name, 
+                "observation": booking.observation,
+                "room_id": booking.room_id,
+                "room_name": booking.room.name if booking.room else "Observação Geral", 
+                "booking_date": booking.booking_date.isoformat(),
+                "period": booking.period, 
+                "created_at": booking.created_at.isoformat() if booking.created_at else None
+            })
+        return jsonify(result)
+    
+    except Exception as e:
+        current_app.logger.error(f"Erro ao buscar agendamentos: {str(e)}")
+        return jsonify({"error": "Erro ao carregar agendamentos"}), 500
 
 @bookings_bp.route("/generate-pdf", methods=["GET"])
 def generate_schedule_pdf():
