@@ -88,7 +88,7 @@ document.addEventListener("DOMContentLoaded", () => {
         
         // Se for sexta-feira (5) após as 18h, ou fim de semana (6=sábado, 0=domingo)
         // mostrar a próxima semana
-        if ((currentDayOfWeek === 4 && currentHour >= 5) || 
+        if ((currentDayOfWeek === 3 && currentHour >= 5) || 
             currentDayOfWeek === 6 || 
             currentDayOfWeek === 0) {
             
@@ -126,7 +126,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Regra: Semana atual fica aberta de segunda a sexta até quarta-feira às 23:59
         // Próxima semana abre sexta-feira às 18:00
         
-        if (currentDayOfWeek >= 1 && currentDayOfWeek <= 2) {
+        if (currentDayOfWeek >= 1 && currentDayOfWeek <= 3) {
             // Segunda (1), Terça (2), Quarta (3)
             if (currentDayOfWeek === 3) {
                 // Quarta-feira: aberta até 23:59
