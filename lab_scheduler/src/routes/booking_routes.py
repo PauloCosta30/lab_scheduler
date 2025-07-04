@@ -137,17 +137,17 @@ def get_booking_window_status():
         next_week_monday = current_week_monday + timedelta(weeks=1)
         
         # Definir os pontos de corte para a semana atual
-        current_week_cutoff_date = current_week_monday + timedelta(days=3) # Quarta-feira
+        current_week_cutoff_date = current_week_monday + timedelta(days=2) # Quarta-feira
         current_week_cutoff_time = time(18, 0, 0) # 18:00
         current_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(current_week_cutoff_date, current_week_cutoff_time))
 
         # Definir os pontos de corte para a próxima semana
         next_week_open_date = current_week_monday + timedelta(days=3) # Sexta-feira
-        next_week_open_time = time(8, 0, 0) # 18:00
+        next_week_open_time = time(5, 0, 0) # 18:00
         next_week_open_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_open_date, next_week_open_time))
 
         next_week_cutoff_date = next_week_monday + timedelta(days=2) # Quarta-feira da próxima semana
-        next_week_cutoff_time = time(23, 59, 0) # 18:00
+        next_week_cutoff_time = time(18, 0, 0) # 18:00
         next_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_cutoff_date, next_week_cutoff_time))
 
         status = {
