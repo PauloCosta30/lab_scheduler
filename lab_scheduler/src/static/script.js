@@ -88,7 +88,7 @@ document.addEventListener("DOMContentLoaded", () => {
         
         // Se for sexta-feira (5) após as 18h, ou fim de semana (6=sábado, 0=domingo)
         // mostrar a próxima semana
-        if ((currentDayOfWeek === 4 && currentHour >= 5) || 
+        if ((currentDayOfWeek === 3 && currentHour >= 5) || 
             currentDayOfWeek === 6 || 
             currentDayOfWeek === 0) {
             
