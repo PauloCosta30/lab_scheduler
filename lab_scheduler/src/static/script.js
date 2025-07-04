@@ -86,15 +86,23 @@ document.addEventListener("DOMContentLoaded", () => {
         console.log(`Dia da semana: ${currentDayOfWeek} (0=Dom, 1=Seg, ..., 6=Sab)`);
         console.log(`Hora atual: ${currentHour}:${now.getMinutes().toString().padStart(2, '0')}`);
         
-        // Se for sexta-feira (5) após as 18h, ou fim de semana (6=sábado, 0=domingo)
+        // Se for quinta-feira (4) após as 5h, ou fim de semana (6=sábado, 0=domingo)
         // mostrar a próxima semana
         if ((currentDayOfWeek === 4 && currentHour >= 5) || 
+            currentDayOfWeek === 5 || 
             currentDayOfWeek === 6 || 
             currentDayOfWeek === 0) {
             
             // Retornar data da próxima semana (próxima segunda-feira)
             const nextWeek = new Date(now);
-            const daysUntilNextMonday = currentDayOfWeek === 0 ? 1 : 8 - currentDayOfWeek;
+            let daysUntilNextMonday;
+            
+            if (currentDayOfWeek === 0) { // Domingo
+                daysUntilNextMonday = 1;
+            } else { // Quinta (após 5h), Sexta ou Sábado
+                daysUntilNextMonday = 8 - currentDayOfWeek;
+            }
+            
             nextWeek.setDate(now.getDate() + daysUntilNextMonday);
             const nextWeekDate = nextWeek.toISOString().split("T")[0];
             
@@ -123,39 +131,41 @@ document.addEventListener("DOMContentLoaded", () => {
         let nextWeekOpen = false;
         let statusMessage = "";
 
-        // Regra: Semana atual fica aberta de segunda a sexta até quarta-feira às 23:59
-        // Próxima semana abre sexta-feira às 18:00
+        // Regra atualizada: 
+        // - Semana atual fica aberta de segunda a quarta-feira às 23:59
+        // - Próxima semana abre quinta-feira às 5:00
         
-        if (currentDayOfWeek >= 1 && currentDayOfWeek <= 2) {
+        if (currentDayOfWeek >= 1 && currentDayOfWeek <= 3) {
             // Segunda (1), Terça (2), Quarta (3)
-            if (currentDayOfWeek === 2) {
+            if (currentDayOfWeek === 3) {
                 // Quarta-feira: aberta até 23:59
                 currentWeekOpen = true;
                 nextWeekOpen = false;
-                statusMessage = "Agendamentos da semana atual fecham hoje às 23:59. Próxima semana abrirá sexta-feira às 18:00.";
+                statusMessage = "Agendamentos da semana atual fecham hoje às 23:59. Próxima semana abrirá quinta-feira às 05:00.";
             } else {
                 // Segunda e Terça: sempre aberta
                 currentWeekOpen = true;
                 nextWeekOpen = false;
                 statusMessage = "Agendamentos da semana atual estão abertos até quarta-feira às 23:59.";
             }
-        } else if (currentDayOfWeek === 3) {
-            // Quinta-feira: semana atual fechada, próxima semana ainda não abriu
-            currentWeekOpen = false;
-            nextWeekOpen = false;
-            statusMessage = "Agendamentos da semana atual estão fechados. Próxima semana abrirá sexta-feira às 18:00.";
         } else if (currentDayOfWeek === 4) {
-            // Sexta-feira: verificar se já são 18:00 ou mais
+            // Quinta-feira: verificar se já são 5:00 ou mais
             currentWeekOpen = false;
             if (currentHour >= 5) {
                 nextWeekOpen = true;
                 statusMessage = "Agendamentos para a próxima semana estão abertos até quarta-feira às 23:59.";
             } else {
                 nextWeekOpen = false;
-                statusMessage = `Agendamentos para a próxima semana abrem hoje às 18:00 (faltam ${18 - currentHour} hora(s)).`;
+                const hoursRemaining = 5 - currentHour;
+                const minutesRemaining = hoursRemaining === 1 ? 60 - currentMinute : 0;
+                if (hoursRemaining > 0) {
+                    statusMessage = `Agendamentos para a próxima semana abrem hoje às 05:00 (faltam ${hoursRemaining} hora(s)${minutesRemaining > 0 ? ` e ${minutesRemaining} minuto(s)` : ''}).`;
+                } else {
+                    statusMessage = `Agendamentos para a próxima semana abrem hoje às 05:00 (faltam ${minutesRemaining} minuto(s)).`;
+                }
             }
-        } else if (currentDayOfWeek === 6 || currentDayOfWeek === 0) {
-            // Sábado (6) ou Domingo (0): próxima semana continua aberta
+        } else if (currentDayOfWeek === 5 || currentDayOfWeek === 6 || currentDayOfWeek === 0) {
+            // Sexta (5), Sábado (6) ou Domingo (0): próxima semana continua aberta
             currentWeekOpen = false;
             nextWeekOpen = true;
             statusMessage = "Agendamentos para a próxima semana estão abertos até quarta-feira às 23:59.";
@@ -206,7 +216,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Usar a mensagem personalizada se disponível, senão usar a padrão
         const message = bookingWindowStatus.general_message || 
-                       "Agendamentos da semana atual fecham às quartas-feiras às 23:59. Próxima semana abre sexta-feira às 18:00.";
+                       "Agendamentos da semana atual fecham às quartas-feiras às 23:59. Próxima semana abre quinta-feira às 05:00.";
         
         showBookingStatusMessage(message, "info");
 
