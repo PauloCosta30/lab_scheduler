@@ -702,7 +702,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // --- Booking Creation ---
-    async function createBooking(formData) {
+       async function createBooking(formData) {
         console.log("=== DEBUG: Iniciando createBooking ===");
         
         // Debug: Listar todos os campos do FormData
@@ -741,23 +741,23 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        // REMOVIDA A VALIDAÇÃO QUE IMPEDIA AGENDAMENTOS SEM SLOTS
-        // Agora permite agendamentos somente com observação
-        if (selectedSlots.length === 0 && !observation.trim()) {
+        // Validação específica para agendamentos sem slots
+        if (selectedSlots.length === 0 && (!observation || observation.trim() === "")) {
             showModalMessage("É necessário fornecer uma observação quando não há salas selecionadas (ex: solicitação de encaixe).", "error");
             return;
         }
 
+        // CORREÇÃO: Sempre garantir que slots seja um array (mesmo que vazio)
         const bookingData = {
-            slots: selectedSlots.map(slot => ({
-                room_id: slot.roomId,
-                booking_date: slot.date,
-                period: slot.period
-            })),
             user_name: userName.trim(),
             user_email: emailTrimmed,
             coordinator_name: coordinatorName.trim(),
-            observation: observation.trim()
+            observation: observation.trim(),
+            slots: selectedSlots.length > 0 ? selectedSlots.map(slot => ({
+                room_id: slot.roomId,
+                booking_date: slot.date,
+                period: slot.period
+            })) : [] // Array vazio para agendamentos somente observação
         };
 
         console.log("=== DEBUG: Dados finais do agendamento ===");
@@ -817,8 +817,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 
                 selectedSlots = [];
                 updateSelectedSlotsSummary();
-                updateButtonStates(); // Atualizar texto do botão
+                updateButtonStates();
                 modalBookingForm.reset();
+                
+                // Fechar o modal após sucesso
+                setTimeout(() => {
+                    bookingModal.style.display = "none";
+                    if (modalFormMessage) {
+                        modalFormMessage.textContent = "";
+                        modalFormMessage.className = "message";
+                    }
+                }, 2000);
                 
                 // Recarregar a escala para garantir consistência
                 setTimeout(() => {
@@ -849,7 +858,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 showModalMessage(`Falha ao criar agendamento: ${errorMessage}`, "error");
             }
         } catch (error) {
-            console.error("=== DEBUG: Erro na requisição ===", error)
+            console.error("=== DEBUG: Erro na requisição ===", error);
             
             if (error.name === 'TypeError' && error.message.includes('fetch')) {
                 showModalMessage("Erro de conexão: Não foi possível conectar ao servidor. Verifique sua conexão.", "error");
@@ -860,7 +869,6 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
     }
-
     // --- Modal and Form Handling ---
     if (proceedToBookingButton) {
         proceedToBookingButton.addEventListener("click", () => {
