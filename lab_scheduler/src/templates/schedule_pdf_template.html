@@ -273,32 +273,30 @@
                 <p><strong>Coordenador:</strong> {{ user_data.coordinator }}</p>
                 {% endif %}
                 
-                {% if user_data.bookings and user_data.bookings|length > 0 %}
-                    {% for booking in user_data.bookings %}
-                    <div class="booking-item">
-                        <div class="booking-details">
-                            {{ booking.room_name }} - 
-                            {% if booking.date %}
-                                {{ booking.date.strftime('%d/%m/%Y') if booking.date.strftime else booking.date }}
-                            {% else %}
-                                __/__/____
-                            {% endif %}
-                            - {{ booking.period }}
+                {% set has_any_user_observation = false %}
+                {% for booking in user_data.bookings %}
+                    {% if booking.observation and booking.observation.strip() %}
+                        {% set has_any_user_observation = true %}
+                        <div class="booking-item">
+                            <div class="booking-details">
+                                {{ booking.room_name }} - 
+                                {% if booking.date %}
+                                    {{ booking.date.strftime('%d/%m/%Y') if booking.date.strftime else booking.date }}
+                                {% else %}
+                                    __/__/____
+                                {% endif %}
+                                - {{ booking.period }}
+                            </div>
+                            <div class="observation-text">
+                                "{{ booking.observation }}"
+                            </div>
                         </div>
-                        {% if booking.observation %}
-                        <div class="observation-text">
-                            "{{ booking.observation }}"
-                        </div>
-                        {% else %}
-                        <div class="observation-text">
-                            Sem observações
-                        </div>
-                        {% endif %}
-                    </div>
-                    {% endfor %}
-                {% else %}
+                    {% endif %}
+                {% endfor %}
+
+                {% if not has_any_user_observation %}
                     <div class="observation-text">
-                        Nenhum agendamento encontrado para este usuário.
+                        Nenhum agendamento com observação encontrado para este usuário.
                     </div>
                 {% endif %}
             </div>
