@@ -494,47 +494,40 @@ def get_bookings():
         return jsonify({"error": "Erro ao carregar agendamentos"}), 500
 
 @bookings_bp.route("/generate-pdf", methods=["GET"])
+@bookings_bp.route("/generate-pdf", methods=["GET"])
 def generate_schedule_pdf():
     """Gera PDF da escala semanal com observações organizadas por usuário e observações gerais"""
     try:
         if not WEASYPRINT_AVAILABLE:
             return jsonify({"error": "WeasyPrint não está disponível. Geração de PDF desabilitada."}), 500
-        
+
         # Obter parâmetros de data
         start_date_str = request.args.get("start_date")
         end_date_str = request.args.get("end_date")
-        
+
         if not start_date_str or not end_date_str:
             return jsonify({"error": "start_date e end_date são obrigatórios"}), 400
-        
+
         try:
             start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
             end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
         except ValueError:
             return jsonify({"error": "Formato de data inválido. Use YYYY-MM-DD"}), 400
-        
+
         # Buscar todas as salas do sistema e ordená-las
         all_rooms = Room.query.all()
         sorted_rooms = sort_rooms_custom(all_rooms)
-        
+
         # Buscar TODOS os agendamentos no período (incluindo observações gerais)
         all_bookings = Booking.query.outerjoin(Room).filter(
             Booking.booking_date.between(start_date, end_date)
         ).order_by(Booking.booking_date, Booking.period).all()
-        
-        # CORREÇÃO: Debug dos agendamentos encontrados
-        current_app.logger.info(f"Total de agendamentos encontrados: {len(all_bookings)}")
-        for booking in all_bookings:
-            current_app.logger.info(f"Agendamento: {booking.user_name} - {booking.period} - {booking.room.name if booking.room else 'Sem sala'} - Obs: {booking.observation}")
-        
-        # Organizar dados por data e período para a tabela da escala
+
         schedule_data = defaultdict(lambda: defaultdict(list))
         user_observations = {}
         general_observations = []
-        
-        # Processar todos os agendamentos
+
         for booking in all_bookings:
-            # Separar observações gerais
             if booking.period == "Observação Geral":
                 general_observations.append({
                     "user_name": booking.user_name,
@@ -542,23 +535,36 @@ def generate_schedule_pdf():
                     "observation": booking.observation,
                     "booking_date": booking.booking_date
                 })
-                current_app.logger.info(f"Observação geral encontrada: {booking.user_name} - {booking.observation}")
+                # Também adiciona no user_observations:
+                if booking.user_name not in user_observations:
+                    user_observations[booking.user_name] = {
+                        "email": booking.user_email,
+                        "coordinator": booking.coordinator_name,
+                        "bookings": [],
+                        "has_observations": False
+                    }
+
+                user_observations[booking.user_name]["bookings"].append({
+                    "room_name": "Observação Geral",
+                    "date": booking.booking_date,
+                    "period": booking.period,
+                    "observation": booking.observation if booking.observation else ""
+                })
+
+                if booking.observation and booking.observation.strip():
+                    user_observations[booking.user_name]["has_observations"] = True
                 continue
-            
-            # Processar agendamentos normais para a tabela da escala
-            if booking.room and booking.booking_date.weekday() < 5:  # Segunda a Sexta apenas
+
+            # Tabela da escala
+            if booking.room and booking.booking_date.weekday() < 5:
                 date_str = booking.booking_date.strftime("%Y-%m-%d")
-                
-                # Adicionar à estrutura da escala
                 schedule_data[date_str][booking.period].append({
                     "user_name": booking.user_name,
                     "coordinator_name": booking.coordinator_name,
                     "room_name": booking.room.name,
                     "observation": booking.observation
                 })
-            
-            # Coletar observações específicas por usuário (independente se tem observação ou não)
-            # Inicializar usuário se não existir
+
             if booking.user_name not in user_observations:
                 user_observations[booking.user_name] = {
                     "email": booking.user_email,
@@ -566,56 +572,44 @@ def generate_schedule_pdf():
                     "bookings": [],
                     "has_observations": False
                 }
-            
-            # Adicionar o agendamento à lista do usuário
+
             user_observations[booking.user_name]["bookings"].append({
                 "room_name": booking.room.name if booking.room else "N/A",
                 "date": booking.booking_date,
                 "period": booking.period,
                 "observation": booking.observation if booking.observation else ""
             })
-            
-            # Marcar se este usuário tem observações
+
             if booking.observation and booking.observation.strip():
                 user_observations[booking.user_name]["has_observations"] = True
-        
-        # Filtrar apenas usuários que realmente têm observações
-        filtered_user_observations = {
-            user_name: user_data 
-            for user_name, user_data in user_observations.items() 
-            if user_data["has_observations"]
-        }
-        
-        # Gerar lista de datas para os dias úteis da semana
+
+        # CORREÇÃO: considerar também observações do tipo "Observação Geral"
+        filtered_user_observations = {}
+        for user_name, user_data in user_observations.items():
+            has_valid_observation = any(
+                b["observation"].strip()
+                for b in user_data["bookings"]
+                if b["period"] != "Observação Geral"
+            )
+            has_general_observation = any(
+                b["period"] == "Observação Geral" and b["observation"].strip()
+                for b in user_data["bookings"]
+            )
+            if has_valid_observation or has_general_observation:
+                filtered_user_observations[user_name] = user_data
+
+        # Gerar lista de datas úteis
         dates_of_week = []
         current_date = start_date
         while current_date <= end_date:
-            if current_date.weekday() < 5:  # Segunda a Sexta
+            if current_date.weekday() < 5:
                 dates_of_week.append(current_date)
             current_date += timedelta(days=1)
-        
-        # Limitar a 5 dias úteis se necessário
         dates_of_week = dates_of_week[:5]
-        
-        # Obter timestamp atual para o cabeçalho
+
         now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
         now_brasilia = now_utc.astimezone(BRASILIA_TZ)
-        
-        # Debug: Log dos dados que estão sendo passados para o template
-        current_app.logger.info(f"Salas encontradas: {[room.name for room in sorted_rooms]}")
-        current_app.logger.info(f"Datas da semana: {[d.strftime('%Y-%m-%d') for d in dates_of_week]}")
-        current_app.logger.info(f"Dados da escala: {dict(schedule_data)}")
-        current_app.logger.info(f"Observações de usuários: {len(filtered_user_observations)} usuários com observações")
-        current_app.logger.info(f"Observações gerais: {len(general_observations)} observações")
-        
-        # Adicionar debug detalhado das observações
-        for user_name, user_data in filtered_user_observations.items():
-            current_app.logger.info(f"Usuário {user_name}: {len(user_data['bookings'])} agendamentos")
-            for booking in user_data['bookings']:
-                if booking['observation']:
-                    current_app.logger.info(f"  - {booking['room_name']} ({booking['date']}, {booking['period']}): {booking['observation']}")
-        
-        # Renderizar template HTML
+
         html_content = render_template(
             "schedule_pdf_template.html",
             schedule_data=dict(schedule_data),
@@ -628,17 +622,15 @@ def generate_schedule_pdf():
             all_rooms=sorted_rooms,
             timedelta=timedelta
         )
-        
-        # Gerar PDF
+
         pdf = HTML(string=html_content).write_pdf()
-        
-        # Criar resposta
+
         response = make_response(pdf)
         response.headers["Content-Type"] = "application/pdf"
         response.headers["Content-Disposition"] = f"attachment; filename=escala_{start_date_str}_a_{end_date_str}.pdf"
-        
+
         return response
-        
+
     except Exception as e:
         current_app.logger.error(f"Erro ao gerar PDF: {str(e)}")
         return jsonify({"error": "Erro ao gerar PDF", "details": str(e)}), 500
