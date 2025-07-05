@@ -352,7 +352,7 @@ def create_booking():
                 "period": slot["period"]
             })
         
-        # Se não há slots mas há observação, criar um registro de observação geral
+        # CORREÇÃO: Se não há slots mas há observação, criar um registro de observação geral
         if not processed_slots and observation.strip():
             # Determinar a data da semana atual para a observação geral
             now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
@@ -360,18 +360,45 @@ def create_booking():
             today_brasilia = now_brasilia.date()
             current_week_monday = today_brasilia - timedelta(days=today_brasilia.weekday())
             
-            general_observation_booking = Booking(
+            # Verificar se já existe uma observação geral para este usuário nesta semana
+            existing_general_observation = Booking.query.filter_by(
                 user_name=user_name,
-                user_email=user_email,
-                coordinator_name=coordinator_name,
-                observation=observation,
-                room_id=None,  # Sem sala específica
-                booking_date=current_week_monday,  # Data da segunda-feira da semana atual
-                period="Observação Geral"  # Período especial para observações gerais
-            )
-            db.session.add(general_observation_booking)
+                booking_date=current_week_monday,
+                period="Observação Geral"
+            ).first()
+            
+            if existing_general_observation:
+                # Atualizar a observação existente
+                existing_general_observation.observation = observation
+                existing_general_observation.coordinator_name = coordinator_name
+                existing_general_observation.user_email = user_email
+                current_app.logger.info(f"Observação geral atualizada para {user_name} na semana de {current_week_monday}")
+            else:
+                # Criar nova observação geral
+                general_observation_booking = Booking(
+                    user_name=user_name,
+                    user_email=user_email,
+                    coordinator_name=coordinator_name,
+                    observation=observation,
+                    room_id=None,  # Sem sala específica
+                    booking_date=current_week_monday,  # Data da segunda-feira da semana atual
+                    period="Observação Geral"  # Período especial para observações gerais
+                )
+                db.session.add(general_observation_booking)
+                current_app.logger.info(f"Nova observação geral criada para {user_name} na semana de {current_week_monday}")
         
         db.session.commit()
+        
+        # CORREÇÃO: Debug - Verificar se as observações foram salvas
+        if not processed_slots and observation.strip():
+            saved_observation = Booking.query.filter_by(
+                user_name=user_name,
+                period="Observação Geral"
+            ).first()
+            if saved_observation:
+                current_app.logger.info(f"Observação geral confirmada no banco: {saved_observation.observation}")
+            else:
+                current_app.logger.error(f"Observação geral NÃO foi salva para {user_name}")
         
         email_sent_successfully = send_booking_confirmation_email(
             user_email, user_name, coordinator_name, observation, newly_created_bookings_details_for_email
@@ -467,7 +494,6 @@ def get_bookings():
         return jsonify({"error": "Erro ao carregar agendamentos"}), 500
 
 @bookings_bp.route("/generate-pdf", methods=["GET"])
-@bookings_bp.route("/generate-pdf", methods=["GET"])
 def generate_schedule_pdf():
     """Gera PDF da escala semanal com observações organizadas por usuário e observações gerais"""
     try:
@@ -496,6 +522,11 @@ def generate_schedule_pdf():
             Booking.booking_date.between(start_date, end_date)
         ).order_by(Booking.booking_date, Booking.period).all()
         
+        # CORREÇÃO: Debug dos agendamentos encontrados
+        current_app.logger.info(f"Total de agendamentos encontrados: {len(all_bookings)}")
+        for booking in all_bookings:
+            current_app.logger.info(f"Agendamento: {booking.user_name} - {booking.period} - {booking.room.name if booking.room else 'Sem sala'} - Obs: {booking.observation}")
+        
         # Organizar dados por data e período para a tabela da escala
         schedule_data = defaultdict(lambda: defaultdict(list))
         user_observations = {}
@@ -511,6 +542,7 @@ def generate_schedule_pdf():
                     "observation": booking.observation,
                     "booking_date": booking.booking_date
                 })
+                current_app.logger.info(f"Observação geral encontrada: {booking.user_name} - {booking.observation}")
                 continue
             
             # Processar agendamentos normais para a tabela da escala
@@ -525,7 +557,7 @@ def generate_schedule_pdf():
                     "observation": booking.observation
                 })
             
-            # CORREÇÃO: Coletar observações específicas por usuário (independente se tem observação ou não)
+            # Coletar observações específicas por usuário (independente se tem observação ou não)
             # Inicializar usuário se não existir
             if booking.user_name not in user_observations:
                 user_observations[booking.user_name] = {
@@ -547,7 +579,7 @@ def generate_schedule_pdf():
             if booking.observation and booking.observation.strip():
                 user_observations[booking.user_name]["has_observations"] = True
         
-        # CORREÇÃO: Filtrar apenas usuários que realmente têm observações
+        # Filtrar apenas usuários que realmente têm observações
         filtered_user_observations = {
             user_name: user_data 
             for user_name, user_data in user_observations.items() 
@@ -576,7 +608,7 @@ def generate_schedule_pdf():
         current_app.logger.info(f"Observações de usuários: {len(filtered_user_observations)} usuários com observações")
         current_app.logger.info(f"Observações gerais: {len(general_observations)} observações")
         
-        # CORREÇÃO: Adicionar debug detalhado das observações
+        # Adicionar debug detalhado das observações
         for user_name, user_data in filtered_user_observations.items():
             current_app.logger.info(f"Usuário {user_name}: {len(user_data['bookings'])} agendamentos")
             for booking in user_data['bookings']:
@@ -587,7 +619,7 @@ def generate_schedule_pdf():
         html_content = render_template(
             "schedule_pdf_template.html",
             schedule_data=dict(schedule_data),
-            user_observations=filtered_user_observations,  # CORREÇÃO: Usar a versão filtrada
+            user_observations=filtered_user_observations,
             general_observations=general_observations,
             start_date=start_date,
             end_date=end_date,
