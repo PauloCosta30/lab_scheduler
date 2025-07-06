@@ -102,9 +102,9 @@ def serve_spa(path):
             return send_from_directory(app.static_folder, 'index.html')
     except Exception as e:
         return f"Erro ao servir arquivo: {str(e)}", 404
-from src import create_app
+from src.app import create_app # <--- MUDANÇA AQUI: de src para src.app
 import logging
-import sys # Adicione esta linha para importar sys
+import sys
 
 app = create_app()
 
