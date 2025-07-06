@@ -463,9 +463,6 @@ def get_bookings():
         return jsonify({"error": "Erro ao carregar agendamentos"}), 500
 
 @bookings_bp.route("/generate-pdf", methods=["GET"])
-# ... (código anterior) ...
-
-@bookings_bp.route("/generate-pdf", methods=["GET"])
 def generate_schedule_pdf():
     """Gera PDF da escala semanal com observações organizadas por usuário e observações gerais"""
     try:
@@ -497,11 +494,11 @@ def generate_schedule_pdf():
             Booking.booking_date.between(start_date, end_date)
         ).order_by(Booking.booking_date, Booking.period).all()
         
-        # --- DEBUG -> INFO: Log de todos os bookings encontrados ---
+        # --- INFO: Log de todos os bookings encontrados ---
         current_app.logger.info(f"INFO: Total de bookings encontrados para PDF: {len(all_bookings)}")
         for b in all_bookings:
             current_app.logger.info(f"INFO: Booking ID: {b.id}, User: {b.user_name}, Room: {b.room.name if b.room else 'N/A'}, Date: {b.booking_date}, Period: {b.period}, Obs: '{b.observation}'")
-        # --- FIM DEBUG -> INFO ---
+        # --- FIM INFO ---
 
         # Organizar dados por data e período para a tabela da escala
         schedule_data = defaultdict(lambda: defaultdict(list))
@@ -552,18 +549,6 @@ def generate_schedule_pdf():
             if user_data["has_observations"]
         }
         
-        # --- DEBUG -> INFO: Log dos dados finais que serão passados para o template ---
-        current_app.logger.info(f"INFO: Salas encontradas: {[room.name for room in sorted_rooms]}")
-        current_app.logger.info(f"INFO: Datas da semana: {[d.strftime('%Y-%m-%d') for d in dates_of_week]}")
-        current_app.logger.info(f"INFO: Dados da escala (schedule_data): {dict(schedule_data)}")
-        current_app.logger.info(f"INFO: Observações de usuários (filtered_user_observations): {len(filtered_user_observations)} usuários com observações")
-        for user_name, user_data in filtered_user_observations.items():
-            current_app.logger.info(f"  INFO: Usuário {user_name}: {len(user_data['bookings'])} agendamentos")
-            for booking in user_data['bookings']:
-                if booking['observation']:
-                    current_app.logger.info(f"    INFO: Agendamento com observação: {booking['room_name']} ({booking['date']}, {booking['period']}): '{booking['observation']}'")
-        # --- FIM DEBUG -> INFO ---
-
         # Gerar lista de datas para os dias úteis da semana
         dates_of_week = []
         current_date = start_date
@@ -574,6 +559,18 @@ def generate_schedule_pdf():
         
         # Limitar a 5 dias úteis se necessário
         dates_of_week = dates_of_week[:5]
+
+        # --- INFO: Log dos dados finais que serão passados para o template ---
+        current_app.logger.info(f"INFO: Salas encontradas: {[room.name for room in sorted_rooms]}")
+        current_app.logger.info(f"INFO: Datas da semana: {[d.strftime('%Y-%m-%d') for d in dates_of_week]}") # AGORA ESTÁ NO LUGAR CERTO
+        current_app.logger.info(f"INFO: Dados da escala (schedule_data): {dict(schedule_data)}")
+        current_app.logger.info(f"INFO: Observações de usuários (filtered_user_observations): {len(filtered_user_observations)} usuários com observações")
+        for user_name, user_data in filtered_user_observations.items():
+            current_app.logger.info(f"  INFO: Usuário {user_name}: {len(user_data['bookings'])} agendamentos")
+            for booking in user_data['bookings']:
+                if booking['observation']:
+                    current_app.logger.info(f"    INFO: Agendamento com observação: {booking['room_name']} ({booking['date']}, {booking['period']}): '{booking['observation']}'")
+        # --- FIM INFO ---
         
         # Obter timestamp atual para o cabeçalho
         now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
@@ -606,6 +603,4 @@ def generate_schedule_pdf():
     except Exception as e:
         current_app.logger.error(f"Erro ao gerar PDF: {str(e)}", exc_info=True)
         return jsonify({"error": "Erro ao gerar PDF", "details": str(e)}), 500
-
-
 
