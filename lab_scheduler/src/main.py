@@ -10,10 +10,6 @@ from src.models.entities import Room, Booking
 from src.routes.booking_routes import bookings_bp
 from flask_mail import Mail # Import Flask-Mail
 from datetime import datetime
-from src import create_app
-import logging # Adicione esta linha
-
-app = create_app()
 
 # Adicione esta linha para configurar o nível de log para DEBUG
 app.logger.setLevel(logging.DEBUG)        
