@@ -548,7 +548,18 @@ def generate_schedule_pdf():
             for user_name, user_data in user_observations.items() 
             if user_data["has_observations"]
         }
+       
+        # Gerar lista de datas para os dias úteis da semana
+        dates_of_week = []
+        current_date = start_date
+        while current_date <= end_date:
+            if current_date.weekday() < 5:  # Segunda a Sexta
+                dates_of_week.append(current_date)
+            current_date += timedelta(days=1)
         
+        # Limitar a 5 dias úteis se necessário
+        dates_of_week = dates_of_week[:5]
+      
         # --- DEBUG: Log dos dados finais que serão passados para o template ---
         current_app.logger.debug(f"DEBUG: Salas encontradas: {[room.name for room in sorted_rooms]}")
         current_app.logger.debug(f"DEBUG: Datas da semana: {[d.strftime('%Y-%m-%d') for d in dates_of_week]}")
@@ -560,17 +571,6 @@ def generate_schedule_pdf():
                 if booking['observation']:
                     current_app.logger.debug(f"    DEBUG: Agendamento com observação: {booking['room_name']} ({booking['date']}, {booking['period']}): '{booking['observation']}'")
         # --- FIM DEBUG ---
-
-        # Gerar lista de datas para os dias úteis da semana
-        dates_of_week = []
-        current_date = start_date
-        while current_date <= end_date:
-            if current_date.weekday() < 5:  # Segunda a Sexta
-                dates_of_week.append(current_date)
-            current_date += timedelta(days=1)
-        
-        # Limitar a 5 dias úteis se necessário
-        dates_of_week = dates_of_week[:5]
         
         # Obter timestamp atual para o cabeçalho
         now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
