@@ -335,7 +335,7 @@ def create_booking():
         newly_created_bookings_details_for_email = []
         
         # Criar agendamentos para slots específicos
-for slot in processed_slots:
+        for slot in processed_slots:
             new_booking = Booking(
                 user_name=user_name, 
                 user_email=user_email, 
@@ -352,7 +352,7 @@ for slot in processed_slots:
                 "period": slot["period"]
             })
         
-        # Se não há slots mas há observação, criar um registro de observação geral
+        # CORREÇÃO: Se não há slots mas há observação, criar um registro de observação geral
         if not processed_slots and observation.strip():
             # Determinar a data da semana atual para a observação geral
             now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
@@ -360,18 +360,45 @@ for slot in processed_slots:
             today_brasilia = now_brasilia.date()
             current_week_monday = today_brasilia - timedelta(days=today_brasilia.weekday())
             
-            general_observation_booking = Booking(
+            # Verificar se já existe uma observação geral para este usuário nesta semana
+            existing_general_observation = Booking.query.filter_by(
                 user_name=user_name,
-                user_email=user_email,
-                coordinator_name=coordinator_name,
-                observation=observation,
-                room_id=None,  # Sem sala específica
-                booking_date=current_week_monday,  # Data da segunda-feira da semana atual
-                period="Observação Geral"  # Período especial para observações gerais
-            )
-            db.session.add(general_observation_booking)
+                booking_date=current_week_monday,
+                period="Observação Geral"
+            ).first()
+            
+            if existing_general_observation:
+                # Atualizar a observação existente
+                existing_general_observation.observation = observation
+                existing_general_observation.coordinator_name = coordinator_name
+                existing_general_observation.user_email = user_email
+                current_app.logger.info(f"Observação geral atualizada para {user_name} na semana de {current_week_monday}")
+            else:
+                # Criar nova observação geral
+                general_observation_booking = Booking(
+                    user_name=user_name,
+                    user_email=user_email,
+                    coordinator_name=coordinator_name,
+                    observation=observation,
+                    room_id=None,  # Sem sala específica
+                    booking_date=current_week_monday,  # Data da segunda-feira da semana atual
+                    period="Observação Geral"  # Período especial para observações gerais
+                )
+                db.session.add(general_observation_booking)
+                current_app.logger.info(f"Nova observação geral criada para {user_name} na semana de {current_week_monday}")
         
         db.session.commit()
+        
+        # CORREÇÃO: Debug - Verificar se as observações foram salvas
+        if not processed_slots and observation.strip():
+            saved_observation = Booking.query.filter_by(
+                user_name=user_name,
+                period="Observação Geral"
+            ).first()
+            if saved_observation:
+                current_app.logger.info(f"Observação geral confirmada no banco: {saved_observation.observation}")
+            else:
+                current_app.logger.error(f"Observação geral NÃO foi salva para {user_name}")
         
         email_sent_successfully = send_booking_confirmation_email(
             user_email, user_name, coordinator_name, observation, newly_created_bookings_details_for_email
@@ -468,7 +495,6 @@ def get_bookings():
 
 
 @bookings_bp.route("/generate-pdf", methods=["GET"])
-def generate_schedule_pdf():
     """Gera PDF da escala semanal com observações organizadas por usuário e observações gerais"""
     try:
         if not WEASYPRINT_AVAILABLE:
@@ -594,6 +620,4 @@ def generate_schedule_pdf():
     except Exception as e:
         current_app.logger.error(f"Erro ao gerar PDF: {str(e)}")
         return jsonify({"error": "Erro ao gerar PDF", "details": str(e)}), 500
-
-
 
