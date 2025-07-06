@@ -10,7 +10,6 @@ from src.models.entities import Room, Booking
 from src.routes.booking_routes import bookings_bp
 from flask_mail import Mail # Import Flask-Mail
 from datetime import datetime
-from src import create_app # Importa a função create_app do seu pacote src
        
 # Configuração correta do Flask para servir arquivos estáticos
 app = Flask(__name__, 
@@ -103,8 +102,6 @@ def serve_spa(path):
             return send_from_directory(app.static_folder, 'index.html')
     except Exception as e:
         return f"Erro ao servir arquivo: {str(e)}", 404
-
-app = create_app()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
