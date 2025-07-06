@@ -275,6 +275,7 @@
                 
                 {% set has_any_user_observation = false %}
                 {% for booking in user_data.bookings %}
+                    {# Apenas exibe o item se houver uma observação não vazia #}
                     {% if booking.observation and booking.observation.strip() %}
                         {% set has_any_user_observation = true %}
                         <div class="booking-item">
