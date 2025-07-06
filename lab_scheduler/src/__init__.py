@@ -1,5 +1,4 @@
 from flask import Flask
-from src import create_app
 def create_app():
     app = Flask(__name__)
     app.config.from_object('config.Config')
