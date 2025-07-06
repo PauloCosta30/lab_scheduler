@@ -495,6 +495,8 @@ def get_bookings():
 
 
 @bookings_bp.route("/generate-pdf", methods=["GET"])
+    @bookings_bp.route("/generate-pdf", methods=["GET"])
+def generate_pdf():
     """Gera PDF da escala semanal com observações organizadas por usuário e observações gerais"""
     try:
         if not WEASYPRINT_AVAILABLE:
@@ -620,4 +622,3 @@ def get_bookings():
     except Exception as e:
         current_app.logger.error(f"Erro ao gerar PDF: {str(e)}")
         return jsonify({"error": "Erro ao gerar PDF", "details": str(e)}), 500
-
