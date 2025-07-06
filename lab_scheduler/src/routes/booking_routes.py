@@ -495,420 +495,132 @@ def get_bookings():
 
 
 @bookings_bp.route("/generate-pdf", methods=["GET"])
-async function generatePdf() {
-        if (!currentWeekStartDate) {
-            showScheduleMessage("Carregue uma escala primeiro antes de gerar o PDF.", "error");
-            return;
-        }
-
-        const startDate = currentWeekStartDate.toISOString().split("T")[0];
-        const endDate = new Date(currentWeekStartDate.valueOf());
-        endDate.setUTCDate(currentWeekStartDate.getUTCDate() + 4);
-        const endDateStr = endDate.toISOString().split("T")[0];
-
-        // Desabilitar o botão durante a geração
-        if (generatePdfButton) {
-            generatePdfButton.disabled = true;
-            generatePdfButton.textContent = "Gerando PDF...";
-        }
-
-        showScheduleMessage("Gerando PDF...", "");
+def generate_schedule_pdf():
+    """Gera PDF da escala semanal com observações organizadas por usuário e observações gerais"""
+    try:
+        if not WEASYPRINT_AVAILABLE:
+            return jsonify({"error": "WeasyPrint não está disponível. Geração de PDF desabilitada."}), 500
         
-        try {
-            console.log(`Solicitando PDF para período: ${startDate} até ${endDateStr}`);
-            
-            const response = await fetch(`${API_BASE_URL}/generate-pdf?start_date=${startDate}&end_date=${endDateStr}`, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/pdf',
-                    'Cache-Control': 'no-cache'
-                }
-            });
-            
-            console.log(`Response status: ${response.status}`);
-            console.log(`Response headers:`, response.headers);
-            
-            if (!response.ok) {
-                let errorMessage = `Erro ${response.status}: ${response.statusText}`;
+        # Obter parâmetros de data
+        start_date_str = request.args.get("start_date")
+        end_date_str = request.args.get("end_date")
+        
+        if not start_date_str or not end_date_str:
+            return jsonify({"error": "start_date e end_date são obrigatórios"}), 400
+        
+        try:
+            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"error": "Formato de data inválido. Use YYYY-MM-DD"}), 400
+        
+        # Buscar todas as salas do sistema e ordená-las
+        all_rooms = Room.query.all()
+        sorted_rooms = sort_rooms_custom(all_rooms)
+        
+        # Buscar agendamentos no período (excluindo fins de semana e observações gerais)
+        bookings = Booking.query.outerjoin(Room).filter(
+            Booking.booking_date.between(start_date, end_date),
+            Booking.period != "Observação Geral"  # Excluir observações gerais da tabela principal
+        ).order_by(Booking.booking_date, Booking.period).all()
+        
+        # Organizar dados por data e período para a tabela da escala
+        schedule_data = defaultdict(lambda: defaultdict(list))
+        user_observations = {}
+        
+        # Processar agendamentos normais
+        for booking in bookings:
+            if booking.room and booking.booking_date.weekday() < 5:  # Segunda a Sexta apenas
+                date_str = booking.booking_date.strftime("%Y-%m-%d")
                 
-                try {
-                    // Tentar ler como JSON para obter mensagem de erro detalhada
-                    const contentType = response.headers.get('content-type');
-                    if (contentType && contentType.includes('application/json')) {
-                        const errorData = await response.json();
-                        errorMessage = errorData.error || errorData.message || errorMessage;
-                    } else {
-                        // Se não for JSON, ler como texto
-                        const errorText = await response.text();
-                        if (errorText.trim()) {
-                            errorMessage = errorText;
-                        }
+                # Adicionar à estrutura da escala
+                schedule_data[date_str][booking.period].append({
+                    "user_name": booking.user_name,
+                    "coordinator_name": booking.coordinator_name,
+                    "room_name": booking.room.name,
+                    "observation": booking.observation
+                })
+            
+            # Coletar observações específicas por usuário (se houver observação)
+            if booking.observation and booking.observation.strip():
+                if booking.user_name not in user_observations:
+                    user_observations[booking.user_name] = {
+                        "email": booking.user_email,
+                        "coordinator": booking.coordinator_name,
+                        "bookings": []
                     }
-                } catch (parseError) {
-                    console.error("Erro ao fazer parse da resposta de erro:", parseError);
-                }
-                
-                throw new Error(errorMessage);
-            }
 
-            // Verificar se a resposta é realmente um PDF
-            const contentType = response.headers.get('content-type');
-            if (!contentType || !contentType.includes('application/pdf')) {
-                console.warn(`Tipo de conteúdo inesperado: ${contentType}`);
-            }
-
-            const blob = await response.blob();
-            
-            // Verificar se o blob tem conteúdo
-            if (blob.size === 0) {
-                throw new Error("PDF gerado está vazio");
-            }
-            
-            console.log(`PDF blob criado com tamanho: ${blob.size} bytes`);
-
-            // Criar URL para download
-            const url = window.URL.createObjectURL(blob);
-            
-            // Criar elemento de download
-            const a = document.createElement("a");
-            a.style.display = "none";
-            a.href = url;
-            
-            // Nome do arquivo com data formatada
-            const startDateFormatted = new Date(startDate).toLocaleDateString('pt-BR').replace(/\//g, '-');
-            const endDateFormatted = new Date(endDateStr).toLocaleDateString('pt-BR').replace(/\//g, '-');
-            a.download = `escala_agendamentos_${startDateFormatted}_a_${endDateFormatted}.pdf`;
-            
-            // Adicionar ao DOM, clicar e remover
-            document.body.appendChild(a);
-            a.click();
-            
-            // Limpar recursos
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-            
-            showScheduleMessage("PDF gerado e baixado com sucesso!", "success");
-            console.log("PDF baixado com sucesso");
-            
-        } catch (error) {
-            console.error("Falha ao gerar PDF:", error);
-            
-            let userMessage = "Não foi possível gerar o PDF.";
-            
-            if (error.message.includes('Failed to fetch')) {
-                userMessage = "Erro de conexão: Não foi possível conectar ao servidor para gerar o PDF.";
-            } else if (error.message.includes('NetworkError')) {
-                userMessage = "Erro de rede: Verifique sua conexão com a internet.";
-            } else if (error.message.includes('timeout')) {
-                userMessage = "Timeout: A geração do PDF demorou muito tempo. Tente novamente.";
-            } else if (error.message) {
-                userMessage = `Erro: ${error.message}`;
-            }
-            
-            showScheduleMessage(userMessage, "error");
-            
-        } finally {
-            // Re-habilitar o botão
-            if (generatePdfButton) {
-                generatePdfButton.disabled = false;
-                generatePdfButton.textContent = "Gerar PDF";
-            }
-        }
-    }
-
-    // Função auxiliar para debug do endpoint PDF
-    async function testPdfEndpoint() {
-        if (!currentWeekStartDate) {
-            console.error("Nenhuma data de semana definida");
-            return;
-        }
-
-        const startDate = currentWeekStartDate.toISOString().split("T")[0];
-        const endDate = new Date(currentWeekStartDate.valueOf());
-        endDate.setUTCDate(currentWeekStartDate.getUTCDate() + 4);
-        const endDateStr = endDate.toISOString().split("T")[0];
+                user_observations[booking.user_name]["bookings"].append({
+                    "room_name": booking.room.name if booking.room else "N/A",
+                    "date": booking.booking_date,
+                    "period": booking.period,
+                    "observation": booking.observation
+                })
         
-        const testUrl = `${API_BASE_URL}/generate-pdf?start_date=${startDate}&end_date=${endDateStr}`;
+        # Buscar observações gerais separadamente
+        general_observations_query = Booking.query.filter(
+            Booking.booking_date.between(start_date, end_date),
+            Booking.period == "Observação Geral"
+        ).order_by(Booking.booking_date).all()
         
-        console.log("=== TESTE DO ENDPOINT PDF ===");
-        console.log(`URL: ${testUrl}`);
-        console.log(`Período: ${startDate} até ${endDateStr}`);
+        general_observations = []
+        for obs_booking in general_observations_query:
+            general_observations.append({
+                "user_name": obs_booking.user_name,
+                "coordinator_name": obs_booking.coordinator_name,
+                "observation": obs_booking.observation,
+                "booking_date": obs_booking.booking_date
+            })
         
-        try {
-            const response = await fetch(testUrl, {
-                method: 'HEAD' // Usar HEAD para testar sem baixar o conteúdo
-            });
-            
-            console.log(`Status: ${response.status}`);
-            console.log(`Status Text: ${response.statusText}`);
-            console.log(`Headers:`, [...response.headers.entries()]);
-            
-            if (response.ok) {
-                console.log("✅ Endpoint PDF está respondendo corretamente");
-            } else {
-                console.log("❌ Endpoint PDF retornou erro");
-            }
-            
-        } catch (error) {
-            console.error("❌ Erro ao testar endpoint PDF:", error);
-        }
-    }
-
-    // --- Booking Creation ---
-    async function createBooking(formData) {
-        console.log("=== DEBUG: Iniciando createBooking ===");
+        # Gerar lista de datas para os dias úteis da semana
+        dates_of_week = []
+        current_date = start_date
+        while current_date <= end_date:
+            if current_date.weekday() < 5:  # Segunda a Sexta
+                dates_of_week.append(current_date)
+            current_date += timedelta(days=1)
         
-        // Debug: Listar todos os campos do FormData
-        console.log("Campos do FormData:");
-        for (let [key, value] of formData.entries()) {
-            console.log(`  ${key}: "${value}"`);
-        }
-
-        const userName = formData.get("userName");
-        const userEmail = formData.get("userEmail");
-        const coordinatorName = formData.get("coordinatorName") || "";
-        const observation = formData.get("observation") || "";
-
-        console.log("Valores extraídos:");
-        console.log(`  userName: "${userName}"`);
-        console.log(`  userEmail: "${userEmail}"`);
-        console.log(`  coordinatorName: "${coordinatorName}"`);
-        console.log(`  observation: "${observation}"`);
-        console.log(`  selectedSlots: ${selectedSlots.length} slots`);
-
-        // Validação de campos obrigatórios no frontend
-        if (!userName || userName.trim() === "") {
-            showModalMessage("Nome é obrigatório para o agendamento.", "error");
-            return;
-        }
-
-        if (!userEmail || userEmail.trim() === "") {
-            showModalMessage("E-mail é obrigatório para o agendamento.", "error");
-            return;
-        }
-
-        // Validação de formato de e-mail no frontend
-        const emailTrimmed = userEmail.trim();
-        if (!emailTrimmed.includes("@") || !emailTrimmed.includes(".")) {
-            showModalMessage("Por favor, insira um e-mail válido.", "error");
-            return;
-        }
-
-        // REMOVIDA A VALIDAÇÃO QUE IMPEDIA AGENDAMENTOS SEM SLOTS
-        // Agora permite agendamentos somente com observação
-        if (selectedSlots.length === 0 && !observation.trim()) {
-            showModalMessage("É necessário fornecer uma observação quando não há salas selecionadas (ex: solicitação de encaixe).", "error");
-            return;
-        }
-
-        const bookingData = {
-            slots: selectedSlots.map(slot => ({
-                room_id: slot.roomId,
-                booking_date: slot.date,
-                period: slot.period
-            })),
-            user_name: userName.trim(),
-            user_email: emailTrimmed,
-            coordinator_name: coordinatorName.trim(),
-            observation: observation.trim()
-        };
-
-        console.log("=== DEBUG: Dados finais do agendamento ===");
-        console.log(JSON.stringify(bookingData, null, 2));
-        console.log(`URL da requisição: ${API_BASE_URL}/bookings`);
-
-        // Mostrar mensagem diferente para agendamentos somente observação
-        if (selectedSlots.length === 0) {
-            showModalMessage("Enviando solicitação de encaixe...", "");
-        } else {
-            showModalMessage("Enviando agendamento...", "");
-        }
-
-        try {
-            console.log("=== DEBUG: Fazendo requisição POST ===");
-            const response = await fetch(`${API_BASE_URL}/bookings`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(bookingData)
-            });
-
-            console.log(`=== DEBUG: Response Status: ${response.status} ===`);
-            console.log(`=== DEBUG: Response OK: ${response.ok} ===`);
-
-            let result;
-            try {
-                result = await response.json();
-                console.log("=== DEBUG: Response JSON ===");
-                console.log(JSON.stringify(result, null, 2));
-            } catch (jsonError) {
-                console.error("=== DEBUG: Erro ao fazer parse do JSON ===", jsonError);
-                const textResponse = await response.text();
-                console.log("=== DEBUG: Response Text ===", textResponse);
-                throw new Error(`Resposta inválida do servidor (Status: ${response.status})`);
-            }
-
-            if (response.ok) {
-                if (selectedSlots.length === 0) {
-                    showModalMessage("Solicitação de encaixe registrada com sucesso!", "success");
-                } else {
-                    showModalMessage("Agendamento realizado com sucesso!", "success");
-                }
-                
-                // Limpar slots selecionados e atualizar a tabela após o sucesso
-                selectedSlots.forEach(slot => {
-                    if (slot.cellRef) {
-                        slot.cellRef.classList.remove("selected");
-                        slot.cellRef.classList.add("booked");
-                        slot.cellRef.textContent = userName.trim();
-                        slot.cellRef.removeEventListener("click", handleSlotClick);
-                        slot.cellRef.style.cursor = "default";
-                        slot.cellRef.title = `Reservado por: ${userName.trim()}`;
-                    }
-                });
-                
-                selectedSlots = [];
-                updateSelectedSlotsSummary();
-                updateButtonStates(); // Atualizar texto do botão
-                modalBookingForm.reset();
-                
-                // Recarregar a escala para garantir consistência
-                setTimeout(() => {
-                    loadScheduleData(currentWeekStartDate.toISOString().split("T")[0]);
-                }, 1000);
-                
-            } else {
-                // Tratar diferentes tipos de erro do servidor
-                let errorMessage = "Erro desconhecido do servidor";
-                
-                if (result && result.error) {
-                    errorMessage = result.error;
-                } else if (result && result.message) {
-                    errorMessage = result.message;
-                } else if (result && result.detail) {
-                    errorMessage = result.detail;
-                } else {
-                    errorMessage = `Erro ${response.status}: ${response.statusText}`;
-                }
-                
-                console.error("=== DEBUG: Erro do servidor ===", {
-                    status: response.status,
-                    statusText: response.statusText,
-                    result: result,
-                    errorMessage: errorMessage
-                });
-                
-                showModalMessage(`Falha ao criar agendamento: ${errorMessage}`, "error");
-            }
-        } catch (error) {
-            console.error("=== DEBUG: Erro na requisição ===", error)
-            
-            if (error.name === 'TypeError' && error.message.includes('fetch')) {
-                showModalMessage("Erro de conexão: Não foi possível conectar ao servidor. Verifique sua conexão.", "error");
-            } else if (error.message.includes('JSON')) {
-                showModalMessage("Erro de comunicação: Resposta inválida do servidor.", "error");
-            } else {
-                showModalMessage(`Erro de conexão: ${error.message}`, "error");
-            }
-        }
-    }
-
-    // --- Modal and Form Handling ---
-    if (proceedToBookingButton) {
-        proceedToBookingButton.addEventListener("click", () => {
-            updateSelectedSlotsSummary();
-            bookingModal.style.display = "block";
-            
-            // Focar no campo de observação se não há slots selecionados
-            if (selectedSlots.length === 0) {
-                setTimeout(() => {
-                    const observationField = document.querySelector('#modalBookingForm textarea[name="observation"]');
-                    if (observationField) {
-                        observationField.focus();
-                        observationField.placeholder = "Descreva sua solicitação de encaixe (ex: 'Preciso de uma sala na sexta à tarde para reunião urgente')";
-                    }
-                }, 100);
-            }
-        });
-    }
-
-    if (closeModalButton) {
-        closeModalButton.addEventListener("click", () => {
-            bookingModal.style.display = "none";
-            if (modalFormMessage) {
-                modalFormMessage.textContent = "";
-                modalFormMessage.className = "message";
-            }
-        });
-    }
-
-    window.addEventListener("click", (event) => {
-        if (event.target === bookingModal) {
-            bookingModal.style.display = "none";
-            if (modalFormMessage) {
-                modalFormMessage.textContent = "";
-                modalFormMessage.className = "message";
-            }
-        }
-    });
-
-    if (modalBookingForm) {
-        modalBookingForm.addEventListener("submit", async (event) => {
-            event.preventDefault();
-            console.log("=== DEBUG: Form submit ===");
-            
-            // Debug: Verificar se o formulário existe e tem elementos
-            console.log("Form encontrado:", modalBookingForm);
-            console.log("Elementos do form:", modalBookingForm.elements);
-            
-            const formData = new FormData(modalBookingForm);
-            await createBooking(formData);
-        });
-    }
-
-    function updateSelectedSlotsSummary() {
-        if (!selectedSlotsSummaryList) return;
+        # Limitar a 5 dias úteis se necessário
+        dates_of_week = dates_of_week[:5]
         
-        selectedSlotsSummaryList.innerHTML = "";
-        if (selectedSlots.length === 0) {
-            const li = document.createElement("li");
-            li.innerHTML = "<em>Nenhum horário selecionado - Agendamento somente observação</em>";
-            li.style.color = "#666";
-            selectedSlotsSummaryList.appendChild(li);
-            return;
-        }
-        selectedSlots.forEach(slot => {
-            const li = document.createElement("li");
-            li.textContent = `${slot.roomName} - ${slot.date} - ${slot.period}`;
-            selectedSlotsSummaryList.appendChild(li);
-        });
-    }
+        # Obter timestamp atual para o cabeçalho
+        now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
+        now_brasilia = now_utc.astimezone(BRASILIA_TZ)
+        
+        # Debug: Log dos dados que estão sendo passados para o template
+        current_app.logger.info(f"Salas encontradas: {[room.name for room in sorted_rooms]}")
+        current_app.logger.info(f"Datas da semana: {[d.strftime('%Y-%m-%d') for d in dates_of_week]}")
+        current_app.logger.info(f"Dados da escala: {dict(schedule_data)}")
+        current_app.logger.info(f"Observações de usuários: {len(user_observations)} usuários")
+        current_app.logger.info(f"Observações gerais: {len(general_observations)} observações")
+        
+        # Renderizar template HTML
+        html_content = render_template(
+            "schedule_pdf_template.html",
+            schedule_data=dict(schedule_data),
+            user_observations=dict(user_observations),
+            general_observations=general_observations,
+            start_date=start_date,
+            end_date=end_date,
+            generated_at=now_brasilia,
+            dates_of_week=dates_of_week,
+            all_rooms=sorted_rooms,  # Adicionar todas as salas para o template
+            timedelta=timedelta  # Disponibilizar timedelta para o template
+        )
+        
+        # Gerar PDF
+        pdf = HTML(string=html_content).write_pdf()
+        
+        # Criar resposta
+        response = make_response(pdf)
+        response.headers["Content-Type"] = "application/pdf"
+        response.headers["Content-Disposition"] = f"attachment; filename=escala_{start_date_str}_a_{end_date_str}.pdf"
+        
+        return response
+        
+    except Exception as e:
+        current_app.logger.error(f"Erro ao gerar PDF: {str(e)}")
+        return jsonify({"error": "Erro ao gerar PDF", "details": str(e)}), 500
 
-    // --- Event Listeners ---
-    if (weekSelector) {
-        weekSelector.value = new Date().toISOString().split("T")[0];
-    }
-    
-    if (loadScheduleButton) {
-        loadScheduleButton.addEventListener("click", () => {
-            const selectedDate = weekSelector ? weekSelector.value : null;
-            loadScheduleData(selectedDate);
-        });
-    }
-    
-    if (generatePdfButton) {
-        generatePdfButton.addEventListener("click", generatePdf);
-    }
-
-    // --- Initialization ---
-    console.log("Inicializando aplicação...");
-    
-    // Carregar status da janela de agendamento primeiro
-    fetchBookingWindowStatus().then(() => {
-        // Depois carregar a escala
-        loadScheduleData();
-    });
-});
 
 
