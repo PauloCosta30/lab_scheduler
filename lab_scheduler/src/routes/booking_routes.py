@@ -348,6 +348,7 @@ def create_booking():
                 "period": slot["period"]
             })
         
+
         # Se não há slots mas há observação, criar um registro de observação geral
         if not processed_slots and observation.strip():
             # Determinar a data da semana atual para a observação geral
@@ -366,13 +367,15 @@ def create_booking():
                 period="Observação Geral"  # Período especial para observações gerais
             )
             db.session.add(general_observation_booking)
+            current_app.logger.info(f"INFO: Criado booking de observação geral para {user_name} na data {current_week_monday} com observação: '{observation}'") # NOVO LOG AQUI
         
         db.session.commit()
+        current_app.logger.info("INFO: db.session.commit() executado com sucesso.") # NOVO LOG AQUI
         
         email_sent_successfully = send_booking_confirmation_email(
             user_email, user_name, coordinator_name, observation, newly_created_bookings_details_for_email
         )
-        
+                
         if processed_slots:
             response_message = "Agendamento(s) criado(s) com sucesso!"
         elif observation.strip():
