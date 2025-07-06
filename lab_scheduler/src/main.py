@@ -11,8 +11,6 @@ from src.routes.booking_routes import bookings_bp
 from flask_mail import Mail # Import Flask-Mail
 from datetime import datetime
 
-# Adicione esta linha para configurar o nível de log para DEBUG
-app.logger.setLevel(logging.DEBUG)        
 # Configuração correta do Flask para servir arquivos estáticos
 app = Flask(__name__, 
            static_folder=os.path.join(os.path.dirname(__file__), 'static'),
