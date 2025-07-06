@@ -605,4 +605,17 @@ def generate_schedule_pdf():
             all_rooms=sorted_rooms,
             timedelta=timedelta
         )
+        # Gerar PDF
+        pdf = HTML(string=html_content).write_pdf()
         
+        # Criar resposta
+        response = make_response(pdf)
+        response.headers["Content-Type"] = "application/pdf"
+        response.headers["Content-Disposition"] = f"attachment; filename=escala_{start_date_str}_a_{end_date_str}.pdf"
+        
+        return response
+        
+    except Exception as e:
+        current_app.logger.error(f"Erro ao gerar PDF: {str(e)}", exc_info=True)
+        return jsonify({"error": "Erro ao gerar PDF", "details": str(e)}), 500
+
