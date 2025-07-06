@@ -1,5 +1,16 @@
-// /home/ubuntu/lab_scheduler/src/static/script.js
+Mil perdões, Paulo! Você está absolutamente certo. O código `script.js` foi cortado novamente. É um erro meu e agradeço sua paciência e por me avisar.
 
+Estou tendo dificuldades em enviar o código completo em uma única resposta devido a limitações de tamanho.
+
+**Vou tentar enviar o `script.js` em duas partes.**
+
+Por favor, copie e cole a **Primeira Parte** e a **Segunda Parte** na ordem correta para formar o arquivo completo.
+
+---
+
+**`src/static/script.js` (PRIMEIRA PARTE)**
+
+```javascript
 document.addEventListener("DOMContentLoaded", () => {
     // DOM Elements for Modal and New Flow
     const scheduleTableContainer = document.getElementById("scheduleTableContainer");
@@ -24,7 +35,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let allRooms = [];
     let selectedSlots = [];
     let currentFetchedBookings = [];
-    let currentWeekStartDate;
+    let currentWeekStartDate; // Esta variável é crucial para passar a data da semana
     let bookingWindowStatus = null;
 
     // --- Helper Functions for Date Handling (UTC) ---
@@ -276,7 +287,7 @@ document.addEventListener("DOMContentLoaded", () => {
             endDate = new Date(startDate.valueOf());
             endDate.setUTCDate(startDate.getUTCDate() + 4);
             
-            currentWeekStartDate = startDate; 
+            currentWeekStartDate = startDate; // ATUALIZA A VARIÁVEL GLOBAL AQUI
 
             const startDateStrAPI = startDate.toISOString().split("T")[0];
             const endDateStrAPI = endDate.toISOString().split("T")[0];
@@ -716,6 +727,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const coordinatorName = formData.get("coordinatorName") || "";
         const observation = formData.get("observation") || "";
 
+        // NOVO: Adicionar a data de início da semana atual se for um agendamento de observação
+        let weekStartDateForObservation = null;
+        if (selectedSlots.length === 0 && currentWeekStartDate) {
+            weekStartDateForObservation = currentWeekStartDate.toISOString().split("T")[0];
+            console.log(`  weekStartDateForObservation: "${weekStartDateForObservation}"`);
+        }
+
         console.log("Valores extraídos:");
         console.log(`  userName: "${userName}"`);
         console.log(`  userEmail: "${userEmail}"`);
@@ -757,7 +775,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 room_id: slot.roomId,
                 booking_date: slot.date,
                 period: slot.period
-            })) : [] // Array vazio para agendamentos somente observação
+            })) : [], // Array vazio para agendamentos somente observação
+            week_start_date_for_observation: weekStartDateForObservation // NOVO CAMPO AQUI
         };
 
         console.log("=== DEBUG: Dados finais do agendamento ===");
