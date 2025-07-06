@@ -1,16 +1,3 @@
-Mil perdões, Paulo! Você está absolutamente certo. O código `script.js` foi cortado novamente. É um erro meu e agradeço sua paciência e por me avisar.
-
-Estou tendo dificuldades em enviar o código completo em uma única resposta devido a limitações de tamanho.
-
-**Vou tentar enviar o `script.js` em duas partes.**
-
-Por favor, copie e cole a **Primeira Parte** e a **Segunda Parte** na ordem correta para formar o arquivo completo.
-
----
-
-**`src/static/script.js` (PRIMEIRA PARTE)**
-
-```javascript
 document.addEventListener("DOMContentLoaded", () => {
     // DOM Elements for Modal and New Flow
     const scheduleTableContainer = document.getElementById("scheduleTableContainer");
