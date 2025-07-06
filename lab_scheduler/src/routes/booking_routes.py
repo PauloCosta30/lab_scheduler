@@ -5,7 +5,7 @@ from datetime import datetime, date, timedelta, time
 from collections import defaultdict
 from flask_mail import Message
 import re
-import pytz
+import pytz # Importar pytz para lidar com fusos horários
 from functools import wraps
 
 # Importação condicional do weasyprint
@@ -227,7 +227,7 @@ def create_booking():
         if "@" not in user_email or "." not in user_email.split("@")[-1]:
             return jsonify({"error": "Invalid email format"}), 400
 
-        # Validar slots apenas se fornecidos
+        # Validação de slots apenas se fornecidos
         if slots_data and not isinstance(slots_data, list):
             return jsonify({"error": "Slots must be a list"}), 400
 
@@ -494,6 +494,12 @@ def generate_schedule_pdf():
             Booking.booking_date.between(start_date, end_date)
         ).order_by(Booking.booking_date, Booking.period).all()
         
+        # --- DEBUG: Log de todos os bookings encontrados ---
+        current_app.logger.debug(f"DEBUG: Total de bookings encontrados para PDF: {len(all_bookings)}")
+        for b in all_bookings:
+            current_app.logger.debug(f"DEBUG: Booking ID: {b.id}, User: {b.user_name}, Room: {b.room.name if b.room else 'N/A'}, Date: {b.booking_date}, Period: {b.period}, Obs: '{b.observation}'")
+        # --- FIM DEBUG ---
+
         # Organizar dados por data e período para a tabela da escala
         schedule_data = defaultdict(lambda: defaultdict(list))
         user_observations = {}
@@ -543,6 +549,18 @@ def generate_schedule_pdf():
             if user_data["has_observations"]
         }
         
+        # --- DEBUG: Log dos dados finais que serão passados para o template ---
+        current_app.logger.debug(f"DEBUG: Salas encontradas: {[room.name for room in sorted_rooms]}")
+        current_app.logger.debug(f"DEBUG: Datas da semana: {[d.strftime('%Y-%m-%d') for d in dates_of_week]}")
+        current_app.logger.debug(f"DEBUG: Dados da escala (schedule_data): {dict(schedule_data)}")
+        current_app.logger.debug(f"DEBUG: Observações de usuários (filtered_user_observations): {len(filtered_user_observations)} usuários com observações")
+        for user_name, user_data in filtered_user_observations.items():
+            current_app.logger.debug(f"  DEBUG: Usuário {user_name}: {len(user_data['bookings'])} agendamentos")
+            for booking in user_data['bookings']:
+                if booking['observation']:
+                    current_app.logger.debug(f"    DEBUG: Agendamento com observação: {booking['room_name']} ({booking['date']}, {booking['period']}): '{booking['observation']}'")
+        # --- FIM DEBUG ---
+
         # Gerar lista de datas para os dias úteis da semana
         dates_of_week = []
         current_date = start_date
@@ -563,8 +581,7 @@ def generate_schedule_pdf():
             "schedule_pdf_template.html",
             schedule_data=dict(schedule_data),
             user_observations=filtered_user_observations,
-            # Não precisamos mais de general_observations separadas, pois elas estão em user_observations
-            general_observations=[], # Passar vazio ou remover do template
+            general_observations=[], # Passar vazio, pois agora tudo está em user_observations
             start_date=start_date,
             end_date=end_date,
             generated_at=now_brasilia,
