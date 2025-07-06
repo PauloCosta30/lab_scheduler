@@ -1,6 +1,7 @@
-# /home/ubuntu/lab_scheduler/src/main.py
 import os
 import sys
+import logging # Adicione esta linha para importar logging
+
 # DON'T CHANGE THIS !!!
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -34,6 +35,18 @@ app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', ('LAB.ITV',
 
 mail = Mail(app) # Initialize Flask-Mail
 db.init_app(app)
+
+# --- INÍCIO DAS MODIFICAÇÕES PARA LOGGING ---
+# Configurar o nível de log para INFO (ou DEBUG, se preferir mais detalhes)
+app.logger.setLevel(logging.INFO) 
+
+# Adicionar handler para enviar logs para a saída padrão (stdout)
+handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+app.logger.addHandler(handler)
+# --- FIM DAS MODIFICAÇÕES PARA LOGGING ---
+
 
 # Adicionar filtro de template para formatação de data
 @app.template_filter('format_date')
@@ -102,21 +115,6 @@ def serve_spa(path):
             return send_from_directory(app.static_folder, 'index.html')
     except Exception as e:
         return f"Erro ao servir arquivo: {str(e)}", 404
-from src.app import create_app # <--- MUDANÇA AQUI: de src para src.app
-import logging
-import sys
-
-app = create_app()
-
-# Configurar o nível de log para DEBUG (ou INFO, se preferir menos verbosidade)
-app.logger.setLevel(logging.DEBUG) 
-
-# Adicione estas linhas para configurar o handler de log
-# Isso garante que os logs do Flask sejam enviados para a saída padrão (stdout)
-handler = logging.StreamHandler(sys.stdout)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-app.logger.addHandler(handler)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
