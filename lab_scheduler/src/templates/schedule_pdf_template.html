@@ -306,24 +306,6 @@
                 Nenhum agendamento com observações encontrado para esta semana.
             </div>
         {% endif %}
-        
-        <!-- Observações Gerais -->
-        {% if general_observations and general_observations|length > 0 %}
-        <div class="general-observations">
-            <h3>Observações Gerais</h3>
-            {% for obs in general_observations %}
-            <div class="booking-item">
-                <div class="booking-details">
-                    {{ obs.user_name }}{% if obs.coordinator_name %} ({{ obs.coordinator_name }}){% endif %}
-                    - {{ obs.booking_date.strftime('%d/%m/%Y') if obs.booking_date.strftime else obs.booking_date }}
-                </div>
-                <div class="observation-text">
-                    "{{ obs.observation }}"
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
     </div>
 </body>
 </html>
