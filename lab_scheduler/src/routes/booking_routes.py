@@ -214,6 +214,9 @@ def create_booking():
         coordinator_name = data.get("coordinator_name")
         observation = data.get("observation", "")
         slots_data = data.get("slots", [])  # Permitir lista vazia
+        
+        # NOVO: Obter a data de início da semana do frontend para observações
+        week_start_date_for_observation_str = data.get("week_start_date_for_observation")
 
         # Validação básica - requer pelo menos nome, email e (slots OU observação)
         if not user_name or not user_email:
@@ -351,11 +354,21 @@ def create_booking():
 
         # Se não há slots mas há observação, criar um registro de observação geral
         if not processed_slots and observation.strip():
-            # Determinar a data da semana atual para a observação geral
-            now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
-            now_brasilia = now_utc.astimezone(BRASILIA_TZ)
-            today_brasilia = now_brasilia.date()
-            current_week_monday = today_brasilia - timedelta(days=today_brasilia.weekday())
+            # NOVO: Usar a data do frontend se fornecida, senão usar a segunda-feira da semana atual do servidor
+            booking_date_for_general_observation = None
+            if week_start_date_for_observation_str:
+                try:
+                    booking_date_for_general_observation = datetime.strptime(week_start_date_for_observation_str, "%Y-%m-%d").date()
+                    current_app.logger.info(f"INFO: Usando week_start_date_for_observation do frontend: {booking_date_for_general_observation}")
+                except ValueError:
+                    current_app.logger.warning(f"WARNING: week_start_date_for_observation inválida: {week_start_date_for_observation_str}. Usando data do servidor.")
+            
+            if not booking_date_for_general_observation:
+                now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
+                now_brasilia = now_utc.astimezone(BRASILIA_TZ)
+                today_brasilia = now_brasilia.date()
+                booking_date_for_general_observation = today_brasilia - timedelta(days=today_brasilia.weekday())
+                current_app.logger.info(f"INFO: Usando segunda-feira da semana atual do servidor: {booking_date_for_general_observation}")
             
             general_observation_booking = Booking(
                 user_name=user_name,
@@ -363,14 +376,14 @@ def create_booking():
                 coordinator_name=coordinator_name,
                 observation=observation,
                 room_id=None,  # Sem sala específica
-                booking_date=current_week_monday,  # Data da segunda-feira da semana atual
+                booking_date=booking_date_for_general_observation,  # AGORA USA A DATA DETERMINADA ACIMA
                 period="Observação Geral"  # Período especial para observações gerais
             )
             db.session.add(general_observation_booking)
-            current_app.logger.info(f"INFO: Criado booking de observação geral para {user_name} na data {current_week_monday} com observação: '{observation}'") # NOVO LOG AQUI
+            current_app.logger.info(f"INFO: Criado booking de observação geral para {user_name} na data {booking_date_for_general_observation} com observação: '{observation}'")
         
         db.session.commit()
-        current_app.logger.info("INFO: db.session.commit() executado com sucesso.") # NOVO LOG AQUI
+        current_app.logger.info("INFO: db.session.commit() executado com sucesso.")
         
         email_sent_successfully = send_booking_confirmation_email(
             user_email, user_name, coordinator_name, observation, newly_created_bookings_details_for_email
@@ -593,17 +606,3 @@ def generate_schedule_pdf():
             timedelta=timedelta
         )
         
-        # Gerar PDF
-        pdf = HTML(string=html_content).write_pdf()
-        
-        # Criar resposta
-        response = make_response(pdf)
-        response.headers["Content-Type"] = "application/pdf"
-        response.headers["Content-Disposition"] = f"attachment; filename=escala_{start_date_str}_a_{end_date_str}.pdf"
-        
-        return response
-        
-    except Exception as e:
-        current_app.logger.error(f"Erro ao gerar PDF: {str(e)}", exc_info=True)
-        return jsonify({"error": "Erro ao gerar PDF", "details": str(e)}), 500
-
