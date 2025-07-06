@@ -102,6 +102,21 @@ def serve_spa(path):
             return send_from_directory(app.static_folder, 'index.html')
     except Exception as e:
         return f"Erro ao servir arquivo: {str(e)}", 404
+from src import create_app
+import logging
+import sys # Adicione esta linha para importar sys
+
+app = create_app()
+
+# Configurar o nível de log para DEBUG (ou INFO, se preferir menos verbosidade)
+app.logger.setLevel(logging.DEBUG) 
+
+# Adicione estas linhas para configurar o handler de log
+# Isso garante que os logs do Flask sejam enviados para a saída padrão (stdout)
+handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+app.logger.addHandler(handler)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
