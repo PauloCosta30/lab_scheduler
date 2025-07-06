@@ -495,7 +495,6 @@ def get_bookings():
 
 
 @bookings_bp.route("/generate-pdf", methods=["GET"])
-    @bookings_bp.route("/generate-pdf", methods=["GET"])
 def generate_pdf():
     """Gera PDF da escala semanal com observações organizadas por usuário e observações gerais"""
     try:
