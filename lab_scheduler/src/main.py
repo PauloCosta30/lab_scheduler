@@ -19,9 +19,7 @@ app = Flask(__name__,
 
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'a_very_strong_random_secret_key_dev_123!@#')
 
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-db_path = os.path.join(project_root, 'lab_scheduler.db')
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{db_path}"
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:///lab_scheduler.db")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Flask-Mail configuration
@@ -118,4 +116,3 @@ def serve_spa(path):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
-
