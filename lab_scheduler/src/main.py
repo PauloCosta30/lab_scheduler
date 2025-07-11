@@ -25,13 +25,18 @@ if os.getenv('RENDER'):
     db_path = '/opt/render/project/data/lab_scheduler.db'
     # Criar diretório se não existir
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    app.logger.info(f"Running on Render, using persistent database at: {db_path}")
 else:
     # Desenvolvimento local
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     db_path = os.path.join(project_root, 'lab_scheduler.db')
+    app.logger.info(f"Running locally, using database at: {db_path}")
 
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{db_path}"
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", f"sqlite:///{db_path}")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Log da configuração do banco de dados
+app.logger.info(f"Database URI: {app.config['SQLALCHEMY_DATABASE_URI']}")
 
 # Flask-Mail configuration
 app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
@@ -69,10 +74,22 @@ def format_date_filter(date_value, fmt="%d/%m"):
 def init_database():
     """Inicializa o banco de dados e cria as salas se não existirem"""
     try:
-        app.logger.info(f"Initializing database at: {db_path}")
+        app.logger.info(f"Initializing database at: {app.config['SQLALCHEMY_DATABASE_URI']}")
+        
+        # Verificar se o arquivo de banco de dados existe
+        db_file_path = app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')
+        db_exists = os.path.exists(db_file_path)
+        app.logger.info(f"Database file exists: {db_exists}")
+        
+        # Criar todas as tabelas
         db.create_all()
         
-        if not Room.query.first():
+        # Verificar se já existem salas no banco
+        existing_rooms = Room.query.count()
+        app.logger.info(f"Existing rooms count: {existing_rooms}")
+        
+        if existing_rooms == 0:
+            app.logger.info("No rooms found, creating default rooms...")
             room_names = [
                 "Geral 1", "Geral 2", "Geral 3", "Geral 4", "Geral 5", "Geral 6", "Geral 7", "Geral 8",
                 "Geral 9", "Geral 10", "Geral 11", "Geral 12",
@@ -88,9 +105,13 @@ def init_database():
                 db.session.add(room)
             
             db.session.commit()
-            app.logger.info("Database initialized and custom rooms created.")
+            app.logger.info(f"Database initialized and {len(room_names)} rooms created.")
         else:
-            app.logger.info("Database already initialized with rooms.")
+            app.logger.info(f"Database already initialized with {existing_rooms} rooms.")
+            
+        # Verificar se existem reservas
+        existing_bookings = Booking.query.count()
+        app.logger.info(f"Existing bookings count: {existing_bookings}")
             
     except Exception as e:
         app.logger.error(f"Error initializing database: {str(e)}")
