@@ -33,6 +33,10 @@ else:
     app.logger.info(f"Running locally, using database at: {db_path}")
 
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", f"sqlite:///{db_path}")
+
+# Verificação explícita para garantir que não estamos usando PostgreSQL
+if app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgresql"): # or app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgres"):
+    raise ValueError("Configuração de banco de dados inválida: PostgreSQL não é suportado para este aplicativo. Use SQLite.")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Log da configuração do banco de dados
