@@ -1,4 +1,12 @@
 services:
+  # Serviço de banco de dados PostgreSQL
+  - type: pserv
+    name: lab-scheduler-db
+    env: docker
+    plan: free
+    region: oregon
+    
+  # Serviço web principal
   - type: web
     name: lab-scheduler
     env: python
@@ -12,4 +20,18 @@ services:
       - key: ADMIN_PASSWORD
         value: admin123
       - key: DATABASE_URL
-        value: sqlite:///lab_scheduler.db
+        fromDatabase:
+          name: lab-scheduler-db
+          property: connectionString
+      - key: MAIL_SERVER
+        value: smtp.gmail.com
+      - key: MAIL_PORT
+        value: 587
+      - key: MAIL_USE_TLS
+        value: true
+      - key: MAIL_USERNAME
+        value: itvdslab@gmail.com
+      - key: MAIL_PASSWORD
+        value: cast qddf bxby mwsl
+      - key: MAIL_DEFAULT_SENDER
+        value: LAB.ITV
