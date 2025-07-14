@@ -1,6 +1,6 @@
 import os
 import sys
-import logging
+import logging # Adicione esta linha para importar logging
 
 # DON'T CHANGE THIS !!!
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -9,7 +9,7 @@ from flask import Flask, send_from_directory, render_template
 from src.extensions import db
 from src.models.entities import Room, Booking
 from src.routes.booking_routes import bookings_bp
-from flask_mail import Mail
+from flask_mail import Mail # Import Flask-Mail
 from datetime import datetime
 
 # Configuração correta do Flask para servir arquivos estáticos
@@ -19,28 +19,10 @@ app = Flask(__name__,
 
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'a_very_strong_random_secret_key_dev_123!@#')
 
-# Configuração do banco de dados SQLite com volume persistente
-if os.getenv('RENDER'):
-    # Produção no Render - usar diretório persistente
-    db_path = '/opt/render/project/data/lab_scheduler.db'
-    # Criar diretório se não existir
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    app.logger.info(f"Running on Render, using persistent database at: {db_path}")
-else:
-    # Desenvolvimento local
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    db_path = os.path.join(project_root, 'lab_scheduler.db')
-    app.logger.info(f"Running locally, using database at: {db_path}")
-
-app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", f"sqlite:///{db_path}")
-
-# Verificação explícita para garantir que não estamos usando PostgreSQL
-if app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgresql"): # or app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgres"):
-    raise ValueError("Configuração de banco de dados inválida: PostgreSQL não é suportado para este aplicativo. Use SQLite.")
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+db_path = os.path.join(project_root, 'lab_scheduler.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{db_path}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# Log da configuração do banco de dados
-app.logger.info(f"Database URI: {app.config['SQLALCHEMY_DATABASE_URI']}")
 
 # Flask-Mail configuration
 app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
@@ -51,89 +33,67 @@ app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', 'itvdslab@gmail.com')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'cast qddf bxby mwsl')
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', ('LAB.ITV', 'noreply@gmail.com'))
 
-mail = Mail(app)
+mail = Mail(app) # Initialize Flask-Mail
 db.init_app(app)
 
-# Configuração de logging
-app.logger.setLevel(logging.INFO)
+# --- INÍCIO DAS MODIFICAÇÕES PARA LOGGING ---
+# Configurar o nível de log para INFO (ou DEBUG, se preferir mais detalhes)
+app.logger.setLevel(logging.INFO) 
+
+# Adicionar handler para enviar logs para a saída padrão (stdout)
 handler = logging.StreamHandler(sys.stdout)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 app.logger.addHandler(handler)
+# --- FIM DAS MODIFICAÇÕES PARA LOGGING ---
 
+
+# Adicionar filtro de template para formatação de data
 @app.template_filter('format_date')
 def format_date_filter(date_value, fmt="%d/%m"):
     """Filtro para formatação de datas nos templates"""
     if isinstance(date_value, str):
         try:
+            # Tentar converter string ISO para objeto date
             date_obj = datetime.strptime(date_value, "%Y-%m-%d").date()
             return date_obj.strftime(fmt)
         except ValueError:
             return date_value
     elif hasattr(date_value, 'strftime'):
+        # Se já é um objeto date/datetime
         return date_value.strftime(fmt)
     else:
         return str(date_value)
 
-def init_database():
-    """Inicializa o banco de dados e cria as salas se não existirem"""
-    try:
-        app.logger.info(f"Initializing database at: {app.config['SQLALCHEMY_DATABASE_URI']}")
-        
-        # Verificar se o arquivo de banco de dados existe
-        db_file_path = app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')
-        db_exists = os.path.exists(db_file_path)
-        app.logger.info(f"Database file exists: {db_exists}")
-        
-        # Criar todas as tabelas
-        db.create_all()
-        
-        # Verificar se já existem salas no banco
-        existing_rooms = Room.query.count()
-        app.logger.info(f"Existing rooms count: {existing_rooms}")
-        
-        if existing_rooms == 0:
-            app.logger.info("No rooms found, creating default rooms...")
-            room_names = [
-                "Geral 1", "Geral 2", "Geral 3", "Geral 4", "Geral 5", "Geral 6", "Geral 7", "Geral 8",
-                "Geral 9", "Geral 10", "Geral 11", "Geral 12",
-                "Citometria - Bancada", "Sala Clara - Lupa esquerda", "Sala Clara - Lupa direita",
-                "Sala Clara - Lupa com Câmera", "Sala Clara - Microscópio", "Sala Escura - Axio Imager.M2", 
-                "Sala Escura - Axio Scope.A1", "Sala Escura - Microscópio CONFOCAL-LMSN",
-                "Microbiologia - Capela de Fluxo Laminar", "Microbiologia - Lupa", "Microbiologia - Equipamento",
-                "Geologia 1", "Geologia Micrótomo", "Cultivo A1", "Cultivo A2", "Cultivo B1", "Cultivo B2"
-            ]
-            
-            for name in room_names:
-                room = Room(name=name)
-                db.session.add(room)
-            
-            db.session.commit()
-            app.logger.info(f"Database initialized and {len(room_names)} rooms created.")
-        else:
-            app.logger.info(f"Database already initialized with {existing_rooms} rooms.")
-            
-        # Verificar se existem reservas
-        existing_bookings = Booking.query.count()
-        app.logger.info(f"Existing bookings count: {existing_bookings}")
-            
-    except Exception as e:
-        app.logger.error(f"Error initializing database: {str(e)}")
-        db.session.rollback()
-        raise
-
 # Inicialização do banco de dados
 with app.app_context():
-    init_database()
+    db.create_all()
+    if not Room.query.first():
+        room_names = [
+            "Geral 1", "Geral 2", "Geral 3", "Geral 4", "Geral 5", "Geral 6", "Geral 7", "Geral 8",
+            "Geral 9", "Geral 10", "Geral 11", "Geral 12",
+            "Citometria - Bancada", "Sala Clara - Lupa esquerda", "Sala Clara - Lupa direita",
+            "Sala Clara - Lupa com Câmera", "Sala Clara - Microscópio", "Sala Escura - Axio Imager.M2", 
+            "Sala Escura - Axio Scope.A1", "Sala Escura - Microscópio CONFOCAL-LMSN",
+            "Microbiologia - Capela de Fluxo Laminar", "Microbiologia - Lupa", "Microbiologia - Equipamento",
+            "Geologia 1", "Geologia Micrótomo", "Cultivo A1", "Cultivo A2", "Cultivo B1", "Cultivo B2"
+        ]
+        for name in room_names:
+            room = Room(name=name)
+            db.session.add(room)
+        db.session.commit()
+        print("Database initialized and custom rooms created.")
 
 # Registrar blueprint
 app.register_blueprint(bookings_bp, url_prefix='/api')
 
+# Rota para servir arquivos estáticos corretamente
 @app.route('/static/<path:filename>')
 def static_files(filename):
     """Serve arquivos estáticos explicitamente"""
     return send_from_directory(app.static_folder, filename)
 
+# Rota principal corrigida
 @app.route('/')
 def index():
     """Serve a página principal"""
@@ -142,16 +102,20 @@ def index():
     except Exception as e:
         return f"Erro ao carregar página: {str(e)}", 500
 
+# Rota catch-all para SPA
 @app.route('/<path:path>')
 def serve_spa(path):
     """Serve arquivos estáticos ou redireciona para index.html"""
     try:
+        # Primeiro, tenta servir o arquivo solicitado
         if os.path.exists(os.path.join(app.static_folder, path)):
             return send_from_directory(app.static_folder, path)
         else:
+            # Se não encontrar, serve o index.html (comportamento SPA)
             return send_from_directory(app.static_folder, 'index.html')
     except Exception as e:
         return f"Erro ao servir arquivo: {str(e)}", 404
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
+
