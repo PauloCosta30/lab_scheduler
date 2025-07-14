@@ -19,9 +19,17 @@ app = Flask(__name__,
 
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'a_very_strong_random_secret_key_dev_123!@#')
 
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-db_path = os.path.join(project_root, 'lab_scheduler.db')
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{db_path}"
+# Configuração do banco de dados - suporte para PostgreSQL e SQLite
+database_url = os.getenv('DATABASE_URL')
+if database_url:
+    # Se DATABASE_URL está definida, use ela (PostgreSQL no Render)
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+else:
+    # Fallback para SQLite local para desenvolvimento
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    db_path = os.path.join(project_root, 'lab_scheduler.db')
+    app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{db_path}"
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Flask-Mail configuration
@@ -67,22 +75,30 @@ def format_date_filter(date_value, fmt="%d/%m"):
 
 # Inicialização do banco de dados
 with app.app_context():
-    db.create_all()
-    if not Room.query.first():
-        room_names = [
-            "Geral 1", "Geral 2", "Geral 3", "Geral 4", "Geral 5", "Geral 6", "Geral 7", "Geral 8",
-            "Geral 9", "Geral 10", "Geral 11", "Geral 12",
-            "Citometria - Bancada", "Sala Clara - Lupa esquerda", "Sala Clara - Lupa direita",
-            "Sala Clara - Lupa com Câmera", "Sala Clara - Microscópio", "Sala Escura - Axio Imager.M2", 
-            "Sala Escura - Axio Scope.A1", "Sala Escura - Microscópio CONFOCAL-LMSN",
-            "Microbiologia - Capela de Fluxo Laminar", "Microbiologia - Lupa", "Microbiologia - Equipamento",
-            "Geologia 1", "Geologia Micrótomo", "Cultivo A1", "Cultivo A2", "Cultivo B1", "Cultivo B2"
-        ]
-        for name in room_names:
-            room = Room(name=name)
-            db.session.add(room)
-        db.session.commit()
-        print("Database initialized and custom rooms created.")
+    try:
+        db.create_all()
+        app.logger.info("Tabelas do banco de dados criadas com sucesso")
+        
+        if not Room.query.first():
+            room_names = [
+                "Geral 1", "Geral 2", "Geral 3", "Geral 4", "Geral 5", "Geral 6", "Geral 7", "Geral 8",
+                "Geral 9", "Geral 10", "Geral 11", "Geral 12",
+                "Citometria - Bancada", "Sala Clara - Lupa esquerda", "Sala Clara - Lupa direita",
+                "Sala Clara - Lupa com Câmera", "Sala Clara - Microscópio", "Sala Escura - Axio Imager.M2", 
+                "Sala Escura - Axio Scope.A1", "Sala Escura - Microscópio CONFOCAL-LMSN",
+                "Microbiologia - Capela de Fluxo Laminar", "Microbiologia - Lupa", "Microbiologia - Equipamento",
+                "Geologia 1", "Geologia Micrótomo", "Cultivo A1", "Cultivo A2", "Cultivo B1", "Cultivo B2"
+            ]
+            for name in room_names:
+                room = Room(name=name)
+                db.session.add(room)
+            db.session.commit()
+            app.logger.info("Salas padrão criadas no banco de dados")
+        else:
+            app.logger.info("Salas já existem no banco de dados")
+            
+    except Exception as e:
+        app.logger.error(f"Erro ao inicializar banco de dados: {str(e)}")
 
 # Registrar blueprint
 app.register_blueprint(bookings_bp, url_prefix='/api')
@@ -118,4 +134,3 @@ def serve_spa(path):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
-
