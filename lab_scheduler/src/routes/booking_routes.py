@@ -142,22 +142,22 @@ def get_booking_window_status():
         
         # Definir os pontos de corte para a semana atual
         current_week_cutoff_date = current_week_monday + timedelta(days=2) # Quarta-feira
-        current_week_cutoff_time = time(23, 59, 0) # 23:59
+        current_week_cutoff_time = time(18, 0, 0) # 18:00
         current_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(current_week_cutoff_date, current_week_cutoff_time))
 
         # Definir os pontos de corte para a próxima semana
-        next_week_open_date = current_week_monday + timedelta(days=3) # Quinta - feira
-        next_week_open_time = time(5, 0, 0) # 18:00
+        next_week_open_date = current_week_monday + timedelta(days=3) # Sexta-feira
+        next_week_open_time = time(18, 0, 0) # 18:00
         next_week_open_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_open_date, next_week_open_time))
 
         next_week_cutoff_date = next_week_monday + timedelta(days=2) # Quarta-feira da próxima semana
-        next_week_cutoff_time = time(23, 59, 0) # 23:59
+        next_week_cutoff_time = time(18, 0, 0) # 18:00
         next_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_cutoff_date, next_week_cutoff_time))
 
         status = {
             "current_week": {"open": False, "message": "Fechado"},
             "next_week": {"open": False, "message": "Fechado"},
-            "general_message": "As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 23:59, e a escala da próxima semana será liberada todas as quintas-feiras, às 18h."
+            "general_message": "As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 18h, e a escala da próxima semana será liberada todas as sextas-feiras, às 18h."
         }
 
         # Regra para a semana atual
