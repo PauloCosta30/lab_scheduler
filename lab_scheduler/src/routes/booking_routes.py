@@ -11,12 +11,8 @@ import pytz # Importar pytz para lidar com fusos horários
 from functools import wraps
 
 # Importação condicional do weasyprint
-try:
-    from weasyprint import HTML
-    WEASYPRINT_AVAILABLE = True
-except ImportError:
-    WEASYPRINT_AVAILABLE = False
-    current_app.logger.warning("WeasyPrint não está disponível. Geração de PDF desabilitada.")
+from weasyprint import HTML
+WEASYPRINT_AVAILABLE = True
 
 bookings_bp = Blueprint("bookings_bp", __name__)
 
@@ -213,9 +209,34 @@ def create_booking():
         observation = data.get("observation", "")
         slots_data = data.get("slots")
 
-        if not all([user_name, user_email, slots_data]):
+        if not all([user_name, user_email]):
             return jsonify({"error": "Missing fields. Required: user_name, user_email, slots"}), 400
         
+        if not slots_data and not observation:
+            return jsonify({"error": "Missing fields. Required: slots or observation"}), 400
+
+        if not slots_data and observation:
+            # If no slots are provided, and observation is present, treat as a general observation
+            # We need a booking_date for general observations. Let's use today's date for simplicity
+            # or the first available date if that's more appropriate for the frontend flow.
+            # For now, we'll use today's date as the booking_date for general observations.
+            today_brasilia = datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(BRASILIA_TZ).date()
+            general_obs_booking = Booking(
+                user_name=user_name,
+                user_email=user_email,
+                coordinator_name=coordinator_name,
+                observation=f"OBSERVAÇÃO GERAL: {observation}",
+                room_id=None,  # Sem sala específica
+                booking_date=today_brasilia,
+                period="Geral"  # Período especial para observações gerais
+            )
+            db.session.add(general_obs_booking)
+            db.session.commit()
+            return jsonify({
+                "message": "Observação geral adicionada com sucesso!",
+                "observation": observation
+            }), 201
+
         if not isinstance(slots_data, list) or not slots_data:
             return jsonify({"error": "Slots must be a non-empty list"}), 400
 
