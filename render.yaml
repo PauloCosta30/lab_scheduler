@@ -10,7 +10,7 @@ services:
     name: lab-scheduler
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn lab_scheduler.src.main:app
+    startCommand: cd lab_scheduler && gunicorn -w 4 -b 0.0.0.0:$PORT "src.main:app"
     region: oregon
     plan: free
     envVars:
@@ -20,4 +20,16 @@ services:
         value: admin123
       # Configuração manual da DATABASE_URL usando a string de conexão interna
       - key: DATABASE_URL
-        value: postgresql://lab_sch
+        value: postgresql://lab_scheduler_db_user:CSvrKRcXsLo4LflAWa0P0j5Y3CjlzRFM@dpg-d0qfu6ruibrs73ej20lg-a/lab_scheduler_db
+      - key: MAIL_SERVER
+        value: smtp.gmail.com
+      - key: MAIL_PORT
+        value: 587
+      - key: MAIL_USE_TLS
+        value: true
+      - key: MAIL_USERNAME
+        value: itvdslab@gmail.com
+      - key: MAIL_PASSWORD
+        value: cast qddf bxby mwsl
+      - key: MAIL_DEFAULT_SENDER
+        value: LAB.ITV
