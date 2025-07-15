@@ -18,9 +18,9 @@ services:
         value: a_very_strong_random_secret_key_prod_456!@#
       - key: ADMIN_PASSWORD
         value: admin123
-      # Configuração manual da DATABASE_URL usando a string de conexão interna
+      # Usar a External Database URL com hostname completo
       - key: DATABASE_URL
-        value: postgresql://lab_scheduler_db_user:CSvrKRcXsLo4LflAWa0P0j5Y3CjlzRFM@dpg-d0qfu6ruibrs73ej20lg-a/lab_scheduler_db
+        value: postgresql://lab_scheduler_db_user:CSvrKRcXsLo4LflAWa0P0j5Y3CjlzRFM@dpg-d0qfu6ruibrs73ej20lg-a.oregon-postgres.render.com/lab_scheduler_db
       - key: MAIL_SERVER
         value: smtp.gmail.com
       - key: MAIL_PORT
