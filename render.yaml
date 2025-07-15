@@ -2,10 +2,8 @@ services:
   - type: web
     name: lab-scheduler
     env: python
-    buildCommand: |
-      pip install --upgrade pip
-      pip install -r requirements.txt
-    startCommand: gunicorn src.main:app --bind 0.0.0.0:$PORT
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
     region: oregon
     plan: free
     envVars:
@@ -13,5 +11,3 @@ services:
         value: a_very_strong_random_secret_key_prod_456!@#
       - key: ADMIN_PASSWORD
         value: admin123
-      - key: PYTHONPATH
-        value: /opt/render/project:/opt/render/project/src
