@@ -1,57 +1,62 @@
+#!/usr/bin/env python3
+"""
+Arquivo principal para deploy no Render
+Este arquivo deve ficar na RAIZ do projeto
+"""
 import os
 import sys
 import logging
 
-# Configurar o path para encontrar os módulos
+# Adicionar o diretório src ao Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-project_root = os.path.dirname(parent_dir)
-
-# Adicionar todos os caminhos possíveis
-sys.path.insert(0, project_root)
-sys.path.insert(0, parent_dir)
+src_dir = os.path.join(current_dir, 'src')
+sys.path.insert(0, src_dir)
 sys.path.insert(0, current_dir)
 
-# Agora importar com try/except para debug
+print(f"Diretório atual: {current_dir}")
+print(f"Diretório src: {src_dir}")
+print(f"Python path: {sys.path[:3]}")
+
+# Verificar se o diretório src existe
+if not os.path.exists(src_dir):
+    print(f"ERRO: Diretório src não encontrado em {src_dir}")
+    print(f"Conteúdo do diretório atual: {os.listdir(current_dir)}")
+    sys.exit(1)
+
+# Tentar importar os módulos
 try:
-    from flask import Flask, send_from_directory, render_template
+    from flask import Flask, send_from_directory
     from flask_mail import Mail
     from datetime import datetime
     
-    # Tentar importar os módulos locais
-    from src.extensions import db
-    from src.models.entities import Room, Booking
-    from src.routes.booking_routes import bookings_bp
+    # Importar módulos locais
+    from extensions import db
+    from models.entities import Room, Booking
+    from routes.booking_routes import bookings_bp
     
-    print("Todos os módulos importados com sucesso!")
+    print("✓ Todos os módulos importados com sucesso!")
     
 except ImportError as e:
-    print(f"Erro de importação: {e}")
-    print(f"Diretório atual: {current_dir}")
-    print(f"Diretório pai: {parent_dir}")
-    print(f"Conteúdo do diretório atual: {os.listdir(current_dir)}")
-    if os.path.exists(os.path.join(current_dir, 'src')):
-        print(f"Conteúdo do diretório src: {os.listdir(os.path.join(current_dir, 'src'))}")
+    print(f"✗ Erro de importação: {e}")
+    print(f"Conteúdo do diretório src: {os.listdir(src_dir) if os.path.exists(src_dir) else 'Não existe'}")
     sys.exit(1)
 
 # Configuração do Flask
 app = Flask(__name__, 
-           static_folder=os.path.join(current_dir, 'static'),
-           template_folder=os.path.join(current_dir, 'templates'))
+           static_folder=os.path.join(src_dir, 'static'),
+           template_folder=os.path.join(src_dir, 'templates'))
 
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'a_very_strong_random_secret_key_dev_123!@#')
 
 # Configuração do banco de dados
 database_url = os.getenv('DATABASE_URL')
 if database_url:
-    # Produção - PostgreSQL
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-    app.logger.info("Usando PostgreSQL em produção")
+    print("✓ Usando PostgreSQL em produção")
 else:
-    # Desenvolvimento - SQLite
-    db_path = os.path.join(parent_dir, 'lab_scheduler.db')
+    db_path = os.path.join(current_dir, 'lab_scheduler.db')
     app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{db_path}"
-    app.logger.info("Usando SQLite em desenvolvimento")
+    print("✓ Usando SQLite em desenvolvimento")
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -68,11 +73,8 @@ mail = Mail(app)
 db.init_app(app)
 
 # Configurar logging
+logging.basicConfig(level=logging.INFO)
 app.logger.setLevel(logging.INFO)
-handler = logging.StreamHandler(sys.stdout)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-app.logger.addHandler(handler)
 
 # Filtro de template para formatação de data
 @app.template_filter('format_date')
@@ -136,6 +138,7 @@ def index():
     try:
         return send_from_directory(app.static_folder, 'index.html')
     except Exception as e:
+        app.logger.error(f"Erro ao carregar index.html: {str(e)}")
         return f"Erro ao carregar página: {str(e)}", 500
 
 @app.route('/<path:path>')
