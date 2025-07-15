@@ -5,6 +5,10 @@ import logging
 # Configurar o path para encontrar os módulos
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
+project_root = os.path.dirname(parent_dir)
+
+# Adicionar todos os caminhos possíveis
+sys.path.insert(0, project_root)
 sys.path.insert(0, parent_dir)
 sys.path.insert(0, current_dir)
 
