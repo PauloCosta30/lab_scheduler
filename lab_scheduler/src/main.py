@@ -1,64 +1,44 @@
-#!/usr/bin/env python3
-"""
-Arquivo principal para deploy no Render
-Este arquivo deve ficar na RAIZ do projeto
-"""
 import os
 import sys
 import logging
 
-# Adicionar o diretório src ao Python path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-src_dir = os.path.join(current_dir, 'src')
-sys.path.insert(0, src_dir)
-sys.path.insert(0, current_dir)
+# DON'T CHANGE THIS !!!
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-print(f"Diretório atual: {current_dir}")
-print(f"Diretório src: {src_dir}")
-print(f"Python path: {sys.path[:3]}")
+from flask import Flask, send_from_directory, render_template
+from src.extensions import db
+from src.models.entities import Room, Booking
+from src.routes.booking_routes import bookings_bp
+from flask_mail import Mail
+from datetime import datetime
 
-# Verificar se o diretório src existe
-if not os.path.exists(src_dir):
-    print(f"ERRO: Diretório src não encontrado em {src_dir}")
-    print(f"Conteúdo do diretório atual: {os.listdir(current_dir)}")
-    sys.exit(1)
-
-# Tentar importar os módulos
-try:
-    from flask import Flask, send_from_directory
-    from flask_mail import Mail
-    from datetime import datetime
-    
-    # Importar módulos locais
-    from extensions import db
-    from models.entities import Room, Booking
-    from routes.booking_routes import bookings_bp
-    
-    print("✓ Todos os módulos importados com sucesso!")
-    
-except ImportError as e:
-    print(f"✗ Erro de importação: {e}")
-    print(f"Conteúdo do diretório src: {os.listdir(src_dir) if os.path.exists(src_dir) else 'Não existe'}")
-    sys.exit(1)
-
-# Configuração do Flask
+# Configuração correta do Flask para servir arquivos estáticos
 app = Flask(__name__, 
-           static_folder=os.path.join(src_dir, 'static'),
-           template_folder=os.path.join(src_dir, 'templates'))
+           static_folder=os.path.join(os.path.dirname(__file__), 'static'),
+           template_folder=os.path.join(os.path.dirname(__file__), 'templates'))
 
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'a_very_strong_random_secret_key_dev_123!@#')
 
 # Configuração do banco de dados
-database_url = os.getenv('DATABASE_URL')
-if database_url:
-    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-    print("✓ Usando PostgreSQL em produção")
-else:
-    db_path = os.path.join(current_dir, 'lab_scheduler.db')
-    app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{db_path}"
-    print("✓ Usando SQLite em desenvolvimento")
+# No Render Free Tier, SQLite não persiste. Usar PostgreSQL gratuito como alternativa.
+database_url = os.getenv("DATABASE_URL")
 
+if database_url:
+    # Se DATABASE_URL está definida, usar ela (PostgreSQL do Render)
+    app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+    app.logger.info(f"Using DATABASE_URL: {database_url}")
+else:
+    # Desenvolvimento local - usar SQLite
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    db_path = os.path.join(project_root, 'lab_scheduler.db')
+    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
+    app.logger.info(f"Using local SQLite: {db_path}")
+
+# Verificação explícita removida - agora suportamos PostgreSQL para persistência
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Log da configuração do banco de dados
+app.logger.info(f"Database URI: {app.config['SQLALCHEMY_DATABASE_URI']}")
 
 # Flask-Mail configuration
 app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
@@ -72,11 +52,13 @@ app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', ('LAB.ITV',
 mail = Mail(app)
 db.init_app(app)
 
-# Configurar logging
-logging.basicConfig(level=logging.INFO)
+# Configuração de logging
 app.logger.setLevel(logging.INFO)
+handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+app.logger.addHandler(handler)
 
-# Filtro de template para formatação de data
 @app.template_filter('format_date')
 def format_date_filter(date_value, fmt="%d/%m"):
     """Filtro para formatação de datas nos templates"""
@@ -92,57 +74,75 @@ def format_date_filter(date_value, fmt="%d/%m"):
         return str(date_value)
 
 def init_database():
-    """Inicializa o banco de dados com as salas padrão"""
-    with app.app_context():
-        try:
-            db.create_all()
-            app.logger.info("Tabelas criadas com sucesso")
+    """Inicializa o banco de dados e cria as salas se não existirem"""
+    try:
+        app.logger.info(f"Initializing database at: {app.config['SQLALCHEMY_DATABASE_URI']}")
+        
+        # Verificar se o arquivo de banco de dados existe
+        db_file_path = app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')
+        db_exists = os.path.exists(db_file_path)
+        app.logger.info(f"Database file exists: {db_exists}")
+        
+        # Criar todas as tabelas
+        db.create_all()
+        
+        # Verificar se já existem salas no banco
+        existing_rooms = Room.query.count()
+        app.logger.info(f"Existing rooms count: {existing_rooms}")
+        
+        if existing_rooms == 0:
+            app.logger.info("No rooms found, creating default rooms...")
+            room_names = [
+                "Geral 1", "Geral 2", "Geral 3", "Geral 4", "Geral 5", "Geral 6", "Geral 7", "Geral 8",
+                "Geral 9", "Geral 10", "Geral 11", "Geral 12",
+                "Citometria - Bancada", "Sala Clara - Lupa esquerda", "Sala Clara - Lupa direita",
+                "Sala Clara - Lupa com Câmera", "Sala Clara - Microscópio", "Sala Escura - Axio Imager.M2", 
+                "Sala Escura - Axio Scope.A1", "Sala Escura - Microscópio CONFOCAL-LMSN",
+                "Microbiologia - Capela de Fluxo Laminar", "Microbiologia - Lupa", "Microbiologia - Equipamento",
+                "Geologia 1", "Geologia Micrótomo", "Cultivo A1", "Cultivo A2", "Cultivo B1", "Cultivo B2"
+            ]
             
-            if not Room.query.first():
-                room_names = [
-                    "Geral 1", "Geral 2", "Geral 3", "Geral 4", "Geral 5", "Geral 6", "Geral 7", "Geral 8",
-                    "Geral 9", "Geral 10", "Geral 11", "Geral 12",
-                    "Citometria - Bancada", "Sala Clara - Lupa esquerda", "Sala Clara - Lupa direita",
-                    "Sala Clara - Lupa com Câmera", "Sala Clara - Microscópio", "Sala Escura - Axio Imager.M2", 
-                    "Sala Escura - Axio Scope.A1", "Sala Escura - Microscópio CONFOCAL-LMSN",
-                    "Microbiologia - Capela de Fluxo Laminar", "Microbiologia - Lupa", "Microbiologia - Equipamento",
-                    "Geologia 1", "Geologia Micrótomo", "Cultivo A1", "Cultivo A2", "Cultivo B1", "Cultivo B2"
-                ]
-                
-                for name in room_names:
-                    room = Room(name=name)
-                    db.session.add(room)
-                
-                db.session.commit()
-                app.logger.info("Salas criadas com sucesso")
-            else:
-                app.logger.info("Salas já existem no banco")
-                
-        except Exception as e:
-            app.logger.error(f"Erro ao inicializar banco: {str(e)}")
-            db.session.rollback()
+            for name in room_names:
+                room = Room(name=name)
+                db.session.add(room)
+            
+            db.session.commit()
+            app.logger.info(f"Database initialized and {len(room_names)} rooms created.")
+        else:
+            app.logger.info(f"Database already initialized with {existing_rooms} rooms.")
+            
+        # Verificar se existem reservas
+        existing_bookings = Booking.query.count()
+        app.logger.info(f"Existing bookings count: {existing_bookings}")
+            
+    except Exception as e:
+        app.logger.error(f"Error initializing database: {str(e)}")
+        db.session.rollback()
+        raise
 
-# Inicializar banco
-init_database()
+# Inicialização do banco de dados
+with app.app_context():
+    init_database()
 
 # Registrar blueprint
 app.register_blueprint(bookings_bp, url_prefix='/api')
 
-# Rotas
 @app.route('/static/<path:filename>')
 def static_files(filename):
+    """Serve arquivos estáticos explicitamente"""
     return send_from_directory(app.static_folder, filename)
 
 @app.route('/')
 def index():
+    """Serve a página principal"""
     try:
         return send_from_directory(app.static_folder, 'index.html')
     except Exception as e:
-        app.logger.error(f"Erro ao carregar index.html: {str(e)}")
         return f"Erro ao carregar página: {str(e)}", 500
 
 @app.route('/<path:path>')
 def serve_spa(path):
+    """Serve arquivos estáticos ou redireciona para index.html"""
     try:
         if os.path.exists(os.path.join(app.static_folder, path)):
             return send_from_directory(app.static_folder, path)
