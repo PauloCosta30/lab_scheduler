@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 import time
+import socket
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 
@@ -22,27 +23,62 @@ app = Flask(__name__,
 
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'a_very_strong_random_secret_key_dev_123!@#')
 
-# Configuração do banco de dados com retry e fallback melhorado
+# Função para testar resolução DNS
+def test_dns_resolution(hostname):
+    """Testa se o hostname pode ser resolvido"""
+    try:
+        ip = socket.gethostbyname(hostname)
+        app.logger.info(f"DNS resolvido: {hostname} -> {ip}")
+        return True
+    except socket.gaierror as e:
+        app.logger.error(f"Falha na resolução DNS para {hostname}: {e}")
+        return False
+
+# Configuração do banco de dados com workaround para DNS
 def get_database_uri():
-    """Obtém a URI do banco de dados com retry para PostgreSQL"""
+    """Obtém a URI do banco de dados com workaround para DNS"""
     database_url = os.getenv('DATABASE_URL')
     
     if database_url and database_url.startswith('postgresql'):
         app.logger.info(f"Tentando conectar ao PostgreSQL: {database_url[:50]}...")
         
+        # Extrair hostname da URL para teste DNS
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(database_url)
+            hostname = parsed.hostname
+            
+            app.logger.info(f"Testando resolução DNS para: {hostname}")
+            
+            # Tentar resolver DNS primeiro
+            if not test_dns_resolution(hostname):
+                app.logger.warning(f"DNS não resolveu {hostname}, tentando com URL externa")
+                
+                # Tentar com hostname externo completo
+                external_hostname = f"{hostname}.oregon-postgres.render.com"
+                if test_dns_resolution(external_hostname):
+                    # Substituir hostname na URL
+                    database_url = database_url.replace(hostname, external_hostname)
+                    app.logger.info(f"Usando URL externa: {database_url[:50]}...")
+                else:
+                    app.logger.error("Falha na resolução DNS mesmo com hostname externo")
+            
+        except Exception as e:
+            app.logger.error(f"Erro ao processar URL do banco: {e}")
+        
         # Tentar conectar ao PostgreSQL com retry
-        max_retries = 3
-        retry_delay = 5
+        max_retries = 5
+        retry_delay = 3
         
         for attempt in range(max_retries):
             try:
                 # Testar a conexão com timeout
                 engine = create_engine(
                     database_url,
-                    pool_timeout=10,
+                    pool_timeout=15,
                     pool_recycle=300,
                     connect_args={
-                        "connect_timeout": 10,
+                        "connect_timeout": 15,
                         "application_name": "lab_scheduler"
                     }
                 )
