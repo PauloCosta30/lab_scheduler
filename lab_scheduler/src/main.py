@@ -22,32 +22,39 @@ app = Flask(__name__,
 
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'a_very_strong_random_secret_key_dev_123!@#')
 
-# Configuração do banco de dados com retry e fallback
+# Configuração do banco de dados com retry e fallback melhorado
 def get_database_uri():
     """Obtém a URI do banco de dados com retry para PostgreSQL"""
     database_url = os.getenv('DATABASE_URL')
     
-    if database_url:
+    if database_url and database_url.startswith('postgresql'):
         app.logger.info(f"Tentando conectar ao PostgreSQL: {database_url[:50]}...")
         
         # Tentar conectar ao PostgreSQL com retry
-        max_retries = 5
-        retry_delay = 2
+        max_retries = 3
+        retry_delay = 5
         
         for attempt in range(max_retries):
             try:
-                # Testar a conexão
-                engine = create_engine(database_url)
+                # Testar a conexão com timeout
+                engine = create_engine(
+                    database_url,
+                    pool_timeout=10,
+                    pool_recycle=300,
+                    connect_args={
+                        "connect_timeout": 10,
+                        "application_name": "lab_scheduler"
+                    }
+                )
                 with engine.connect() as conn:
                     conn.execute(text("SELECT 1"))
                 app.logger.info("Conexão PostgreSQL estabelecida com sucesso!")
                 return database_url
-            except OperationalError as e:
+            except Exception as e:
                 app.logger.warning(f"Tentativa {attempt + 1}/{max_retries} falhou: {str(e)}")
                 if attempt < max_retries - 1:
                     app.logger.info(f"Aguardando {retry_delay} segundos antes da próxima tentativa...")
                     time.sleep(retry_delay)
-                    retry_delay *= 2  # Backoff exponencial
                 else:
                     app.logger.error("Todas as tentativas de conexão PostgreSQL falharam")
                     
@@ -63,6 +70,11 @@ def get_database_uri():
 
 app.config['SQLALCHEMY_DATABASE_URI'] = get_database_uri()
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_timeout': 20,
+    'pool_recycle': 300,
+    'pool_pre_ping': True
+}
 
 # Flask-Mail configuration
 app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
@@ -85,6 +97,10 @@ handler = logging.StreamHandler(sys.stdout)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 app.logger.addHandler(handler)
+
+# Log da configuração de porta
+port = os.getenv('PORT', '5000')
+app.logger.info(f"Aplicação configurada para rodar na porta: {port}")
 # --- FIM DAS MODIFICAÇÕES PARA LOGGING ---
 
 
@@ -109,7 +125,7 @@ def format_date_filter(date_value, fmt="%d/%m"):
 def initialize_database():
     """Inicializa o banco de dados com retry"""
     max_retries = 3
-    retry_delay = 1
+    retry_delay = 2
     
     for attempt in range(max_retries):
         try:
@@ -140,7 +156,6 @@ def initialize_database():
             if attempt < max_retries - 1:
                 app.logger.info(f"Aguardando {retry_delay} segundos antes da próxima tentativa...")
                 time.sleep(retry_delay)
-                retry_delay *= 2
             else:
                 app.logger.error("Falha na inicialização do banco de dados após todas as tentativas")
                 return False
@@ -167,6 +182,12 @@ def index():
     except Exception as e:
         return f"Erro ao carregar página: {str(e)}", 500
 
+# Rota de health check para o Render
+@app.route('/health')
+def health_check():
+    """Health check endpoint para o Render"""
+    return {"status": "healthy", "database": "connected" if db else "disconnected"}, 200
+
 # Rota catch-all para SPA
 @app.route('/<path:path>')
 def serve_spa(path):
@@ -182,4 +203,5 @@ def serve_spa(path):
         return f"Erro ao servir arquivo: {str(e)}", 404
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    port = int(os.getenv('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
