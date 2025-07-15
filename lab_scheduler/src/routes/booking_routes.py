@@ -23,6 +23,19 @@ MAX_BOOKINGS_PER_DAY = 3
 # Definir o fuso horário de Brasília
 BRASILIA_TZ = pytz.timezone("America/Sao_Paulo")
 
+# Função para obter data atual no fuso horário de Brasília
+def get_current_brasilia_date():
+    """Retorna a data atual no fuso horário de Brasília"""
+    now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
+    now_brasilia = now_utc.astimezone(BRASILIA_TZ)
+    return now_brasilia.date()
+
+# Função para obter datetime atual no fuso horário de Brasília
+def get_current_brasilia_datetime():
+    """Retorna o datetime atual no fuso horário de Brasília"""
+    now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
+    return now_utc.astimezone(BRASILIA_TZ)
+
 # Decorator para verificar chave administrativa
 def require_admin_key(f):
     @wraps(f)
@@ -130,49 +143,66 @@ def sort_rooms_custom(rooms):
 # Função para determinar o status da janela de agendamento
 def get_booking_window_status():
     try:
-        now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
-        now_brasilia = now_utc.astimezone(BRASILIA_TZ)
+        # CORREÇÃO: Usar função centralizada para obter datetime de Brasília
+        now_brasilia = get_current_brasilia_datetime()
+        today_brasilia = now_brasilia.date()
+        
+        # Log para debugging
+        current_app.logger.info(f"DEBUG: Data/hora atual em Brasília: {now_brasilia}")
+        current_app.logger.info(f"DEBUG: Data atual em Brasília: {today_brasilia}")
         
         # Encontrar a segunda-feira da semana atual
-        today_brasilia = now_brasilia.date()
         current_week_monday = today_brasilia - timedelta(days=today_brasilia.weekday())
         
         # Encontrar a segunda-feira da próxima semana
         next_week_monday = current_week_monday + timedelta(weeks=1)
         
+        # Log das datas calculadas
+        current_app.logger.info(f"DEBUG: Segunda-feira da semana atual: {current_week_monday}")
+        current_app.logger.info(f"DEBUG: Segunda-feira da próxima semana: {next_week_monday}")
+        
         # Definir os pontos de corte para a semana atual
         current_week_cutoff_date = current_week_monday + timedelta(days=2) # Quarta-feira
-        current_week_cutoff_time = time(18, 0, 0) # 18:00
+        current_week_cutoff_time = time(23, 59, 0) # 23:59
         current_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(current_week_cutoff_date, current_week_cutoff_time))
 
         # Definir os pontos de corte para a próxima semana
-        next_week_open_date = current_week_monday + timedelta(days=3) # Sexta-feira
-        next_week_open_time = time(18, 0, 0) # 18:00
+        next_week_open_date = current_week_monday + timedelta(days=3) # Quinta-feira
+        next_week_open_time = time(18, 0, 0) # 18:00 (CORRIGIDO: era 5:00)
         next_week_open_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_open_date, next_week_open_time))
 
         next_week_cutoff_date = next_week_monday + timedelta(days=2) # Quarta-feira da próxima semana
-        next_week_cutoff_time = time(18, 0, 0) # 18:00
+        next_week_cutoff_time = time(23, 59, 0) # 23:59
         next_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_cutoff_date, next_week_cutoff_time))
+
+        # Log dos pontos de corte
+        current_app.logger.info(f"DEBUG: Corte semana atual: {current_week_cutoff_datetime}")
+        current_app.logger.info(f"DEBUG: Abertura próxima semana: {next_week_open_datetime}")
+        current_app.logger.info(f"DEBUG: Corte próxima semana: {next_week_cutoff_datetime}")
 
         status = {
             "current_week": {"open": False, "message": "Fechado"},
             "next_week": {"open": False, "message": "Fechado"},
-            "general_message": "As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 18h, e a escala da próxima semana será liberada todas as sextas-feiras, às 18h."
+            "general_message": "As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 23:59, e a escala da próxima semana será liberada todas as quintas-feiras, às 18h."
         }
 
         # Regra para a semana atual
         if now_brasilia <= current_week_cutoff_datetime:
             status["current_week"]["open"] = True
-            status["current_week"]["message"] = "Aberto até quarta-feira às 18:00"
+            status["current_week"]["message"] = "Aberto até quarta-feira às 23:59"
+            current_app.logger.info(f"DEBUG: Semana atual ABERTA (agora: {now_brasilia} <= corte: {current_week_cutoff_datetime})")
         else:
-            status["current_week"]["message"] = "Fechado (após quarta-feira 18:00)"
+            status["current_week"]["message"] = "Fechado (após quarta-feira 23:59)"
+            current_app.logger.info(f"DEBUG: Semana atual FECHADA (agora: {now_brasilia} > corte: {current_week_cutoff_datetime})")
 
         # Regra para a próxima semana
         if now_brasilia >= next_week_open_datetime and now_brasilia <= next_week_cutoff_datetime:
             status["next_week"]["open"] = True
             status["next_week"]["message"] = "Aberto para a próxima semana"
+            current_app.logger.info(f"DEBUG: Próxima semana ABERTA")
         else:
-            status["next_week"]["message"] = "Fechado (após quarta-feira 18:00 da próxima semana)"
+            status["next_week"]["message"] = "Fechado (após quarta-feira 23:59 da próxima semana)"
+            current_app.logger.info(f"DEBUG: Próxima semana FECHADA")
 
         return status
     except Exception as e:
@@ -180,7 +210,7 @@ def get_booking_window_status():
         return {
             "current_week": {"open": False, "message": "Erro no sistema"},
             "next_week": {"open": False, "message": "Erro no sistema"},
-            "general_message": "As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 18h, e a escala da próxima semana será liberada todas as sextas-feiras, às 18h."
+            "general_message": "As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 23:59, e a escala da próxima semana será liberada todas as quintas-feiras, às 18h."
         }
 
 @bookings_bp.route("/booking-window-status", methods=["GET"])
@@ -255,25 +285,31 @@ def create_booking():
                 except ValueError:
                     return jsonify({"error": f"Invalid date format '{booking_date_str}' in slot: {slot_input}. Use YYYY-MM-DD"}), 400
                 
-                # Validação da janela de agendamento
-                now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
-                now_brasilia = now_utc.astimezone(BRASILIA_TZ)
-                today_brasilia = now_brasilia.date()
+                # CORREÇÃO: Usar função centralizada para obter data atual
+                today_brasilia = get_current_brasilia_date()
                 current_week_monday = today_brasilia - timedelta(days=today_brasilia.weekday())
                 next_week_monday = current_week_monday + timedelta(weeks=1)
+
+                # Log para debugging
+                current_app.logger.info(f"DEBUG: Tentando agendar para {booking_date_str} ({booking_date_obj})")
+                current_app.logger.info(f"DEBUG: Hoje em Brasília: {today_brasilia}")
 
                 if booking_date_obj.weekday() >= 5: # Sábado ou Domingo
                     return jsonify({"error": f"Agendamentos para {booking_date_str} são permitidos apenas de segunda a sexta-feira."}), 400
 
+                # CORREÇÃO: Validação de data passada mais precisa
+                # Permitir agendamento para o dia atual se a janela ainda estiver aberta
                 if booking_date_obj < today_brasilia:
                     return jsonify({"error": f"Agendamento para {booking_date_str} não pode ser no passado."}), 400
                 
                 if booking_date_obj >= current_week_monday and booking_date_obj < next_week_monday:
                     # Agendamento para a semana atual
+                    current_app.logger.info(f"DEBUG: Agendamento para semana atual. Janela aberta: {booking_window['current_week']['open']}")
                     if not booking_window["current_week"]["open"]:
                         return jsonify({"error": f"Agendamentos para a semana atual estão fechados. {booking_window['current_week']['message']}"}), 403
                 elif booking_date_obj >= next_week_monday and booking_date_obj < (next_week_monday + timedelta(weeks=1)):
                     # Agendamento para a próxima semana
+                    current_app.logger.info(f"DEBUG: Agendamento para próxima semana. Janela aberta: {booking_window['next_week']['open']}")
                     if not booking_window["next_week"]["open"]:
                         return jsonify({"error": f"Agendamentos para a próxima semana estão fechados. {booking_window['next_week']['message']}"}), 403
                 else:
@@ -335,6 +371,9 @@ def create_booking():
         
         # Criar agendamentos para slots específicos
         for slot in processed_slots:
+            # Log para debugging
+            current_app.logger.info(f"DEBUG: Criando agendamento - Data: {slot['booking_date_obj']}, Sala: {slot['room_name']}, Período: {slot['period']}")
+            
             new_booking = Booking(
                 user_name=user_name, 
                 user_email=user_email, 
@@ -354,7 +393,7 @@ def create_booking():
 
         # Se não há slots mas há observação, criar um registro de observação geral
         if not processed_slots and observation.strip():
-            # NOVO: Usar a data do frontend se fornecida, senão usar a segunda-feira da semana atual do servidor
+            # CORREÇÃO: Usar função centralizada para determinar data da observação
             booking_date_for_general_observation = None
             if week_start_date_for_observation_str:
                 try:
@@ -364,11 +403,11 @@ def create_booking():
                     current_app.logger.warning(f"WARNING: week_start_date_for_observation inválida: {week_start_date_for_observation_str}. Usando data do servidor.")
             
             if not booking_date_for_general_observation:
-                now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
-                now_brasilia = now_utc.astimezone(BRASILIA_TZ)
-                today_brasilia = now_brasilia.date()
+                today_brasilia = get_current_brasilia_date()
                 booking_date_for_general_observation = today_brasilia - timedelta(days=today_brasilia.weekday())
                 current_app.logger.info(f"INFO: Usando segunda-feira da semana atual do servidor: {booking_date_for_general_observation}")
+            
+            current_app.logger.info(f"DEBUG: Criando observação geral - Data: {booking_date_for_general_observation}")
             
             general_observation_booking = Booking(
                 user_name=user_name,
@@ -376,7 +415,7 @@ def create_booking():
                 coordinator_name=coordinator_name,
                 observation=observation,
                 room_id=None,  # Sem sala específica
-                booking_date=booking_date_for_general_observation,  # AGORA USA A DATA DETERMINADA ACIMA
+                booking_date=booking_date_for_general_observation,
                 period="Observação Geral"  # Período especial para observações gerais
             )
             db.session.add(general_observation_booking)
@@ -548,7 +587,7 @@ def generate_schedule_pdf():
             # Adicionar o agendamento à lista do usuário
             # Para observações gerais, room_name será "Observação Geral"
             user_observations[booking.user_name]["bookings"].append({
-                "room_name": booking.room.name if booking.room else "Observação Geral", # CORREÇÃO AQUI
+                "room_name": booking.room.name if booking.room else "Observação Geral",
                 "date": booking.booking_date,
                 "period": booking.period,
                 "observation": booking.observation if booking.observation else ""
@@ -588,9 +627,8 @@ def generate_schedule_pdf():
                     current_app.logger.info(f"    INFO: Agendamento com observação: {booking['room_name']} ({booking['date']}, {booking['period']}): '{booking['observation']}'")
         # --- FIM INFO ---
         
-        # Obter timestamp atual para o cabeçalho
-        now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
-        now_brasilia = now_utc.astimezone(BRASILIA_TZ)
+        # CORREÇÃO: Usar função centralizada para obter timestamp atual
+        now_brasilia = get_current_brasilia_datetime()
         
         # Renderizar template HTML
         html_content = render_template(
@@ -618,4 +656,3 @@ def generate_schedule_pdf():
     except Exception as e:
         current_app.logger.error(f"Erro ao gerar PDF: {str(e)}", exc_info=True)
         return jsonify({"error": "Erro ao gerar PDF", "details": str(e)}), 500
-
