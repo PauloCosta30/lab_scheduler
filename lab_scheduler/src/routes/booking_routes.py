@@ -454,13 +454,19 @@ def get_booking_status():
         return jsonify({"error": "Erro interno ao calcular status do agendamento"}), 500
 
 # --- PDF Generation Route (Reverted to 5 days) --- 
+# Solução 1: Modificar o endpoint para usar data atual quando week_start_date não for fornecido
 @bookings_bp.route("/generate-pdf", methods=["GET"])
 def generate_schedule_pdf():
     week_start_date_str = request.args.get("week_start_date")
-    current_app.logger.debug(f"Generating PDF for week starting: {week_start_date_str}")
+    
+    # Se week_start_date não for fornecido, usar a segunda-feira da semana atual
     if not week_start_date_str:
-        current_app.logger.warning("Missing week_start_date for PDF generation")
-        return jsonify({"error": "Parâmetro week_start_date é obrigatório"}), 400
+        today_utc = datetime.now(timezone.utc).date()
+        week_start_date = get_monday_of_week(today_utc)
+        week_start_date_str = week_start_date.isoformat()
+        current_app.logger.info(f"week_start_date não fornecido, usando segunda-feira da semana atual: {week_start_date_str}")
+    
+    current_app.logger.debug(f"Generating PDF for week starting: {week_start_date_str}")
     
     try:
         week_start_date = datetime.strptime(week_start_date_str, "%Y-%m-%d").date()
