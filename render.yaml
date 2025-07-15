@@ -11,9 +11,11 @@ services:
     name: lab-scheduler
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn src.main:app
+    startCommand: gunicorn --config gunicorn.conf.py src.main:app
     region: oregon
     plan: free
+    healthCheckPath: /health
+    autoDeploy: false  # Evita deploys automáticos desnecessários
     envVars:
       - key: FLASK_SECRET_KEY
         value: a_very_strong_random_secret_key_prod_456!@#
@@ -35,3 +37,9 @@ services:
         value: cast qddf bxby mwsl
       - key: MAIL_DEFAULT_SENDER
         value: LAB.ITV
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: FLASK_ENV
+        value: production
+      - key: PYTHONPATH
+        value: /opt/render/project/src
