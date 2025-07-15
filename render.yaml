@@ -12,3 +12,9 @@ services:
       - key: ADMIN_PASSWORD
         value: admin123
       # DATABASE_URL será fornecida automaticamente pelo PostgreSQL gratuito do Render
+
+databases:
+  - name: lab-scheduler-db
+    databaseName: lab_scheduler
+    user: lab_scheduler_user
+    plan: free
