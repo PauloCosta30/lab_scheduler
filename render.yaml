@@ -3,7 +3,7 @@ services:
     name: lab-scheduler
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn src.main:app
+    startCommand: gunicorn lab_scheduler.src.main:app
     region: oregon
     plan: free
     envVars:
