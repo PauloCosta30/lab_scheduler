@@ -2,24 +2,42 @@ import os
 import sys
 import logging
 
-# DON'T CHANGE THIS !!!
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+# Configurar o path para encontrar os módulos
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.insert(0, parent_dir)
+sys.path.insert(0, current_dir)
 
-from flask import Flask, send_from_directory, render_template
-from src.extensions import db
-from src.models.entities import Room, Booking
-from src.routes.booking_routes import bookings_bp
-from flask_mail import Mail
-from datetime import datetime
+# Agora importar com try/except para debug
+try:
+    from flask import Flask, send_from_directory, render_template
+    from flask_mail import Mail
+    from datetime import datetime
+    
+    # Tentar importar os módulos locais
+    from src.extensions import db
+    from src.models.entities import Room, Booking
+    from src.routes.booking_routes import bookings_bp
+    
+    print("Todos os módulos importados com sucesso!")
+    
+except ImportError as e:
+    print(f"Erro de importação: {e}")
+    print(f"Diretório atual: {current_dir}")
+    print(f"Diretório pai: {parent_dir}")
+    print(f"Conteúdo do diretório atual: {os.listdir(current_dir)}")
+    if os.path.exists(os.path.join(current_dir, 'src')):
+        print(f"Conteúdo do diretório src: {os.listdir(os.path.join(current_dir, 'src'))}")
+    sys.exit(1)
 
-# Configuração correta do Flask para servir arquivos estáticos
+# Configuração do Flask
 app = Flask(__name__, 
-           static_folder=os.path.join(os.path.dirname(__file__), 'static'),
-           template_folder=os.path.join(os.path.dirname(__file__), 'templates'))
+           static_folder=os.path.join(current_dir, 'static'),
+           template_folder=os.path.join(current_dir, 'templates'))
 
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'a_very_strong_random_secret_key_dev_123!@#')
 
-# Configuração do banco de dados - PostgreSQL para produção, SQLite para desenvolvimento
+# Configuração do banco de dados
 database_url = os.getenv('DATABASE_URL')
 if database_url:
     # Produção - PostgreSQL
@@ -27,8 +45,7 @@ if database_url:
     app.logger.info("Usando PostgreSQL em produção")
 else:
     # Desenvolvimento - SQLite
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    db_path = os.path.join(project_root, 'lab_scheduler.db')
+    db_path = os.path.join(parent_dir, 'lab_scheduler.db')
     app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{db_path}"
     app.logger.info("Usando SQLite em desenvolvimento")
 
@@ -53,7 +70,7 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 handler.setFormatter(formatter)
 app.logger.addHandler(handler)
 
-# Adicionar filtro de template para formatação de data
+# Filtro de template para formatação de data
 @app.template_filter('format_date')
 def format_date_filter(date_value, fmt="%d/%m"):
     """Filtro para formatação de datas nos templates"""
@@ -72,11 +89,9 @@ def init_database():
     """Inicializa o banco de dados com as salas padrão"""
     with app.app_context():
         try:
-            # Criar todas as tabelas
             db.create_all()
             app.logger.info("Tabelas criadas com sucesso")
             
-            # Verificar se já existem salas
             if not Room.query.first():
                 room_names = [
                     "Geral 1", "Geral 2", "Geral 3", "Geral 4", "Geral 5", "Geral 6", "Geral 7", "Geral 8",
@@ -107,25 +122,20 @@ init_database()
 # Registrar blueprint
 app.register_blueprint(bookings_bp, url_prefix='/api')
 
-# Rota para servir arquivos estáticos corretamente
+# Rotas
 @app.route('/static/<path:filename>')
 def static_files(filename):
-    """Serve arquivos estáticos explicitamente"""
     return send_from_directory(app.static_folder, filename)
 
-# Rota principal corrigida
 @app.route('/')
 def index():
-    """Serve a página principal"""
     try:
         return send_from_directory(app.static_folder, 'index.html')
     except Exception as e:
         return f"Erro ao carregar página: {str(e)}", 500
 
-# Rota catch-all para SPA
 @app.route('/<path:path>')
 def serve_spa(path):
-    """Serve arquivos estáticos ou redireciona para index.html"""
     try:
         if os.path.exists(os.path.join(app.static_folder, path)):
             return send_from_directory(app.static_folder, path)
