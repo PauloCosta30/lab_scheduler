@@ -1,3 +1,10 @@
+databases:
+  - name: lab-scheduler-db
+    databaseName: lab_scheduler
+    user: lab_scheduler_user
+    region: oregon
+    plan: free
+
 services:
   - type: web
     name: lab-scheduler
@@ -12,4 +19,6 @@ services:
       - key: ADMIN_PASSWORD
         value: admin123
       - key: DATABASE_URL
-        value: sqlite:///lab_scheduler.db
+        fromDatabase:
+          name: lab-scheduler-db
+          property: connectionString
