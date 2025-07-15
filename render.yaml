@@ -5,8 +5,7 @@ services:
     buildCommand: |
       pip install --upgrade pip
       pip install -r requirements.txt
-    startCommand: |
-      cd /opt/render/project/src && python -m gunicorn main:app --bind 0.0.0.0:$PORT
+    startCommand: gunicorn src.main:app --bind 0.0.0.0:$PORT
     region: oregon
     plan: free
     envVars:
