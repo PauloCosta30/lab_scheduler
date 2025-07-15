@@ -515,15 +515,25 @@ def generate_schedule_pdf():
         template_dir = os.path.join(current_app.root_path, current_app.template_folder or "templates")
         env = Environment(loader=FileSystemLoader(template_dir), autoescape=True)
         
-        # Add a date formatting filter
-        def format_date_filter(date_str, fmt="%d/%m"):
+        # Add a date formatting filter - CORRIGIDO
+        def format_date_filter(date_input, fmt="%d/%m"):
             try:
-                return datetime.strptime(date_str, "%Y-%m-%d").strftime(fmt)
-            except:
-                return date_str
+                # Se for um objeto date, usar diretamente
+                if isinstance(date_input, date):
+                    return date_input.strftime(fmt)
+                # Se for datetime, extrair apenas a data
+                elif isinstance(date_input, datetime):
+                    return date_input.date().strftime(fmt)
+                # Se for string, converter para datetime primeiro
+                else:
+                    date_str = str(date_input)
+                    return datetime.strptime(date_str, "%Y-%m-%d").strftime(fmt)
+            except (ValueError, TypeError) as e:
+                current_app.logger.warning(f"Error formatting date {date_input}: {e}")
+                return str(date_input)
         env.filters["format_date"] = format_date_filter
         
-        # Render HTML template (Template itself needs update for 5 days)
+        # Render HTML template
         current_app.logger.debug("Rendering PDF HTML template")
         template = env.get_template("schedule_pdf_template.html") 
         html_string = template.render(
@@ -550,7 +560,6 @@ def generate_schedule_pdf():
     except Exception as e:
         current_app.logger.error(f"Erro ao gerar PDF para semana {week_start_date_str}: {str(e)}", exc_info=True)
         return jsonify({"error": "Falha ao gerar PDF no servidor", "details": str(e)}), 500
-
 # --- Admin Route to Download Database --- 
 @bookings_bp.route("/admin/download-database", methods=["GET"])
 def download_database():
