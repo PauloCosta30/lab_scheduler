@@ -1,12 +1,3 @@
-Claro! Sem problemas. É sempre melhor ter o arquivo completo para evitar erros de cópia e colagem.
-
-Aqui está o arquivo `src/routes/booking_routes.py` na íntegra, já incluindo a nova rota `/admin/clear-by-date` para apagar agendamentos por intervalo de datas.
-
----
-
-### `src/routes/booking_routes.py` (Completo com a nova rota de exclusão)
-
-```python
 from flask import Blueprint, request, jsonify, current_app, render_template, make_response
 from src.extensions import db
 from src.models.entities import Room, Booking
@@ -101,7 +92,7 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, obs
         sender = current_app.config.get("MAIL_DEFAULT_SENDER", "noreply@example.com")
         recipients = [user_email]
 
-        html_body = f"""\
+        html_body = f"""
         <p>Olá {user_name},</p>
         <p>Seu agendamento de laboratório foi confirmado com sucesso. Detalhes abaixo:</p>
         <ul>
@@ -178,16 +169,16 @@ def get_booking_window_status():
         
         next_week_monday = current_week_monday + timedelta(weeks=1)
         
-        current_week_cutoff_date = current_week_monday + timedelta(days=2) # Quarta-feira
-        current_week_cutoff_time = time(18, 0, 0) # 18:00
+        current_week_cutoff_date = current_week_monday + timedelta(days=2)  # Quarta-feira
+        current_week_cutoff_time = time(18, 0, 0)  # 18:00
         current_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(current_week_cutoff_date, current_week_cutoff_time))
 
-        next_week_open_date = current_week_monday + timedelta(days=4) # Sexta-feira
-        next_week_open_time = time(18, 0, 0) # 18:00
+        next_week_open_date = current_week_monday + timedelta(days=4)  # Sexta-feira
+        next_week_open_time = time(18, 0, 0)  # 18:00
         next_week_open_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_open_date, next_week_open_time))
 
-        next_week_cutoff_date = next_week_monday + timedelta(days=2) # Quarta-feira da próxima semana
-        next_week_cutoff_time = time(18, 0, 0) # 18:00
+        next_week_cutoff_date = next_week_monday + timedelta(days=2)  # Quarta-feira da próxima semana
+        next_week_cutoff_time = time(18, 0, 0)  # 18:00
         next_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_cutoff_date, next_week_cutoff_time))
 
         status = {
@@ -257,6 +248,7 @@ def create_booking():
         if not slots_data and not observation:
             return jsonify({"error": "Missing fields. Required: slots or observation"}), 400
 
+        # LÓGICA CORRIGIDA PARA OBSERVAÇÃO GERAL
         if not slots_data and observation:
             today_brasilia = datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(BRASILIA_TZ).date()
             week_start_date = today_brasilia - timedelta(days=today_brasilia.weekday())
@@ -336,8 +328,10 @@ def create_booking():
                 return jsonify({"error": f"Room ID {room_id} not found"}), 404
             
             processed_slots.append({
-                "room_id": room_id, "room_name": room.name,
-                "booking_date_obj": booking_date_obj, "booking_date_str": booking_date_str,
+                "room_id": room_id, 
+                "room_name": room.name,
+                "booking_date_obj": booking_date_obj, 
+                "booking_date_str": booking_date_str,
                 "period": period
             })
             daily_new_bookings_count[booking_date_obj] += 1
@@ -484,15 +478,22 @@ def get_bookings():
         
         def booking_sort_key(booking):
             try:
-                if booking.period == "Geral": return (999, 999)
+                if booking.period == "Geral": 
+                    return (999, 999)
                 if booking.room:
                     room_name = booking.room.name
                     if room_name.startswith("Geral "):
-                        try: number = int(re.findall(r'\d+', room_name)[0]); return (0, number)
-                        except (IndexError, ValueError): return (0, 999)
-                    else: return (1, booking.room.id)
-                else: return (999, 999)
-            except Exception: return (999, 999)
+                        try: 
+                            number = int(re.findall(r'\d+', room_name)[0])
+                            return (0, number)
+                        except (IndexError, ValueError): 
+                            return (0, 999)
+                    else: 
+                        return (1, booking.room.id)
+                else: 
+                    return (999, 999)
+            except Exception: 
+                return (999, 999)
         
         bookings.sort(key=booking_sort_key)
         
@@ -547,13 +548,18 @@ def generate_schedule_pdf():
         sorted_rooms = sort_rooms_custom(rooms)
         
         def ensure_date(date_input):
-            if isinstance(date_input, date): return date_input
-            if isinstance(date_input, datetime): return date_input.date()
+            if isinstance(date_input, date): 
+                return date_input
+            if isinstance(date_input, datetime): 
+                return date_input.date()
             if isinstance(date_input, str):
-                try: return datetime.strptime(date_input, "%Y-%m-%d").date()
+                try: 
+                    return datetime.strptime(date_input, "%Y-%m-%d").date()
                 except ValueError:
-                    try: return datetime.fromisoformat(date_input.replace('Z', '+00:00')).date()
-                    except ValueError: return None
+                    try: 
+                        return datetime.fromisoformat(date_input.replace('Z', '+00:00')).date()
+                    except ValueError: 
+                        return None
             return None
 
         dates_of_week = []
@@ -582,7 +588,8 @@ def generate_schedule_pdf():
 
         for booking in bookings:
             booking_date = ensure_date(booking.booking_date)
-            if not booking_date: continue
+            if not booking_date: 
+                continue
 
             if booking.period == "Geral":
                 general_observations.append({
@@ -597,7 +604,7 @@ def generate_schedule_pdf():
             user_info[user_name]['coordinator'] = booking.coordinator_name or ''
             
             if booking.observation and not user_info[user_name]['observation']:
-                 user_info[user_name]['observation'] = booking.observation
+                user_info[user_name]['observation'] = booking.observation
 
             if booking.room:
                 user_info[user_name]['bookings'].append({
@@ -647,29 +654,3 @@ def generate_schedule_pdf():
         current_app.logger.error(f"Traceback completo: {traceback.format_exc()}")
         return jsonify({"error": "Erro interno ao gerar PDF", "details": str(e)}), 500
 
-# <<< NOVA ROTA PARA APAGAR AGENDAMENTOS POR DATA >>>
-@bookings_bp.route("/admin/clear-by-date", methods=["POST"])
-@require_admin_key # Protege a rota com a chave de administrador
-def clear_bookings_by_date_range():
-    """
-    APAGA TODOS OS AGENDAMENTOS E OBSERVAÇÕES DENTRO DE UM INTERVALO DE DATAS.
-    Esta é uma ação destrutiva e irreversível para os dados no período selecionado.
-    As salas não serão apagadas.
-    """
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "Corpo da requisição ausente ou inválido"}), 400
-
-        start_date_str = data.get("start_date")
-        end_date_str = data.get("end_date")
-
-        if not start_date_str or not end_date_str:
-            return jsonify({"error": "Parâmetros 'start_date' e 'end_date' são obrigatórios"}), 400
-
-        try:
-            # Converte as strings de data para objetos date do Python
-            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-            end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-        except ValueError:
-            return jsonify({"error": "Formato de data inválido. Use YYYY-MM
