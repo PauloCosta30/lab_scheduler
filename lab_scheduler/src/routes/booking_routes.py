@@ -494,6 +494,7 @@ def get_bookings():
         return jsonify({"error": "Erro ao carregar agendamentos"}), 500
 
 @bookings_bp.route("/generate-pdf", methods=["GET"])
+@bookings_bp.route("/generate-pdf", methods=["GET"])
 def generate_schedule_pdf():
     """Gera PDF da escala semanal com observações organizadas por usuário e observações gerais"""
     try:
@@ -536,16 +537,24 @@ def generate_schedule_pdf():
         
         for booking in bookings:
             if booking.period == "Geral":
-                # Observação geral
+                # Observação geral - garantir que booking_date seja objeto date
+                booking_date = booking.booking_date
+                if isinstance(booking_date, str):
+                    booking_date = datetime.strptime(booking_date, "%Y-%m-%d").date()
+                
                 general_observations.append({
                     'user_name': booking.user_name,
                     'user_email': booking.user_email,
                     'observation': booking.observation,
-                    'date': booking.booking_date
+                    'date': booking_date
                 })
             else:
                 # Agendamento normal
-                date_str = booking.booking_date.isoformat()
+                booking_date = booking.booking_date
+                if isinstance(booking_date, str):
+                    booking_date = datetime.strptime(booking_date, "%Y-%m-%d").date()
+                
+                date_str = booking_date.isoformat()
                 if date_str in schedule_data and booking.room:
                     room_name = booking.room.name
                     if room_name in schedule_data[date_str][booking.period]:
@@ -563,15 +572,24 @@ def generate_schedule_pdf():
                 user_observations[user_name]['email'] = booking.user_email
                 user_observations[user_name]['coordinator'] = booking.coordinator_name or ''
                 if booking.room:
+                    # Garantir que booking_date seja objeto date
+                    booking_date = booking.booking_date
+                    if isinstance(booking_date, str):
+                        booking_date = datetime.strptime(booking_date, "%Y-%m-%d").date()
+                    
                     user_observations[user_name]['bookings'].append({
                         'room_name': booking.room.name,
-                        'date': booking.booking_date,
+                        'date': booking_date,
                         'period': booking.period,
                         'observation': booking.observation or ''
                     })
         
         days_locale = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"]
-        generation_date = datetime.now().strftime("%d/%m/%Y às %H:%M")
+        
+        # Obter data/hora atual em horário de Brasília
+        now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
+        now_brasilia = now_utc.astimezone(BRASILIA_TZ)
+        generation_date = now_brasilia.strftime("%d/%m/%Y às %H:%M")
         
         html_content = render_template(
             'schedule_pdf_template.html',
@@ -601,14 +619,6 @@ def generate_schedule_pdf():
         
     except Exception as e:
         current_app.logger.error(f"Erro ao gerar PDF: {str(e)}")
+        import traceback
+        current_app.logger.error(f"Traceback completo: {traceback.format_exc()}")
         return jsonify({"error": "Erro interno ao gerar PDF", "details": str(e)}), 500
-
-# Rota para verificar o status do agendamento (para o frontend)
-@bookings_bp.route("/get-booking-status", methods=["GET"])
-def get_booking_status():
-    try:
-        status = get_booking_window_status()
-        return jsonify(status)
-    except Exception as e:
-        current_app.logger.error(f"Erro na rota get-booking-status: {str(e)}")
-        return jsonify({"error": "Erro interno do servidor"}), 500
