@@ -1,12 +1,3 @@
-Com certeza! Peço desculpas, eu deveria ter incluído o arquivo completo na resposta anterior.
-
-Aqui está o arquivo `src/routes/booking_routes.py` completo, com a nova função de e-mail e a lógica de envio para observações gerais.
-
----
-
-### `src/routes/booking_routes.py` (Completo e Corrigido)
-
-```python
 from flask import Blueprint, request, jsonify, current_app, render_template, make_response
 from src.extensions import db
 from src.models.entities import Room, Booking
