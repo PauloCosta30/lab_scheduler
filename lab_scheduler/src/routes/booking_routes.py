@@ -92,7 +92,7 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, obs
         sender = current_app.config.get("MAIL_DEFAULT_SENDER", "noreply@example.com")
         recipients = [user_email]
 
-        html_body = f"""\
+        html_body = f"""
         <p>Olá {user_name},</p>
         <p>Seu agendamento de laboratório foi confirmado com sucesso. Detalhes abaixo:</p>
         <ul>
@@ -169,16 +169,16 @@ def get_booking_window_status():
         
         next_week_monday = current_week_monday + timedelta(weeks=1)
         
-        current_week_cutoff_date = current_week_monday + timedelta(days=2) # Quarta-feira
-        current_week_cutoff_time = time(18, 0, 0) # 18:00
+        current_week_cutoff_date = current_week_monday + timedelta(days=2)  # Quarta-feira
+        current_week_cutoff_time = time(18, 0, 0)  # 18:00
         current_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(current_week_cutoff_date, current_week_cutoff_time))
 
-        next_week_open_date = current_week_monday + timedelta(days=4) # Sexta-feira
-        next_week_open_time = time(18, 0, 0) # 18:00
+        next_week_open_date = current_week_monday + timedelta(days=4)  # Sexta-feira
+        next_week_open_time = time(18, 0, 0)  # 18:00
         next_week_open_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_open_date, next_week_open_time))
 
-        next_week_cutoff_date = next_week_monday + timedelta(days=2) # Quarta-feira da próxima semana
-        next_week_cutoff_time = time(18, 0, 0) # 18:00
+        next_week_cutoff_date = next_week_monday + timedelta(days=2)  # Quarta-feira da próxima semana
+        next_week_cutoff_time = time(18, 0, 0)  # 18:00
         next_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_cutoff_date, next_week_cutoff_time))
 
         status = {
@@ -328,8 +328,10 @@ def create_booking():
                 return jsonify({"error": f"Room ID {room_id} not found"}), 404
             
             processed_slots.append({
-                "room_id": room_id, "room_name": room.name,
-                "booking_date_obj": booking_date_obj, "booking_date_str": booking_date_str,
+                "room_id": room_id, 
+                "room_name": room.name,
+                "booking_date_obj": booking_date_obj, 
+                "booking_date_str": booking_date_str,
                 "period": period
             })
             daily_new_bookings_count[booking_date_obj] += 1
@@ -476,15 +478,22 @@ def get_bookings():
         
         def booking_sort_key(booking):
             try:
-                if booking.period == "Geral": return (999, 999)
+                if booking.period == "Geral": 
+                    return (999, 999)
                 if booking.room:
                     room_name = booking.room.name
                     if room_name.startswith("Geral "):
-                        try: number = int(re.findall(r'\d+', room_name)[0]); return (0, number)
-                        except (IndexError, ValueError): return (0, 999)
-                    else: return (1, booking.room.id)
-                else: return (999, 999)
-            except Exception: return (999, 999)
+                        try: 
+                            number = int(re.findall(r'\d+', room_name)[0])
+                            return (0, number)
+                        except (IndexError, ValueError): 
+                            return (0, 999)
+                    else: 
+                        return (1, booking.room.id)
+                else: 
+                    return (999, 999)
+            except Exception: 
+                return (999, 999)
         
         bookings.sort(key=booking_sort_key)
         
