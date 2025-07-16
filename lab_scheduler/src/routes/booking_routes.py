@@ -545,15 +545,10 @@ def generate_schedule_pdf():
         
         schedule_data = {}
         dates_of_week = []
-        current_date = start_date
         
+        # Inicializar dates_of_week corretamente
+        current_date = start_date
         while current_date <= end_date:
-            # Garantir que current_date seja sempre um objeto date
-            current_date = ensure_date(current_date)
-            if current_date is None:
-                current_app.logger.error("Erro ao processar data atual no loop")
-                break
-                
             # Verificar se é dia da semana (segunda a sexta)
             if current_date.weekday() < 5:
                 date_str = current_date.isoformat()
@@ -568,6 +563,7 @@ def generate_schedule_pdf():
         
         general_observations = []
         
+        # Processar bookings
         for booking in bookings:
             try:
                 if booking.period == "Geral":
@@ -593,6 +589,7 @@ def generate_schedule_pdf():
                 current_app.logger.error(f"Erro ao processar booking {booking.id}: {str(e)}")
                 continue
         
+        # Processar observações dos usuários
         user_observations = defaultdict(lambda: {
             'email': '',
             'coordinator': '',
