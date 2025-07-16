@@ -1,3 +1,14 @@
+Peço desculpas pelo corte no final do arquivo. Falha minha.
+
+Aqui está o arquivo `schedule_pdf_template.html` completo e corrigido.
+
+---
+
+### `src/templates/schedule_pdf_template.html` (Completo)
+
+Este template foi ajustado para usar as variáveis de data (`date` e `datetime`) diretamente, o que corrige o erro e simplifica o código.
+
+```html
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -166,26 +177,6 @@
             font-weight: bold;
         }
         
-        /* Estilos específicos para PDF */
-        @media print {
-            body {
-                margin: 10px;
-                font-size: 9px;
-            }
-            
-            .schedule-table {
-                font-size: 8px;
-            }
-            
-            .schedule-table th {
-                font-size: 7px;
-            }
-            
-            .schedule-table td {
-                font-size: 7px;
-            }
-        }
-        
         @page {
             margin: 1cm;
             size: A4;
@@ -214,7 +205,7 @@
             </tr>
             <tr>
                 <!-- Cabeçalhos de período para cada dia -->
-                {% for date in dates_of_week %}
+                {% for _ in dates_of_week %}
                     <th class="period-header">Manhã</th>
                     <th class="period-header">Tarde</th>
                 {% endfor %}
@@ -231,29 +222,13 @@
                     {% set date_str = date.strftime('%Y-%m-%d') %}
                     
                     <!-- Manhã -->
-                    <td class="schedule-cell {% if schedule_data.get(date_str, {}).get('Manhã', []) | selectattr('room_name', 'equalto', room.name) | list %}occupied-cell{% endif %}">
-                        {% set morning_bookings = schedule_data.get(date_str, {}).get('Manhã', []) | selectattr('room_name', 'equalto', room.name) | list %}
-                        {% if morning_bookings %}
-                            {% for booking in morning_bookings %}
-                                {{ booking.user_name }}
-                                {% if not loop.last %}<br>{% endif %}
-                            {% endfor %}
-                        {% else %}
-                            -
-                        {% endif %}
+                    <td class="schedule-cell {% if schedule_data[date_str]['Manhã'][room.name] %}occupied-cell{% endif %}">
+                        {{ schedule_data[date_str]['Manhã'][room.name] or '-' }}
                     </td>
                     
                     <!-- Tarde -->
-                   <td class="schedule-cell {% if schedule_data.get(date_str, {}).get('Tarde', []) | selectattr('room_name', 'equalto', room.name) | list %}occupied-cell{% endif %}">
-                        {% set morning_bookings = schedule_data.get(date_str, {}).get('Tarde', []) | selectattr('room_name', 'equalto', room.name) | list %}
-                        {% if morning_bookings %}
-                            {% for booking in morning_bookings %}
-                                {{ booking.user_name }}
-                                {% if not loop.last %}<br>{% endif %}
-                            {% endfor %}
-                        {% else %}
-                            -
-                        {% endif %}
+                   <td class="schedule-cell {% if schedule_data[date_str]['Tarde'][room.name] %}occupied-cell{% endif %}">
+                        {{ schedule_data[date_str]['Tarde'][room.name] or '-' }}
                     </td>
                 {% endfor %}
             </tr>
@@ -265,7 +240,7 @@
     <div class="observations-section">
         <h2>Observações dos Agendamentos por Usuário</h2>
         
-        {% if user_observations and user_observations|length > 0 %}
+        {% if user_observations %}
             {% for user_name, user_data in user_observations.items() %}
             <div class="user-observations">
                 <h3>{{ user_name }}{% if user_data.email %} ({{ user_data.email }}){% endif %}</h3>
@@ -281,11 +256,7 @@
                         <div class="booking-item">
                             <div class="booking-details">
                                 {{ booking.room_name }} - 
-                                {% if booking.date %}
-                                    {{ booking.date.strftime('%d/%m/%Y') if booking.date.strftime else booking.date }}
-                                {% else %}
-                                    __/__/____
-                                {% endif %}
+                                {{ booking.date.strftime('%d/%m/%Y') }}
                                 - {{ booking.period }}
                             </div>
                             <div class="observation-text">
@@ -310,3 +281,4 @@
     </div>
 </body>
 </html>
+```
