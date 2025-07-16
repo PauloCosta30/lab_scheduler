@@ -513,21 +513,48 @@ def generate_schedule_pdf():
         except ValueError:
             return jsonify({"error": "Formato de data inválido. Use YYYY-MM-DD"}), 400
         
+        current_app.logger.info(f"Gerando PDF para período: {start_date} a {end_date}")
+        
         bookings = Booking.query.outerjoin(Room).filter(
             Booking.booking_date.between(start_date, end_date)
         ).order_by(Booking.booking_date, Booking.period).all()
         
+        current_app.logger.info(f"Encontrados {len(bookings)} agendamentos")
+        
         rooms = Room.query.all()
         sorted_rooms = sort_rooms_custom(rooms)
+        
+        # Função auxiliar para converter qualquer tipo para date
+        def ensure_date(date_input):
+            if isinstance(date_input, date):
+                return date_input
+            elif isinstance(date_input, datetime):
+                return date_input.date()
+            elif isinstance(date_input, str):
+                try:
+                    return datetime.strptime(date_input, "%Y-%m-%d").date()
+                except ValueError:
+                    try:
+                        return datetime.strptime(date_input, "%Y-%m-%d %H:%M:%S").date()
+                    except ValueError:
+                        current_app.logger.error(f"Formato de data não reconhecido: {date_input}")
+                        return None
+            else:
+                current_app.logger.error(f"Tipo de data não suportado: {type(date_input)} - {date_input}")
+                return None
         
         schedule_data = {}
         dates_of_week = []
         current_date = start_date
+        
         while current_date <= end_date:
-            # CORREÇÃO: Verificar se current_date é um objeto date antes de chamar weekday()
-            if isinstance(current_date, str):
-                current_date = datetime.strptime(current_date, "%Y-%m-%d").date()
-            
+            # Garantir que current_date seja sempre um objeto date
+            current_date = ensure_date(current_date)
+            if current_date is None:
+                current_app.logger.error("Erro ao processar data atual no loop")
+                break
+                
+            # Verificar se é dia da semana (segunda a sexta)
             if current_date.weekday() < 5:
                 date_str = current_date.isoformat()
                 dates_of_week.append(date_str)
@@ -537,32 +564,34 @@ def generate_schedule_pdf():
                 }
             current_date += timedelta(days=1)
         
+        current_app.logger.info(f"Datas da semana processadas: {dates_of_week}")
+        
         general_observations = []
         
         for booking in bookings:
-            if booking.period == "Geral":
-                # Observação geral - garantir que booking_date seja objeto date
-                booking_date = booking.booking_date
-                if isinstance(booking_date, str):
-                    booking_date = datetime.strptime(booking_date, "%Y-%m-%d").date()
-                
-                general_observations.append({
-                    'user_name': booking.user_name,
-                    'user_email': booking.user_email,
-                    'observation': booking.observation,
-                    'date': booking_date
-                })
-            else:
-                # Agendamento normal
-                booking_date = booking.booking_date
-                if isinstance(booking_date, str):
-                    booking_date = datetime.strptime(booking_date, "%Y-%m-%d").date()
-                
-                date_str = booking_date.isoformat()
-                if date_str in schedule_data and booking.room:
-                    room_name = booking.room.name
-                    if room_name in schedule_data[date_str][booking.period]:
-                        schedule_data[date_str][booking.period][room_name] = booking.user_name
+            try:
+                if booking.period == "Geral":
+                    # Observação geral
+                    booking_date = ensure_date(booking.booking_date)
+                    if booking_date:
+                        general_observations.append({
+                            'user_name': booking.user_name,
+                            'user_email': booking.user_email,
+                            'observation': booking.observation,
+                            'date': booking_date
+                        })
+                else:
+                    # Agendamento normal
+                    booking_date = ensure_date(booking.booking_date)
+                    if booking_date:
+                        date_str = booking_date.isoformat()
+                        if date_str in schedule_data and booking.room:
+                            room_name = booking.room.name
+                            if room_name in schedule_data[date_str][booking.period]:
+                                schedule_data[date_str][booking.period][room_name] = booking.user_name
+            except Exception as e:
+                current_app.logger.error(f"Erro ao processar booking {booking.id}: {str(e)}")
+                continue
         
         user_observations = defaultdict(lambda: {
             'email': '',
@@ -571,49 +600,62 @@ def generate_schedule_pdf():
         })
         
         for booking in bookings:
-            if booking.period != "Geral":  # Excluir observações gerais desta seção
-                user_name = booking.user_name
-                user_observations[user_name]['email'] = booking.user_email
-                user_observations[user_name]['coordinator'] = booking.coordinator_name or ''
-                if booking.room:
-                    # Garantir que booking_date seja objeto date
-                    booking_date = booking.booking_date
-                    if isinstance(booking_date, str):
-                        booking_date = datetime.strptime(booking_date, "%Y-%m-%d").date()
-                    
-                    user_observations[user_name]['bookings'].append({
-                        'room_name': booking.room.name,
-                        'date': booking_date,
-                        'period': booking.period,
-                        'observation': booking.observation or ''
-                    })
+            try:
+                if booking.period != "Geral":  # Excluir observações gerais desta seção
+                    user_name = booking.user_name
+                    user_observations[user_name]['email'] = booking.user_email
+                    user_observations[user_name]['coordinator'] = booking.coordinator_name or ''
+                    if booking.room:
+                        booking_date = ensure_date(booking.booking_date)
+                        if booking_date:
+                            user_observations[user_name]['bookings'].append({
+                                'room_name': booking.room.name,
+                                'date': booking_date,
+                                'period': booking.period,
+                                'observation': booking.observation or ''
+                            })
+            except Exception as e:
+                current_app.logger.error(f"Erro ao processar observação do usuário para booking {booking.id}: {str(e)}")
+                continue
         
         days_locale = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"]
         
         # Obter data/hora atual em horário de Brasília
-        now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
-        now_brasilia = now_utc.astimezone(BRASILIA_TZ)
-        generation_date = now_brasilia.strftime("%d/%m/%Y às %H:%M")
+        try:
+            now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
+            now_brasilia = now_utc.astimezone(BRASILIA_TZ)
+            generation_date = now_brasilia.strftime("%d/%m/%Y às %H:%M")
+        except Exception as e:
+            current_app.logger.error(f"Erro ao obter data/hora atual: {str(e)}")
+            generation_date = datetime.now().strftime("%d/%m/%Y às %H:%M")
         
-        html_content = render_template(
-            'schedule_pdf_template.html',
-            rooms=sorted_rooms,
-            dates_of_week=dates_of_week,
-            days_locale=days_locale,
-            schedule_data=schedule_data,
-            user_observations=dict(user_observations),
-            general_observations=general_observations,
-            week_start_date_formatted=start_date.strftime("%d/%m/%Y"),
-            week_end_date_formatted=end_date.strftime("%d/%m/%Y"),
-            generation_date=generation_date,
-            zip=zip
-        )
+        current_app.logger.info("Preparando dados para o template HTML")
+        
+        # Preparar dados para o template
+        template_data = {
+            'rooms': sorted_rooms,
+            'dates_of_week': dates_of_week,
+            'days_locale': days_locale,
+            'schedule_data': schedule_data,
+            'user_observations': dict(user_observations),
+            'general_observations': general_observations,
+            'week_start_date_formatted': start_date.strftime("%d/%m/%Y"),
+            'week_end_date_formatted': end_date.strftime("%d/%m/%Y"),
+            'generation_date': generation_date,
+            'zip': zip
+        }
+        
+        html_content = render_template('schedule_pdf_template.html', **template_data)
+        
+        current_app.logger.info("Template HTML renderizado, gerando PDF")
         
         # Configurações do WeasyPrint para melhor renderização de tabelas
         pdf_bytes = HTML(string=html_content).write_pdf(
             stylesheets=None,
             presentational_hints=True
         )
+        
+        current_app.logger.info("PDF gerado com sucesso")
         
         response = make_response(pdf_bytes)
         response.headers['Content-Type'] = 'application/pdf'
