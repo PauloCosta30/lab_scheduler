@@ -507,31 +507,22 @@ def generate_schedule_pdf():
         sorted_rooms = sort_rooms_custom(rooms)
         
         def ensure_date(date_input):
-            if isinstance(date_input, date):
-                return date_input
-            if isinstance(date_input, datetime):
-                return date_input.date()
+            if isinstance(date_input, date): return date_input
+            if isinstance(date_input, datetime): return date_input.date()
             if isinstance(date_input, str):
-                try:
-                    return datetime.strptime(date_input, "%Y-%m-%d").date()
+                try: return datetime.strptime(date_input, "%Y-%m-%d").date()
                 except ValueError:
-                    try:
-                        return datetime.fromisoformat(date_input.replace('Z', '+00:00')).date()
-                    except ValueError:
-                        current_app.logger.error(f"Formato de data não reconhecido: {date_input}")
-                        return None
-            current_app.logger.error(f"Tipo de data não suportado: {type(date_input)}")
+                    try: return datetime.fromisoformat(date_input.replace('Z', '+00:00')).date()
+                    except ValueError: return None
             return None
 
-        # CORREÇÃO: Inicializar dates_of_week com objetos date
         dates_of_week = []
         current_date = start_date
         while current_date <= end_date:
-            if current_date.weekday() < 5:  # Apenas dias de semana (0=Segunda, 4=Sexta)
+            if current_date.weekday() < 5:
                 dates_of_week.append(current_date)
             current_date += timedelta(days=1)
 
-        # CORREÇÃO: Inicializar a estrutura de dados da escala
         schedule_data = {}
         for d in dates_of_week:
             date_str = d.isoformat()
@@ -540,61 +531,64 @@ def generate_schedule_pdf():
                 "Tarde": {room.name: "" for room in sorted_rooms}
             }
         
-        current_app.logger.info(f"Datas da semana processadas: {[d.isoformat() for d in dates_of_week]}")
+        # <<< INÍCIO DA LÓGICA CORRIGIDA PARA OBSERVAÇÕES >>>
         
-        general_observations = []
-        
-        for booking in bookings:
-            booking_date = ensure_date(booking.booking_date)
-            if not booking_date:
-                current_app.logger.warning(f"Não foi possível processar a data para o agendamento ID {booking.id}")
-                continue
-
-            if booking.period == "Geral":
-                general_observations.append({
-                    'user_name': booking.user_name,
-                    'user_email': booking.user_email,
-                    'observation': booking.observation,
-                    'date': booking_date
-                })
-            elif booking.room:
-                date_str = booking_date.isoformat()
-                if date_str in schedule_data:
-                    room_name = booking.room.name
-                    if room_name in schedule_data[date_str][booking.period]:
-                        schedule_data[date_str][booking.period][room_name] = booking.user_name
-        
-        user_observations = defaultdict(lambda: {
+        user_info = defaultdict(lambda: {
             'email': '',
             'coordinator': '',
+            'observation': '', # Campo para a observação principal do usuário
             'bookings': []
         })
         
+        general_observations = []
+
         for booking in bookings:
-            if booking.period != "Geral" and booking.room:
-                booking_date = ensure_date(booking.booking_date)
-                if booking_date:
-                    user_name = booking.user_name
-                    user_observations[user_name]['email'] = booking.user_email
-                    user_observations[user_name]['coordinator'] = booking.coordinator_name or ''
-                    user_observations[user_name]['bookings'].append({
-                        'room_name': booking.room.name,
-                        'date': booking_date,
-                        'period': booking.period,
-                        'observation': booking.observation or ''
-                    })
-        
+            booking_date = ensure_date(booking.booking_date)
+            if not booking_date: continue
+
+            # Processa observações gerais (sem sala)
+            if booking.period == "Geral":
+                general_observations.append({
+                    'user_name': booking.user_name,
+                    'observation': booking.observation.replace("OBSERVAÇÃO GERAL: ", ""),
+                    'date': booking_date
+                })
+                continue
+
+            # Processa agendamentos normais
+            user_name = booking.user_name
+            user_info[user_name]['email'] = booking.user_email
+            user_info[user_name]['coordinator'] = booking.coordinator_name or ''
+            
+            # Captura a observação do primeiro agendamento do usuário como a principal
+            if booking.observation and not user_info[user_name]['observation']:
+                 user_info[user_name]['observation'] = booking.observation
+
+            # Adiciona o agendamento à lista do usuário
+            if booking.room:
+                user_info[user_name]['bookings'].append({
+                    'room_name': booking.room.name,
+                    'date': booking_date,
+                    'period': booking.period
+                })
+                
+                # Preenche a tabela da escala
+                date_str = booking_date.isoformat()
+                if date_str in schedule_data:
+                    schedule_data[date_str][booking.period][booking.room.name] = user_name
+
+        # <<< FIM DA LÓGICA CORRIGIDA >>>
+
         now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
         now_brasilia = now_utc.astimezone(BRASILIA_TZ)
         
         current_app.logger.info("Preparando dados para o template HTML")
         
-        # CORREÇÃO: Passar objetos date/datetime diretamente para o template
         template_data = {
             'all_rooms': sorted_rooms,
             'dates_of_week': dates_of_week,
             'schedule_data': schedule_data,
-            'user_observations': dict(user_observations),
+            'user_info': dict(user_info), # <<< ALTERAÇÃO: Passa a nova estrutura de dados
             'general_observations': general_observations,
             'start_date': start_date,
             'end_date': end_date,
@@ -621,3 +615,5 @@ def generate_schedule_pdf():
         import traceback
         current_app.logger.error(f"Traceback completo: {traceback.format_exc()}")
         return jsonify({"error": "Erro interno ao gerar PDF", "details": str(e)}), 500
+
+
