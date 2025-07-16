@@ -548,13 +548,18 @@ def generate_schedule_pdf():
         sorted_rooms = sort_rooms_custom(rooms)
         
         def ensure_date(date_input):
-            if isinstance(date_input, date): return date_input
-            if isinstance(date_input, datetime): return date_input.date()
+            if isinstance(date_input, date): 
+                return date_input
+            if isinstance(date_input, datetime): 
+                return date_input.date()
             if isinstance(date_input, str):
-                try: return datetime.strptime(date_input, "%Y-%m-%d").date()
+                try: 
+                    return datetime.strptime(date_input, "%Y-%m-%d").date()
                 except ValueError:
-                    try: return datetime.fromisoformat(date_input.replace('Z', '+00:00')).date()
-                    except ValueError: return None
+                    try: 
+                        return datetime.fromisoformat(date_input.replace('Z', '+00:00')).date()
+                    except ValueError: 
+                        return None
             return None
 
         dates_of_week = []
@@ -583,7 +588,8 @@ def generate_schedule_pdf():
 
         for booking in bookings:
             booking_date = ensure_date(booking.booking_date)
-            if not booking_date: continue
+            if not booking_date: 
+                continue
 
             if booking.period == "Geral":
                 general_observations.append({
@@ -598,7 +604,7 @@ def generate_schedule_pdf():
             user_info[user_name]['coordinator'] = booking.coordinator_name or ''
             
             if booking.observation and not user_info[user_name]['observation']:
-                 user_info[user_name]['observation'] = booking.observation
+                user_info[user_name]['observation'] = booking.observation
 
             if booking.room:
                 user_info[user_name]['bookings'].append({
@@ -647,4 +653,4 @@ def generate_schedule_pdf():
         import traceback
         current_app.logger.error(f"Traceback completo: {traceback.format_exc()}")
         return jsonify({"error": "Erro interno ao gerar PDF", "details": str(e)}), 500
-```
+
