@@ -1,4 +1,4 @@
-# /home/ubuntu/lab_scheduler/src/routes/booking_routes.py
+# /src/routes/booking_routes.py
 
 from flask import Blueprint, request, jsonify, current_app, render_template, make_response
 from src.extensions import db
@@ -11,8 +11,11 @@ import pytz # Importar pytz para lidar com fusos horários
 from functools import wraps
 
 # Importação condicional do weasyprint
-from weasyprint import HTML
-WEASYPRINT_AVAILABLE = True
+try:
+    from weasyprint import HTML
+    WEASYPRINT_AVAILABLE = True
+except ImportError:
+    WEASYPRINT_AVAILABLE = False
 
 bookings_bp = Blueprint("bookings_bp", __name__)
 
@@ -125,21 +128,17 @@ def get_booking_window_status():
         now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
         now_brasilia = now_utc.astimezone(BRASILIA_TZ)
         
-        # Encontrar a segunda-feira da semana atual
         today_brasilia = now_brasilia.date()
         current_week_monday = today_brasilia - timedelta(days=today_brasilia.weekday())
         
-        # Encontrar a segunda-feira da próxima semana
         next_week_monday = current_week_monday + timedelta(weeks=1)
         
-        # Definir os pontos de corte para a semana atual
         current_week_cutoff_date = current_week_monday + timedelta(days=2) # Quarta-feira
         current_week_cutoff_time = time(18, 0, 0) # 18:00
         current_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(current_week_cutoff_date, current_week_cutoff_time))
 
-        # Definir os pontos de corte para a próxima semana
         next_week_open_date = current_week_monday + timedelta(days=4) # Sexta-feira
-        next_week_open_time = time(8, 0, 0) # 18:00
+        next_week_open_time = time(18, 0, 0) # 18:00
         next_week_open_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_open_date, next_week_open_time))
 
         next_week_cutoff_date = next_week_monday + timedelta(days=2) # Quarta-feira da próxima semana
@@ -152,14 +151,12 @@ def get_booking_window_status():
             "general_message": "As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 18h, e a escala da próxima semana será liberada todas as sextas-feiras, às 18h."
         }
 
-        # Regra para a semana atual
         if now_brasilia <= current_week_cutoff_datetime:
             status["current_week"]["open"] = True
             status["current_week"]["message"] = "Aberto até quarta-feira às 18:00"
         else:
             status["current_week"]["message"] = "Fechado (após quarta-feira 18:00)"
 
-        # Regra para a próxima semana
         if now_brasilia >= next_week_open_datetime and now_brasilia <= next_week_cutoff_datetime:
             status["next_week"]["open"] = True
             status["next_week"]["message"] = "Aberto para a próxima semana"
@@ -216,19 +213,15 @@ def create_booking():
             return jsonify({"error": "Missing fields. Required: slots or observation"}), 400
 
         if not slots_data and observation:
-            # If no slots are provided, and observation is present, treat as a general observation
-            # We need a booking_date for general observations. Let's use today's date for simplicity
-            # or the first available date if that's more appropriate for the frontend flow.
-            # For now, we'll use today's date as the booking_date for general observations.
             today_brasilia = datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(BRASILIA_TZ).date()
             general_obs_booking = Booking(
                 user_name=user_name,
                 user_email=user_email,
                 coordinator_name=coordinator_name,
                 observation=f"OBSERVAÇÃO GERAL: {observation}",
-                room_id=None,  # Sem sala específica
+                room_id=None,
                 booking_date=today_brasilia,
-                period="Geral"  # Período especial para observações gerais
+                period="Geral"
             )
             db.session.add(general_obs_booking)
             db.session.commit()
@@ -245,7 +238,6 @@ def create_booking():
 
         processed_slots = []
         daily_new_bookings_count = defaultdict(int)
-
         booking_window = get_booking_window_status()
 
         for slot_input in slots_data:
@@ -262,25 +254,22 @@ def create_booking():
             except ValueError:
                 return jsonify({"error": f"Invalid date format '{booking_date_str}' in slot: {slot_input}. Use YYYY-MM-DD"}), 400
             
-            # Validação da janela de agendamento
             now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
             now_brasilia = now_utc.astimezone(BRASILIA_TZ)
             today_brasilia = now_brasilia.date()
             current_week_monday = today_brasilia - timedelta(days=today_brasilia.weekday())
             next_week_monday = current_week_monday + timedelta(weeks=1)
 
-            if booking_date_obj.weekday() >= 5: # Sábado ou Domingo
+            if booking_date_obj.weekday() >= 5:
                 return jsonify({"error": f"Agendamentos para {booking_date_str} são permitidos apenas de segunda a sexta-feira."}), 400
 
             if booking_date_obj < today_brasilia:
                 return jsonify({"error": f"Agendamento para {booking_date_str} não pode ser no passado."}), 400
             
-            if booking_date_obj >= current_week_monday and booking_date_obj < next_week_monday:
-                # Agendamento para a semana atual
+            if current_week_monday <= booking_date_obj < next_week_monday:
                 if not booking_window["current_week"]["open"]:
                     return jsonify({"error": f"Agendamentos para a semana atual estão fechados. {booking_window['current_week']['message']}"}), 403
-            elif booking_date_obj >= next_week_monday and booking_date_obj < (next_week_monday + timedelta(weeks=1)):
-                # Agendamento para a próxima semana
+            elif next_week_monday <= booking_date_obj < (next_week_monday + timedelta(weeks=1)):
                 if not booking_window["next_week"]["open"]:
                     return jsonify({"error": f"Agendamentos para a próxima semana estão fechados. {booking_window['next_week']['message']}"}), 403
             else:
@@ -297,7 +286,6 @@ def create_booking():
             })
             daily_new_bookings_count[booking_date_obj] += 1
 
-        # Validation for max 3 bookings per day per user
         for booking_date_obj, count_for_this_request in daily_new_bookings_count.items():
             existing_bookings_on_day = Booking.query.filter_by(user_name=user_name, booking_date=booking_date_obj).count()
             if (existing_bookings_on_day + count_for_this_request) > MAX_BOOKINGS_PER_DAY:
@@ -305,7 +293,6 @@ def create_booking():
                     "error": f"Limite de {MAX_BOOKINGS_PER_DAY} agendamentos por dia para o usuário '{user_name}' seria excedido no dia {booking_date_obj.strftime('%Y-%m-%d')}."
                 }), 409
 
-        # Validation for "Geral" rooms - only one per period per day per user
         for booking_date_obj, _ in daily_new_bookings_count.items():
             geral_periods_in_request = defaultdict(list)
             
@@ -331,7 +318,6 @@ def create_booking():
                         "error": f"Você já possui um agendamento para uma sala da categoria 'Geral' ({existing_geral_booking.room.name}) no período '{period}' do dia {booking_date_obj.strftime('%Y-%m-%d')}."
                     }), 409
 
-        # Validation for booking conflicts (slot already taken)
         for slot in processed_slots:
             if check_booking_conflict(slot["room_id"], slot["booking_date_obj"], slot["period"]):
                 return jsonify({
@@ -377,7 +363,6 @@ def create_booking():
         current_app.logger.error(f"Falha ao criar agendamento(s) no servidor: {str(e)}")
         return jsonify({"error": "Falha ao criar agendamento(s) no servidor.", "details": str(e)}), 500
 
-# Nova rota para adicionar observação geral
 @bookings_bp.route("/general-observation", methods=["POST"])
 def add_general_observation():
     try:
@@ -401,15 +386,14 @@ def add_general_observation():
         except ValueError:
             return jsonify({"error": "Invalid date format for week_start_date. Use YYYY-MM-DD"}), 400
 
-        # Criar um agendamento especial para a observação geral (sem sala específica)
         general_obs_booking = Booking(
             user_name=user_name,
             user_email=user_email,
             coordinator_name="",
             observation=f"OBSERVAÇÃO GERAL: {observation}",
-            room_id=None,  # Sem sala específica
+            room_id=None,
             booking_date=week_start_date,
-            period="Geral"  # Período especial para observações gerais
+            period="Geral"
         )
         
         db.session.add(general_obs_booking)
@@ -452,7 +436,6 @@ def get_bookings():
         
         def booking_sort_key(booking):
             try:
-                # Observações gerais vão por último
                 if booking.period == "Geral":
                     return (999, 999)
                 
@@ -494,7 +477,6 @@ def get_bookings():
         return jsonify({"error": "Erro ao carregar agendamentos"}), 500
 
 @bookings_bp.route("/generate-pdf", methods=["GET"])
-@bookings_bp.route("/generate-pdf", methods=["GET"])
 def generate_schedule_pdf():
     """Gera PDF da escala semanal com observações organizadas por usuário e observações gerais"""
     try:
@@ -524,72 +506,64 @@ def generate_schedule_pdf():
         rooms = Room.query.all()
         sorted_rooms = sort_rooms_custom(rooms)
         
-        # Função auxiliar para converter qualquer tipo para date
         def ensure_date(date_input):
             if isinstance(date_input, date):
                 return date_input
-            elif isinstance(date_input, datetime):
+            if isinstance(date_input, datetime):
                 return date_input.date()
-            elif isinstance(date_input, str):
+            if isinstance(date_input, str):
                 try:
                     return datetime.strptime(date_input, "%Y-%m-%d").date()
                 except ValueError:
                     try:
-                        return datetime.strptime(date_input, "%Y-%m-%d %H:%M:%S").date()
+                        return datetime.fromisoformat(date_input.replace('Z', '+00:00')).date()
                     except ValueError:
                         current_app.logger.error(f"Formato de data não reconhecido: {date_input}")
                         return None
-            else:
-                current_app.logger.error(f"Tipo de data não suportado: {type(date_input)} - {date_input}")
-                return None
-        
-        schedule_data = {}
+            current_app.logger.error(f"Tipo de data não suportado: {type(date_input)}")
+            return None
+
+        # CORREÇÃO: Inicializar dates_of_week com objetos date
         dates_of_week = []
-        
-        # Inicializar dates_of_week corretamente
         current_date = start_date
         while current_date <= end_date:
-            # Verificar se é dia da semana (segunda a sexta)
-            if current_date.weekday() < 5:
-                date_str = current_date.isoformat()
-                dates_of_week.append(date_str)
-                schedule_data[date_str] = {
-                    "Manhã": {room.name: "" for room in sorted_rooms},
-                    "Tarde": {room.name: "" for room in sorted_rooms}
-                }
+            if current_date.weekday() < 5:  # Apenas dias de semana (0=Segunda, 4=Sexta)
+                dates_of_week.append(current_date)
             current_date += timedelta(days=1)
+
+        # CORREÇÃO: Inicializar a estrutura de dados da escala
+        schedule_data = {}
+        for d in dates_of_week:
+            date_str = d.isoformat()
+            schedule_data[date_str] = {
+                "Manhã": {room.name: "" for room in sorted_rooms},
+                "Tarde": {room.name: "" for room in sorted_rooms}
+            }
         
-        current_app.logger.info(f"Datas da semana processadas: {dates_of_week}")
+        current_app.logger.info(f"Datas da semana processadas: {[d.isoformat() for d in dates_of_week]}")
         
         general_observations = []
         
-        # Processar bookings
         for booking in bookings:
-            try:
-                if booking.period == "Geral":
-                    # Observação geral
-                    booking_date = ensure_date(booking.booking_date)
-                    if booking_date:
-                        general_observations.append({
-                            'user_name': booking.user_name,
-                            'user_email': booking.user_email,
-                            'observation': booking.observation,
-                            'date': booking_date
-                        })
-                else:
-                    # Agendamento normal
-                    booking_date = ensure_date(booking.booking_date)
-                    if booking_date:
-                        date_str = booking_date.isoformat()
-                        if date_str in schedule_data and booking.room:
-                            room_name = booking.room.name
-                            if room_name in schedule_data[date_str][booking.period]:
-                                schedule_data[date_str][booking.period][room_name] = booking.user_name
-            except Exception as e:
-                current_app.logger.error(f"Erro ao processar booking {booking.id}: {str(e)}")
+            booking_date = ensure_date(booking.booking_date)
+            if not booking_date:
+                current_app.logger.warning(f"Não foi possível processar a data para o agendamento ID {booking.id}")
                 continue
+
+            if booking.period == "Geral":
+                general_observations.append({
+                    'user_name': booking.user_name,
+                    'user_email': booking.user_email,
+                    'observation': booking.observation,
+                    'date': booking_date
+                })
+            elif booking.room:
+                date_str = booking_date.isoformat()
+                if date_str in schedule_data:
+                    room_name = booking.room.name
+                    if room_name in schedule_data[date_str][booking.period]:
+                        schedule_data[date_str][booking.period][room_name] = booking.user_name
         
-        # Processar observações dos usuários
         user_observations = defaultdict(lambda: {
             'email': '',
             'coordinator': '',
@@ -597,48 +571,34 @@ def generate_schedule_pdf():
         })
         
         for booking in bookings:
-            try:
-                if booking.period != "Geral":  # Excluir observações gerais desta seção
+            if booking.period != "Geral" and booking.room:
+                booking_date = ensure_date(booking.booking_date)
+                if booking_date:
                     user_name = booking.user_name
                     user_observations[user_name]['email'] = booking.user_email
                     user_observations[user_name]['coordinator'] = booking.coordinator_name or ''
-                    if booking.room:
-                        booking_date = ensure_date(booking.booking_date)
-                        if booking_date:
-                            user_observations[user_name]['bookings'].append({
-                                'room_name': booking.room.name,
-                                'date': booking_date,
-                                'period': booking.period,
-                                'observation': booking.observation or ''
-                            })
-            except Exception as e:
-                current_app.logger.error(f"Erro ao processar observação do usuário para booking {booking.id}: {str(e)}")
-                continue
+                    user_observations[user_name]['bookings'].append({
+                        'room_name': booking.room.name,
+                        'date': booking_date,
+                        'period': booking.period,
+                        'observation': booking.observation or ''
+                    })
         
-        days_locale = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"]
-        
-        # Obter data/hora atual em horário de Brasília
-        try:
-            now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
-            now_brasilia = now_utc.astimezone(BRASILIA_TZ)
-            generation_date = now_brasilia.strftime("%d/%m/%Y às %H:%M")
-        except Exception as e:
-            current_app.logger.error(f"Erro ao obter data/hora atual: {str(e)}")
-            generation_date = datetime.now().strftime("%d/%m/%Y às %H:%M")
+        now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
+        now_brasilia = now_utc.astimezone(BRASILIA_TZ)
         
         current_app.logger.info("Preparando dados para o template HTML")
         
-        # Preparar dados para o template
+        # CORREÇÃO: Passar objetos date/datetime diretamente para o template
         template_data = {
-            'rooms': sorted_rooms,
+            'all_rooms': sorted_rooms,
             'dates_of_week': dates_of_week,
-            'days_locale': days_locale,
             'schedule_data': schedule_data,
             'user_observations': dict(user_observations),
             'general_observations': general_observations,
-            'week_start_date_formatted': start_date.strftime("%d/%m/%Y"),
-            'week_end_date_formatted': end_date.strftime("%d/%m/%Y"),
-            'generation_date': generation_date,
+            'start_date': start_date,
+            'end_date': end_date,
+            'generated_at': now_brasilia,
             'zip': zip
         }
         
@@ -646,11 +606,7 @@ def generate_schedule_pdf():
         
         current_app.logger.info("Template HTML renderizado, gerando PDF")
         
-        # Configurações do WeasyPrint para melhor renderização de tabelas
-        pdf_bytes = HTML(string=html_content).write_pdf(
-            stylesheets=None,
-            presentational_hints=True
-        )
+        pdf_bytes = HTML(string=html_content).write_pdf(presentational_hints=True)
         
         current_app.logger.info("PDF gerado com sucesso")
         
