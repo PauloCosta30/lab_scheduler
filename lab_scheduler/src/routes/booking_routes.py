@@ -524,6 +524,10 @@ def generate_schedule_pdf():
         dates_of_week = []
         current_date = start_date
         while current_date <= end_date:
+            # CORREÇÃO: Verificar se current_date é um objeto date antes de chamar weekday()
+            if isinstance(current_date, str):
+                current_date = datetime.strptime(current_date, "%Y-%m-%d").date()
+            
             if current_date.weekday() < 5:
                 date_str = current_date.isoformat()
                 dates_of_week.append(date_str)
