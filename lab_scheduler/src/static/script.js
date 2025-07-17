@@ -139,7 +139,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 // Quarta-feira: aberta até 23:59
                 currentWeekOpen = true;
                 nextWeekOpen = false;
-                statusMessage = "Agendamentos da semana atual fecham hoje às 23:59. Próxima semana abrirá quinta-feira às 05:00.";
+                statusMessage = "Agendamentos da semana atual fecham hoje às 23:59. Próxima semana abrirá quinta-feira às 18:00.";
             } else {
                 // Segunda e Terça: sempre aberta
                 currentWeekOpen = true;
@@ -147,14 +147,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 statusMessage = "Agendamentos da semana atual estão abertos até quarta-feira às 23:59.";
             }
         } else if (currentDayOfWeek === 4) {
-            // Quinta-feira: verificar se já são 5:00 ou mais
+            // Quinta-feira: verificar se já são 18:00 ou mais
             currentWeekOpen = false;
-            if (currentHour >= 5) {
+            if (currentHour >= 18) {
                 nextWeekOpen = true;
                 statusMessage = "Agendamentos para a próxima semana estão abertos até quarta-feira às 23:59.";
             } else {
                 nextWeekOpen = false;
-                const hoursRemaining = 5 - currentHour;
+                const hoursRemaining = 18 - currentHour;
                 const minutesRemaining = hoursRemaining === 1 ? 60 - currentMinute : 0;
                 if (hoursRemaining > 0) {
                     statusMessage = `Agendamentos para a próxima semana abrem hoje às 05:00 (faltam ${hoursRemaining} hora(s)${minutesRemaining > 0 ? ` e ${minutesRemaining} minuto(s)` : ''}).`;
