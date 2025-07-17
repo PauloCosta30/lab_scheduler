@@ -1,13 +1,13 @@
 document.addEventListener("DOMContentLoaded", () => {
-    // --- MODIFICADO: Adicionar novos botões de navegação ---
+    // --- Elementos DOM (sem alteração) ---
     const scheduleTableContainer = document.getElementById("scheduleTableContainer");
     const scheduleMessage = document.getElementById("scheduleMessage");
     const proceedToBookingButton = document.getElementById("proceedToBookingButton");
     const generatePdfButton = document.getElementById("generatePdfButton");
     const weekSelector = document.getElementById("weekSelector");
     const loadScheduleButton = document.getElementById("loadScheduleButton");
-    const prevWeekButton = document.getElementById("prevWeekButton"); // NOVO
-    const nextWeekButton = document.getElementById("nextWeekButton"); // NOVO
+    const prevWeekButton = document.getElementById("prevWeekButton");
+    const nextWeekButton = document.getElementById("nextWeekButton");
     const bookingStatusMessage = document.getElementById("bookingStatusMessage");
     const bookingModal = document.getElementById("bookingModal");
     const closeModalButton = document.querySelector(".close-button");
@@ -15,41 +15,53 @@ document.addEventListener("DOMContentLoaded", () => {
     const selectedSlotsSummaryList = document.querySelector("#selectedSlotsSummary ul");
     const modalFormMessage = document.getElementById("modalFormMessage");
 
+    // --- Variáveis Globais (sem alteração) ---
     const API_BASE_URL = "/api";
     let allRooms = [];
     let selectedSlots = [];
     let currentFetchedBookings = [];
-    let currentWeekStartDate; // Esta variável agora é a chave para a navegação
+    let currentWeekStartDate;
     let bookingWindowStatus = null;
 
     // --- Funções Helper (sem alteração) ---
-    function getTodayUTC() {
-        const today = new Date();
-        return new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-    }
-
-    function parseDateStrToUTC(dateStr) {
-        const [year, month, day] = dateStr.split("-").map(Number);
-        return new Date(Date.UTC(year, month - 1, day));
-    }
-
+    function getTodayUTC() { /* ...código sem alteração... */ }
+    function parseDateStrToUTC(dateStr) { /* ...código sem alteração... */ }
     function showModalMessage(message, type) { /* ...código sem alteração... */ }
     function showScheduleMessage(message, type) { /* ...código sem alteração... */ }
     function showBookingStatusMessage(message, type) { /* ...código sem alteração... */ }
 
-    // --- Lógica de Exibição da Semana (sem alteração) ---
+    // --- Lógica de Exibição da Semana (CORRIGIDA) ---
     function getWeekToDisplay() {
-        // Esta função continua definindo a semana padrão no primeiro carregamento
         const now = new Date();
-        const currentDayOfWeek = now.getDay();
+        const currentDayOfWeek = now.getDay(); // 0=Domingo, 1=Segunda, ..., 6=Sábado
         const currentHour = now.getHours();
         
+        console.log(`=== DETERMINANDO SEMANA PARA EXIBIR (v2) ===`);
+        console.log(`Dia/Hora local: ${currentDayOfWeek} / ${currentHour}`);
+
         if ( (currentDayOfWeek === 4 && currentHour >= 18) || currentDayOfWeek >= 5 || currentDayOfWeek === 0 ) {
+            console.log(`DECISÃO: EXIBIR PRÓXIMA SEMANA`);
+            
             const nextWeek = new Date(now);
-            const daysToAdd = (8 - currentDayOfWeek) % 7;
-            nextWeek.setDate(now.getDate() + (daysToAdd === 0 ? 7 : daysToAdd));
+            
+            // --- LÓGICA DE CÁLCULO CORRIGIDA E SIMPLIFICADA ---
+            // 1. Encontra a diferença de dias até a próxima segunda-feira.
+            // (1 - currentDayOfWeek) nos dá a diferença para a segunda-feira desta semana.
+            // Adicionamos 7 para garantir que seja a da próxima semana.
+            // O operador % 7 lida com o caso do domingo (day=0).
+            const daysUntilMonday = (1 - currentDayOfWeek + 7) % 7;
+            
+            // Se hoje for segunda, daysUntilMonday será 0, então pulamos 7 dias.
+            if (daysUntilMonday === 0) {
+                nextWeek.setDate(now.getDate() + 7);
+            } else {
+                nextWeek.setDate(now.getDate() + daysUntilMonday);
+            }
+            
             return nextWeek.toISOString().split("T")[0];
         }
+        
+        console.log(`DECISÃO: EXIBIR SEMANA ATUAL`);
         return null;
     }
 
@@ -58,7 +70,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function updateBookingStatusDisplay() { /* ...código sem alteração... */ }
     async function fetchAllRooms() { /* ...código sem alteração... */ }
 
-    // --- Lógica de Carregamento da Escala (MODIFICADA) ---
+    // --- Lógica de Carregamento da Escala (sem alteração) ---
     async function loadScheduleData(inputDateStr = null) {
         console.log(`Iniciando carregamento da escala. Data de entrada: ${inputDateStr}`);
         
@@ -66,10 +78,8 @@ document.addEventListener("DOMContentLoaded", () => {
             let referenceDate;
             
             if (inputDateStr) {
-                // Se uma data foi fornecida (pelo seletor ou botões), use-a
                 referenceDate = parseDateStrToUTC(inputDateStr);
             } else {
-                // Se nenhuma data foi fornecida (primeiro carregamento), use a lógica padrão
                 const weekToDisplay = getWeekToDisplay();
                 if (weekToDisplay) {
                     referenceDate = parseDateStrToUTC(weekToDisplay);
@@ -78,16 +88,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             }
 
-            // Calcula a segunda-feira da semana de referência
             const dayOfWeek = referenceDate.getUTCDay();
             const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
             const startDate = new Date(referenceDate.valueOf());
             startDate.setUTCDate(referenceDate.getUTCDate() + diffToMonday);
             
-            // ATUALIZA A DATA GLOBAL, que é a nossa "fonte da verdade" para a navegação
             currentWeekStartDate = startDate;
 
-            // --- NOVA LÓGICA: Atualiza o valor do seletor de data ---
             if (weekSelector) {
                 weekSelector.value = currentWeekStartDate.toISOString().split("T")[0];
             }
@@ -133,7 +140,7 @@ document.addEventListener("DOMContentLoaded", () => {
     window.addEventListener("click", (event) => { /* ...código sem alteração... */ });
     if (modalBookingForm) { /* ...código sem alteração... */ }
 
-    // --- Event Listeners (MODIFICADO) ---
+    // --- Event Listeners (sem alteração) ---
     if (loadScheduleButton) {
         loadScheduleButton.addEventListener("click", () => {
             const selectedDate = weekSelector ? weekSelector.value : null;
@@ -145,11 +152,9 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // --- NOVA LÓGICA: Event Listeners para os botões de navegação ---
     if (prevWeekButton) {
         prevWeekButton.addEventListener("click", () => {
             if (currentWeekStartDate) {
-                // Pega a data da semana atual e subtrai 7 dias
                 const prevWeekDate = new Date(currentWeekStartDate.valueOf());
                 prevWeekDate.setUTCDate(currentWeekStartDate.getUTCDate() - 7);
                 loadScheduleData(prevWeekDate.toISOString().split("T")[0]);
@@ -160,7 +165,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (nextWeekButton) {
         nextWeekButton.addEventListener("click", () => {
             if (currentWeekStartDate) {
-                // Pega a data da semana atual e adiciona 7 dias
                 const nextWeekDate = new Date(currentWeekStartDate.valueOf());
                 nextWeekDate.setUTCDate(currentWeekStartDate.getUTCDate() + 7);
                 loadScheduleData(nextWeekDate.toISOString().split("T")[0]);
@@ -172,10 +176,9 @@ document.addEventListener("DOMContentLoaded", () => {
         generatePdfButton.addEventListener("click", generatePdf);
     }
 
-    // --- Initialization ---
+    // --- Initialization (sem alteração) ---
     console.log("Inicializando aplicação...");
     fetchBookingWindowStatus().then(() => {
-        // O primeiro carregamento não passa data, usando a lógica padrão
         loadScheduleData(); 
     });
 });
