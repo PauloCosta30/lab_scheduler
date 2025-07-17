@@ -1,34 +1,41 @@
 import os
 import sys
-import logging # Adicione esta linha para importar logging
+import logging
+from flask import Flask, send_from_directory
+from src.extensions import db
+from src.models.entities import Room
+from src.routes.booking_routes import bookings_bp
+from flask_mail import Mail
+from datetime import datetime
+
+# --- INÍCIO DA CORREÇÃO ---
+# Adicionar a biblioteca para carregar variáveis de ambiente
+from dotenv import load_dotenv
+
+# Carregar as variáveis de ambiente do arquivo .env (essencial para o Render)
+load_dotenv()
+# --- FIM DA CORREÇÃO ---
+
 
 # DON'T CHANGE THIS !!!
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
-from flask import Flask, send_from_directory, render_template
-from src.extensions import db
-from src.models.entities import Room, Booking
-from src.routes.booking_routes import bookings_bp
-from flask_mail import Mail # Import Flask-Mail
-from datetime import datetime
 
 # Configuração correta do Flask para servir arquivos estáticos
 app = Flask(__name__, 
            static_folder=os.path.join(os.path.dirname(__file__), 'static'),
            template_folder=os.path.join(os.path.dirname(__file__), 'templates'))
 
+# Acessar a ADMIN_KEY que foi carregada pelo load_dotenv()
+app.config['ADMIN_KEY'] = os.getenv('ADMIN_KEY')
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'a_very_strong_random_secret_key_dev_123!@#')
 
 # Configuração do banco de dados - PostgreSQL para produção, SQLite para desenvolvimento
 database_url = os.getenv('DATABASE_URL')
 if database_url:
-    # Produção - PostgreSQL no Render
-    # Render fornece DATABASE_URL no formato postgres://, mas SQLAlchemy 2.0+ requer postgresql://
     if database_url.startswith('postgres://'):
         database_url = database_url.replace('postgres://', 'postgresql://', 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 else:
-    # Desenvolvimento - SQLite local
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     db_path = os.path.join(project_root, 'lab_scheduler.db')
     app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{db_path}"
@@ -44,34 +51,26 @@ app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', 'itvdslab@gmail.com')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'cast qddf bxby mwsl')
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', ('LAB.ITV', 'noreply@gmail.com'))
 
-mail = Mail(app) # Initialize Flask-Mail
+mail = Mail(app)
 db.init_app(app)
 
-# --- INÍCIO DAS MODIFICAÇÕES PARA LOGGING ---
-# Configurar o nível de log para INFO (ou DEBUG, se preferir mais detalhes)
+# Configuração de Logging
 app.logger.setLevel(logging.INFO) 
-
-# Adicionar handler para enviar logs para a saída padrão (stdout)
 handler = logging.StreamHandler(sys.stdout)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 app.logger.addHandler(handler)
-# --- FIM DAS MODIFICAÇÕES PARA LOGGING ---
-
 
 # Adicionar filtro de template para formatação de data
 @app.template_filter('format_date')
 def format_date_filter(date_value, fmt="%d/%m"):
-    """Filtro para formatação de datas nos templates"""
     if isinstance(date_value, str):
         try:
-            # Tentar converter string ISO para objeto date
             date_obj = datetime.strptime(date_value, "%Y-%m-%d").date()
             return date_obj.strftime(fmt)
         except ValueError:
             return date_value
     elif hasattr(date_value, 'strftime'):
-        # Se já é um objeto date/datetime
         return date_value.strftime(fmt)
     else:
         return str(date_value)
@@ -90,42 +89,21 @@ with app.app_context():
             "Geologia 1", "Geologia Micrótomo", "Cultivo A1", "Cultivo A2", "Cultivo B1", "Cultivo B2"
         ]
         for name in room_names:
-            room = Room(name=name)
-            db.session.add(room)
+            db.session.add(Room(name=name))
         db.session.commit()
-        print("Database initialized and custom rooms created.")
+        app.logger.info("Banco de dados inicializado e salas criadas.")
 
 # Registrar blueprint
 app.register_blueprint(bookings_bp, url_prefix='/api')
 
-# Rota para servir arquivos estáticos corretamente
-@app.route('/static/<path:filename>')
-def static_files(filename):
-    """Serve arquivos estáticos explicitamente"""
-    return send_from_directory(app.static_folder, filename)
-
-# Rota principal corrigida
-@app.route('/')
-def index():
-    """Serve a página principal"""
-    try:
-        return send_from_directory(app.static_folder, 'index.html')
-    except Exception as e:
-        return f"Erro ao carregar página: {str(e)}", 500
-
-# Rota catch-all para SPA
+# Rota para servir arquivos estáticos e a página principal
+@app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
-def serve_spa(path):
-    """Serve arquivos estáticos ou redireciona para index.html"""
-    try:
-        # Primeiro, tenta servir o arquivo solicitado
-        if os.path.exists(os.path.join(app.static_folder, path)):
-            return send_from_directory(app.static_folder, path)
-        else:
-            # Se não encontrar, serve o index.html (comportamento SPA)
-            return send_from_directory(app.static_folder, 'index.html')
-    except Exception as e:
-        return f"Erro ao servir arquivo: {str(e)}", 404
+def serve(path):
+    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_from_directory(app.static_folder, 'index.html')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
