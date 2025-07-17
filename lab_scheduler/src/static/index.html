@@ -13,21 +13,18 @@
             <h1>Escala para uso dos laboratórios - ITV</h1>
         </div>
 
-        <!-- Status da Janela de Agendamento (sem alteração) -->
+        <!-- Status da Janela de Agendamento -->
         <div class="booking-status-container">
             <h3>Status do Agendamento</h3>
             <div id="bookingStatusMessage" class="status-message">
                 Carregando status...
             </div>
-            <!-- Os spans de status individuais podem ser removidos ou ocultados via CSS se não forem mais necessários -->
         </div>
 
         <div class="schedule-container">
             <h2>Escala Semanal</h2>
             
-            <!-- ================================================================== -->
-            <!-- ================   INÍCIO DO NOVO CÓDIGO HTML   ==================== -->
-            <!-- ================================================================== -->
+            <!-- Barra de Navegação de Semana -->
             <div class="week-navigation">
                 <button id="prevWeekButton" title="Ir para a semana anterior">&lt; Semana Anterior</button>
                 <div class="date-selector-container">
@@ -37,9 +34,6 @@
                 </div>
                 <button id="nextWeekButton" title="Ir para a próxima semana">Próxima Semana &gt;</button>
             </div>
-            <!-- ================================================================== -->
-            <!-- =================    FIM DO NOVO CÓDIGO HTML    ==================== -->
-            <!-- ================================================================== -->
 
             <p>Clique nos horários disponíveis na tabela para selecioná-los. Após selecionar, clique em "Prosseguir com Agendamento".</p>
             <div id="scheduleTableContainer">
@@ -52,9 +46,8 @@
             </div>
         </div>
 
-        <!-- Modal de Agendamento (sem alteração) -->
+        <!-- Modal de Agendamento -->
         <div id="bookingModal" class="modal">
-            <!-- ... todo o conteúdo do modal permanece o mesmo ... -->
             <div class="modal-content">
                 <span class="close-button">&times;</span>
                 <h2>Confirmar Agendamento</h2>
@@ -89,5 +82,10 @@
     </div>
 
     <script src="/static/script.js"></script>
+
+    <!-- Link de Login de Administrador -->
+    <div class="admin-login-container">
+        <a href="#" id="adminLoginLink">Login de Administrador</a>
+    </div>
 </body>
 </html>
