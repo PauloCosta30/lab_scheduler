@@ -9,7 +9,7 @@ body {
 }
 
 .container {
-    max-width: 1100px; /* Aumentado para melhor visualização da tabela */
+    max-width: 1100px;
     margin: auto;
     background: #fff;
     padding: 20px;
@@ -69,25 +69,33 @@ button:disabled {
     border-radius: 5px;
 }
 
-.message {
+.message, .status-message {
     padding: 10px;
     margin-top: 10px;
     border-radius: 4px;
     text-align: center;
     font-weight: bold;
+    min-height: 1.2em;
 }
 
-.message.success {
+.message.success, .status-message.success {
     background-color: #dff0d8;
     color: #3c763d;
     border: 1px solid #d6e9c6;
 }
 
-.message.error {
+.message.error, .status-message.error {
     background-color: #f2dede;
     color: #a94442;
     border: 1px solid #ebccd1;
 }
+
+.status-message.info {
+    background-color: #d9edf7;
+    color: #31708f;
+    border: 1px solid #bce8f1;
+}
+
 
 #scheduleTableContainer table {
     width: 100%;
@@ -100,8 +108,8 @@ button:disabled {
     border: 1px solid #ddd;
     padding: 8px;
     text-align: center;
-    min-width: 70px; /* Ajustado */
-    height: 40px; /* Altura fixa para melhor clique */
+    min-width: 70px;
+    height: 40px;
 }
 
 #scheduleTableContainer th {
@@ -109,7 +117,7 @@ button:disabled {
 }
 
 #scheduleTableContainer td.available {
-    background-color: #e6ffe6; /* Verde claro para disponível */
+    background-color: #e6ffe6;
     cursor: pointer;
 }
 
@@ -118,40 +126,53 @@ button:disabled {
 }
 
 #scheduleTableContainer td.selected {
-    background-color: #a0d3a0; /* Verde mais escuro para selecionado */
+    background-color: #a0d3a0;
     font-weight: bold;
     color: #fff;
 }
 
 #scheduleTableContainer td.booked {
-    background-color: #ffe0b2; /* Laranja claro para ocupado */
+    background-color: #ffe0b2;
     color: #8c5a00;
     cursor: not-allowed;
 }
 
-/* ================================================================== */
-/* ================   INÍCIO DO NOVO CÓDIGO CSS    ==================== */
-/* ================================================================== */
+#scheduleTableContainer td.closed {
+    background-color: #f1f1f1;
+    color: #888;
+    cursor: not-allowed;
+}
 
+/* Estilos para Modo Admin */
+#scheduleTableContainer td.admin-editable {
+    cursor: pointer !important;
+    outline: 1px dashed #007bff;
+    outline-offset: -2px;
+}
+
+#scheduleTableContainer td.admin-editable:hover {
+    background-color: #e9ecef;
+}
+
+
+/* Navegação de Semana */
 .week-navigation {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 15px;
-    background-color: #f9f9f9; /* Um fundo suave para destacar */
+    background-color: #f9f9f9;
     border: 1px solid #eee;
     border-radius: 5px;
     margin-bottom: 20px;
-    flex-wrap: wrap; /* Permite quebrar linha em telas menores */
-    gap: 15px; /* Espaçamento entre os elementos quando quebram a linha */
+    flex-wrap: wrap;
+    gap: 15px;
 }
 
-/* Estilo para os botões de navegação (< >) para combinar com o seu botão verde */
 .week-navigation button {
-    padding: 8px 12px; /* Um pouco menor para não dominar a tela */
+    padding: 8px 12px;
     font-size: 14px;
-    /* Herda o estilo do seu 'button' principal, mas podemos ajustar a cor */
-    background-color: #007bff; /* Um azul padrão para navegação */
+    background-color: #007bff;
     border-color: #007bff;
 }
 
@@ -162,56 +183,51 @@ button:disabled {
 .date-selector-container {
     display: flex;
     align-items: center;
-    gap: 10px; /* Espaçamento entre o label, input e botão */
-    flex-grow: 1; /* Permite que o container cresça */
-    justify-content: center; /* Centraliza o conteúdo */
+    gap: 10px;
+    flex-grow: 1;
+    justify-content: center;
 }
 
 .date-selector-container label {
-    margin-bottom: 0; /* Remove a margem padrão do seu label aqui */
+    margin-bottom: 0;
     font-size: 14px;
 }
 
 .date-selector-container input[type="date"] {
     padding: 8px;
-    margin-bottom: 0; /* Remove a margem padrão */
-    width: auto; /* Largura automática baseada no conteúdo */
+    margin-bottom: 0;
+    width: auto;
 }
 
-/* Estilo específico para o botão "Carregar" para combinar com seu botão verde principal */
 .date-selector-container button {
-    background-color: #5cb85c; /* Sua cor verde principal */
+    background-color: #5cb85c;
     border-color: #5cb85c;
 }
 
 .date-selector-container button:hover {
-    background-color: #4cae4c; /* Sua cor verde hover */
+    background-color: #4cae4c;
 }
-
-/* ================================================================== */
-/* =================    FIM DO NOVO CÓDIGO CSS     ==================== */
-/* ================================================================== */
 
 
 /* Modal Styles */
 .modal {
-    display: none; /* Hidden by default */
-    position: fixed; /* Stay in place */
-    z-index: 1000; /* Sit on top */
+    display: none;
+    position: fixed;
+    z-index: 1000;
     left: 0;
     top: 0;
-    width: 100%; /* Full width */
-    height: 100%; /* Full height */
-    overflow: auto; /* Enable scroll if needed */
-    background-color: rgba(0,0,0,0.6); /* Black w/ opacity */
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.6);
 }
 
 .modal-content {
     background-color: #fefefe;
-    margin: 10% auto; /* 10% from the top and centered */
+    margin: 10% auto;
     padding: 25px;
     border: 1px solid #888;
-    width: 80%; /* Could be more or less, depending on screen size */
+    width: 80%;
     max-width: 600px;
     border-radius: 8px;
     position: relative;
@@ -249,84 +265,89 @@ button:disabled {
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
-    input[type="text"],
-    input[type="email"],
-    input[type="date"],
-    select {
-        font-size: 16px; 
-    }
-
-    /* Removido o width: 100% para botões gerais, para não afetar a navegação */
     .action-buttons button, .modal-content button {
         width: 100%;
         padding: 12px;
-        margin-top: 10px; /* Espaçamento entre botões */
+        margin-top: 10px;
     }
-
-    .container {
-        padding: 10px;
-    }
-
-    h1 {
-        font-size: 1.6em;
-    }
-
-    h2 {
-        font-size: 1.3em;
-    }
-    
-    #scheduleTableContainer {
-        overflow-x: auto; 
-    }
-
-    .modal-content {
-        margin: 5% auto;
-        width: 90%;
-    }
-
-    /* Ajustes responsivos para a nova barra de navegação */
     .week-navigation {
         flex-direction: column;
     }
+    .container { padding: 10px; }
+    h1 { font-size: 1.6em; }
+    h2 { font-size: 1.3em; }
+    #scheduleTableContainer { overflow-x: auto; }
+    .modal-content { margin: 5% auto; width: 90%; }
 }
 
 
-
-/* Styles for Header with Logo */
+/* Header com Logo */
 .header-container {
     display: flex;
     align-items: center;
-    justify-content: center; /* Centraliza o conteúdo do cabeçalho */
+    justify-content: center;
     margin-bottom: 20px;
-    flex-wrap: wrap; /* Permite que os itens quebrem linha em telas menores */
+    flex-wrap: wrap;
 }
 
 #appLogo {
-    max-height: 140px; /* Altura máxima do logo, ajuste conforme necessário */
-    margin-right: 15px; /* Espaço entre o logo e o título */
+    max-height: 140px;
+    margin-right: 15px;
 }
 
-/* Ajuste para o título H1 quando o logo estiver presente */
 .header-container h1 {
-    margin-bottom: 0; /* Remove a margem inferior padrão do h1 se ele estiver no flex container */
-    text-align: left; /* Alinha o texto à esquerda, o container já centraliza */
+    margin-bottom: 0;
+    text-align: left;
 }
 
-/* Media query para telas menores */
 @media (max-width: 768px) {
     .header-container {
-        flex-direction: column; /* Empilha logo e título */
+        flex-direction: column;
         text-align: center;
     }
-
     #appLogo {
         margin-right: 0;
-        margin-bottom: 10px; /* Espaço abaixo do logo quando empilhado */
-        max-height: 60px; /* Logo um pouco menor em telas pequenas */
+        margin-bottom: 10px;
+        max-height: 60px;
     }
-
     .header-container h1 {
-        text-align: center; /* Centraliza o título em telas menores */
-        font-size: 1.4em; /* Ajusta o tamanho do título para telas menores */
+        text-align: center;
+        font-size: 1.4em;
     }
+}
+
+/* Admin Login e Indicador */
+.admin-login-container {
+    position: fixed;
+    bottom: 10px;
+    right: 15px;
+    z-index: 100;
+}
+
+.admin-login-container a {
+    font-size: 12px;
+    color: #6c757d;
+    text-decoration: none;
+    padding: 5px;
+    border-radius: 3px;
+    transition: background-color 0.2s;
+}
+
+.admin-login-container a:hover {
+    background-color: #f0f0f0;
+    color: #333;
+}
+
+.admin-mode-indicator {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background-color: #ffc107;
+    color: #333;
+    text-align: center;
+    padding: 5px;
+    font-weight: bold;
+    z-index: 2000;
+    font-size: 14px;
 }
