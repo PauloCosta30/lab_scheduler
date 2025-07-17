@@ -649,4 +649,13 @@ def admin_create_or_update_booking():
                 coordinator_name="Admin",
                 observation="Editado pelo administrador"
             )
-            db.session.add
+            db.session.add(new_booking)
+            message = "Agendamento criado com sucesso"
+        
+        db.session.commit()
+        return jsonify({"message": message}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erro na rota admin/booking: {str(e)}")
+        return jsonify({"error": "Erro interno do servidor", "details": str(e)}), 500
