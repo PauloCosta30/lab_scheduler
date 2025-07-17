@@ -92,7 +92,7 @@ def send_booking_confirmation_email(user_email, user_name, coordinator_name, obs
         sender = current_app.config.get("MAIL_DEFAULT_SENDER", "noreply@example.com")
         recipients = [user_email]
 
-        html_body = f"""
+        html_body = f"""\
         <p>Olá {user_name},</p>
         <p>Seu agendamento de laboratório foi confirmado com sucesso. Detalhes abaixo:</p>
         <ul>
@@ -160,46 +160,59 @@ def sort_rooms_custom(rooms):
 
 # Função para determinar o status da janela de agendamento
 def get_booking_window_status():
+    """
+    Determina o status da janela de agendamento com base nas novas regras:
+    - Fecha para a semana atual na quarta-feira às 23:59.
+    - Abre para a próxima semana na quinta-feira às 18:00.
+    """
     try:
         now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
         now_brasilia = now_utc.astimezone(BRASILIA_TZ)
         
         today_brasilia = now_brasilia.date()
+        # weekday(): Segunda=0, Terça=1, ..., Domingo=6
         current_week_monday = today_brasilia - timedelta(days=today_brasilia.weekday())
         
         next_week_monday = current_week_monday + timedelta(weeks=1)
         
-        current_week_cutoff_date = current_week_monday + timedelta(days=2)  # Quarta-feira
-        current_week_cutoff_time = time(23, 59, 0)  # 23:59
+        # --- PONTOS DE CORTE ---
+        # Fechamento da semana atual: Quarta-feira (dia 2) às 23:59
+        current_week_cutoff_date = current_week_monday + timedelta(days=2)
+        current_week_cutoff_time = time(23, 59, 59) # Usar 59 segundos para garantir
         current_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(current_week_cutoff_date, current_week_cutoff_time))
 
-        next_week_open_date = current_week_monday + timedelta(days=4)  # quinta-feira
-        next_week_open_time = time(18, 0, 0)  # 18:00
+        # Abertura da próxima semana: Quinta-feira (dia 3) às 18:00
+        next_week_open_date = current_week_monday + timedelta(days=3)
+        next_week_open_time = time(18, 0, 0)
         next_week_open_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_open_date, next_week_open_time))
 
-        next_week_cutoff_date = next_week_monday + timedelta(days=2)  # Quarta-feira da próxima semana
-        next_week_cutoff_time = time(23, 59, 0)  # 23:59
+        # Fechamento da próxima semana: Quarta-feira da outra semana
+        next_week_cutoff_date = next_week_monday + timedelta(days=2)
+        next_week_cutoff_time = time(23, 59, 59)
         next_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_cutoff_date, next_week_cutoff_time))
 
         status = {
             "current_week": {"open": False, "message": "Fechado"},
             "next_week": {"open": False, "message": "Fechado"},
-            "general_message": "As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 23:59, e a escala da próxima semana será liberada todas as quinta-feiras, às 18h."
+            "general_message": "As escolhas para a semana atual fecham às quartas-feiras (23:59), e a escala da próxima semana abre às quintas-feiras (18:00)."
         }
 
+        # --- LÓGICA DE STATUS ---
+        # Semana atual: aberta até o ponto de corte
         if now_brasilia <= current_week_cutoff_datetime:
             status["current_week"]["open"] = True
             status["current_week"]["message"] = "Aberto até quarta-feira às 23:59"
         else:
-            status["current_week"]["message"] = "Fechado (após quarta-feira 23:59)"
+            status["current_week"]["message"] = "Fechado (encerrado quarta-feira às 23:59)"
 
+        # Próxima semana: aberta entre a data de abertura e o fechamento da próxima semana
         if now_brasilia >= next_week_open_datetime and now_brasilia <= next_week_cutoff_datetime:
             status["next_week"]["open"] = True
             status["next_week"]["message"] = "Aberto para a próxima semana"
         elif now_brasilia < next_week_open_datetime:
             status["next_week"]["message"] = f"Abre na quinta-feira às 18:00 ({next_week_open_date.strftime('%d/%m')})"
         else:
-            status["next_week"]["message"] = "Fechado (após quarta-feira 23:59 da próxima semana)"
+            status["next_week"]["message"] = "Fechado (após o prazo da próxima semana)"
 
         return status
     except Exception as e:
@@ -207,7 +220,7 @@ def get_booking_window_status():
         return {
             "current_week": {"open": False, "message": "Erro no sistema"},
             "next_week": {"open": False, "message": "Erro no sistema"},
-            "general_message": "As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 23:59, e a escala da próxima semana será liberada todas as quinta-feiras, às 18h."
+            "general_message": "As escolhas para a semana atual fecham às quartas-feiras (23:59), e a escala da próxima semana abre às quintas-feiras (18:00)."
         }
 
 @bookings_bp.route("/booking-window-status", methods=["GET"])
@@ -248,7 +261,6 @@ def create_booking():
         if not slots_data and not observation:
             return jsonify({"error": "Missing fields. Required: slots or observation"}), 400
 
-        # LÓGICA CORRIGIDA PARA OBSERVAÇÃO GERAL
         if not slots_data and observation:
             today_brasilia = datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(BRASILIA_TZ).date()
             week_start_date = today_brasilia - timedelta(days=today_brasilia.weekday())
@@ -328,10 +340,8 @@ def create_booking():
                 return jsonify({"error": f"Room ID {room_id} not found"}), 404
             
             processed_slots.append({
-                "room_id": room_id, 
-                "room_name": room.name,
-                "booking_date_obj": booking_date_obj, 
-                "booking_date_str": booking_date_str,
+                "room_id": room_id, "room_name": room.name,
+                "booking_date_obj": booking_date_obj, "booking_date_str": booking_date_str,
                 "period": period
             })
             daily_new_bookings_count[booking_date_obj] += 1
@@ -478,22 +488,15 @@ def get_bookings():
         
         def booking_sort_key(booking):
             try:
-                if booking.period == "Geral": 
-                    return (999, 999)
+                if booking.period == "Geral": return (999, 999)
                 if booking.room:
                     room_name = booking.room.name
                     if room_name.startswith("Geral "):
-                        try: 
-                            number = int(re.findall(r'\d+', room_name)[0])
-                            return (0, number)
-                        except (IndexError, ValueError): 
-                            return (0, 999)
-                    else: 
-                        return (1, booking.room.id)
-                else: 
-                    return (999, 999)
-            except Exception: 
-                return (999, 999)
+                        try: number = int(re.findall(r'\d+', room_name)[0]); return (0, number)
+                        except (IndexError, ValueError): return (0, 999)
+                    else: return (1, booking.room.id)
+                else: return (999, 999)
+            except Exception: return (999, 999)
         
         bookings.sort(key=booking_sort_key)
         
@@ -548,18 +551,13 @@ def generate_schedule_pdf():
         sorted_rooms = sort_rooms_custom(rooms)
         
         def ensure_date(date_input):
-            if isinstance(date_input, date): 
-                return date_input
-            if isinstance(date_input, datetime): 
-                return date_input.date()
+            if isinstance(date_input, date): return date_input
+            if isinstance(date_input, datetime): return date_input.date()
             if isinstance(date_input, str):
-                try: 
-                    return datetime.strptime(date_input, "%Y-%m-%d").date()
+                try: return datetime.strptime(date_input, "%Y-%m-%d").date()
                 except ValueError:
-                    try: 
-                        return datetime.fromisoformat(date_input.replace('Z', '+00:00')).date()
-                    except ValueError: 
-                        return None
+                    try: return datetime.fromisoformat(date_input.replace('Z', '+00:00')).date()
+                    except ValueError: return None
             return None
 
         dates_of_week = []
@@ -588,8 +586,7 @@ def generate_schedule_pdf():
 
         for booking in bookings:
             booking_date = ensure_date(booking.booking_date)
-            if not booking_date: 
-                continue
+            if not booking_date: continue
 
             if booking.period == "Geral":
                 general_observations.append({
@@ -604,7 +601,7 @@ def generate_schedule_pdf():
             user_info[user_name]['coordinator'] = booking.coordinator_name or ''
             
             if booking.observation and not user_info[user_name]['observation']:
-                user_info[user_name]['observation'] = booking.observation
+                 user_info[user_name]['observation'] = booking.observation
 
             if booking.room:
                 user_info[user_name]['bookings'].append({
@@ -654,3 +651,18 @@ def generate_schedule_pdf():
         current_app.logger.error(f"Traceback completo: {traceback.format_exc()}")
         return jsonify({"error": "Erro interno ao gerar PDF", "details": str(e)}), 500
 
+@bookings_bp.route("/admin/clear-by-date", methods=["POST"])
+@require_admin_key
+def clear_bookings_by_date_range():
+    """
+    APAGA TODOS OS AGENDAMENTOS E OBSERVAÇÕES DENTRO DE UM INTERVALO DE DATAS.
+    Esta é uma ação destrutiva e irreversível para os dados no período selecionado.
+    As salas não serão apagadas.
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Corpo da requisição ausente ou inválido"}), 400
+
+        start_date_str = data.get("start_date")
+        
