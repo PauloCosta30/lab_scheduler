@@ -596,9 +596,24 @@ def clear_bookings_by_date_range():
         current_app.logger.error(f"Erro ao apagar agendamentos por data: {str(e)}")
         return jsonify({"error": "Erro interno ao apagar agendamentos", "details": str(e)}), 500
 
-# --- NOVA ROTA DE ADMINISTRAÇÃO ---
+# Decorator para verificar chave administrativa (SEM ALTERAÇÃO, JÁ ESTÁ CORRETO)
+def require_admin_key(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        admin_key = request.headers.get('X-Admin-Key') or request.args.get('admin_key')
+        expected_key = current_app.config.get('ADMIN_KEY')
+        if not expected_key:
+            return jsonify({"error": "Configuração administrativa não encontrada"}), 500
+        if not admin_key or admin_key != expected_key:
+            return jsonify({"error": "Chave administrativa inválida ou ausente"}), 401
+        return f(*args, **kwargs)
+    return decorated_function
+
+# ... (todas as outras funções e rotas até a rota de admin) ...
+
+# --- ROTA DE ADMINISTRAÇÃO CORRIGIDA ---
 @bookings_bp.route("/admin/booking", methods=["POST"])
-@require_admin_key
+@require_admin_key # O decorador já faz a validação da chave
 def admin_create_or_update_booking():
     """
     Rota de Admin: Cria, atualiza ou remove um agendamento sem
