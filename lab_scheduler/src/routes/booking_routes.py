@@ -170,23 +170,18 @@ def get_booking_window_status():
         now_brasilia = now_utc.astimezone(BRASILIA_TZ)
         
         today_brasilia = now_brasilia.date()
-        # weekday(): Segunda=0, Terça=1, ..., Domingo=6
         current_week_monday = today_brasilia - timedelta(days=today_brasilia.weekday())
         
         next_week_monday = current_week_monday + timedelta(weeks=1)
         
-        # --- PONTOS DE CORTE ---
-        # Fechamento da semana atual: Quarta-feira (dia 2) às 23:59
         current_week_cutoff_date = current_week_monday + timedelta(days=2)
-        current_week_cutoff_time = time(23, 59, 59) # Usar 59 segundos para garantir
+        current_week_cutoff_time = time(23, 59, 59)
         current_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(current_week_cutoff_date, current_week_cutoff_time))
 
-        # Abertura da próxima semana: Quinta-feira (dia 3) às 18:00
         next_week_open_date = current_week_monday + timedelta(days=3)
         next_week_open_time = time(18, 0, 0)
         next_week_open_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_open_date, next_week_open_time))
 
-        # Fechamento da próxima semana: Quarta-feira da outra semana
         next_week_cutoff_date = next_week_monday + timedelta(days=2)
         next_week_cutoff_time = time(23, 59, 59)
         next_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_cutoff_date, next_week_cutoff_time))
@@ -197,15 +192,12 @@ def get_booking_window_status():
             "general_message": "As escolhas para a semana atual fecham às quartas-feiras (23:59), e a escala da próxima semana abre às quintas-feiras (18:00)."
         }
 
-        # --- LÓGICA DE STATUS ---
-        # Semana atual: aberta até o ponto de corte
         if now_brasilia <= current_week_cutoff_datetime:
             status["current_week"]["open"] = True
             status["current_week"]["message"] = "Aberto até quarta-feira às 23:59"
         else:
             status["current_week"]["message"] = "Fechado (encerrado quarta-feira às 23:59)"
 
-        # Próxima semana: aberta entre a data de abertura e o fechamento da próxima semana
         if now_brasilia >= next_week_open_datetime and now_brasilia <= next_week_cutoff_datetime:
             status["next_week"]["open"] = True
             status["next_week"]["message"] = "Aberto para a próxima semana"
@@ -323,17 +315,23 @@ def create_booking():
             if booking_date_obj.weekday() >= 5:
                 return jsonify({"error": f"Agendamentos para {booking_date_str} são permitidos apenas de segunda a sexta-feira."}), 400
 
-            if booking_date_obj < today_brasilia:
-                return jsonify({"error": f"Agendamento para {booking_date_str} não pode ser no passado."}), 400
-            
-            if current_week_monday <= booking_date_obj < next_week_monday:
+            # --- LÓGICA DE VALIDAÇÃO DE DATA CORRIGIDA ---
+            is_current_week_booking = current_week_monday <= booking_date_obj < next_week_monday
+            is_next_week_booking = next_week_monday <= booking_date_obj < (next_week_monday + timedelta(weeks=1))
+
+            if not is_current_week_booking and not is_next_week_booking:
+                return jsonify({"error": "Agendamentos só são permitidos para a semana atual ou próxima semana."}), 403
+
+            if is_current_week_booking:
                 if not booking_window["current_week"]["open"]:
                     return jsonify({"error": f"Agendamentos para a semana atual estão fechados. {booking_window['current_week']['message']}"}), 403
-            elif next_week_monday <= booking_date_obj < (next_week_monday + timedelta(weeks=1)):
+            
+            elif is_next_week_booking:
                 if not booking_window["next_week"]["open"]:
                     return jsonify({"error": f"Agendamentos para a próxima semana estão fechados. {booking_window['next_week']['message']}"}), 403
-            else:
-                return jsonify({"error": f"Agendamentos só são permitidos para a semana atual ou próxima semana."}), 403
+                if booking_date_obj < today_brasilia:
+                    return jsonify({"error": f"Agendamento para {booking_date_str} não pode ser no passado."}), 400
+            # --- FIM DA LÓGICA CORRIGIDA ---
 
             room = Room.query.get(room_id)
             if not room:
