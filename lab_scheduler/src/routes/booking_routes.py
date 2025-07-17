@@ -651,18 +651,3 @@ def generate_schedule_pdf():
         current_app.logger.error(f"Traceback completo: {traceback.format_exc()}")
         return jsonify({"error": "Erro interno ao gerar PDF", "details": str(e)}), 500
 
-@bookings_bp.route("/admin/clear-by-date", methods=["POST"])
-@require_admin_key
-def clear_bookings_by_date_range():
-    """
-    APAGA TODOS OS AGENDAMENTOS E OBSERVAÇÕES DENTRO DE UM INTERVALO DE DATAS.
-    Esta é uma ação destrutiva e irreversível para os dados no período selecionado.
-    As salas não serão apagadas.
-    """
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "Corpo da requisição ausente ou inválido"}), 400
-
-        start_date_str = data.get("start_date")
-        
