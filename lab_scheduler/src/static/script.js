@@ -117,6 +117,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
             showMessage(scheduleMessage, result.message, "success");
             
+            // --- CORREÇÃO APLICADA AQUI ---
+            // Verifica se a string newUserName, depois de remover espaços, tem algum conteúdo.
             if (newUserName.trim()) {
                 cell.textContent = newUserName.trim();
                 cell.className = 'schedule-cell booked admin-editable';
@@ -245,7 +247,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const roomCell = document.createElement("td");
             roomCell.textContent = room.name;
             roomCell.className = "room-name";
-            row.appendChild(roomCell); // CORREÇÃO APLICADA AQUI
+            row.appendChild(roomCell);
 
             datesOfWeek.forEach(dateStr => {
                 periods.forEach(period => {
@@ -342,9 +344,98 @@ document.addEventListener("DOMContentLoaded", () => {
         if (generatePdfButton) generatePdfButton.disabled = !currentWeekStartDate;
     }
 
-    async function generatePdf() { /* ... (código sem alteração) ... */ }
-    async function createBooking(formData) { /* ... (código sem alteração) ... */ }
-    function updateSelectedSlotsSummary() { /* ... (código sem alteração) ... */ }
+    async function generatePdf() {
+        if (!currentWeekStartDate) {
+            showMessage(scheduleMessage, "Carregue uma escala primeiro.", "error");
+            return;
+        }
+        const startDate = toYYYYMMDD(currentWeekStartDate);
+        const endDate = new Date(currentWeekStartDate);
+        endDate.setUTCDate(currentWeekStartDate.getUTCDate() + 4);
+        const endDateStr = toYYYYMMDD(endDate);
+
+        generatePdfButton.disabled = true;
+        generatePdfButton.textContent = "Gerando...";
+        showMessage(scheduleMessage, "Gerando PDF...", "info");
+        
+        try {
+            const response = await fetch(`${API_BASE_URL}/generate-pdf?start_date=${startDate}&end_date=${endDateStr}`);
+            if (!response.ok) throw new Error(`Erro do servidor: ${response.statusText}`);
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.style.display = "none";
+            a.href = url;
+            a.download = `escala_agendamentos_${startDate}_a_${endDateStr}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            showMessage(scheduleMessage, "PDF gerado com sucesso!", "success");
+        } catch (error) {
+            console.error("Falha ao gerar PDF:", error);
+            showMessage(scheduleMessage, `Erro ao gerar PDF: ${error.message}`, "error");
+        } finally {
+            generatePdfButton.disabled = false;
+            generatePdfButton.textContent = "Gerar PDF da Escala";
+        }
+    }
+
+    async function createBooking(formData) {
+        const userName = formData.get("userName");
+        const userEmail = formData.get("userEmail");
+        if (!userName || !userEmail) {
+            showMessage(modalFormMessage, "Nome e E-mail são obrigatórios.", "error");
+            return;
+        }
+        if (selectedSlots.length === 0 && !formData.get("observation").trim()) {
+            showMessage(modalFormMessage, "É necessário uma observação para agendamentos sem sala.", "error");
+            return;
+        }
+
+        const bookingData = {
+            user_name: userName,
+            user_email: userEmail,
+            coordinator_name: formData.get("coordinatorName"),
+            observation: formData.get("observation"),
+            slots: selectedSlots.map(s => ({ room_id: s.roomId, booking_date: s.date, period: s.period }))
+        };
+
+        showMessage(modalFormMessage, "Enviando agendamento...", "info");
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/bookings`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(bookingData)
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || `Erro ${response.status}`);
+            
+            showMessage(modalFormMessage, result.message, "success");
+            setTimeout(() => {
+                bookingModal.style.display = "none";
+                loadScheduleFor(toYYYYMMDD(currentWeekStartDate)); // Recarrega a escala
+            }, 2000);
+
+        } catch (error) {
+            showMessage(modalFormMessage, `Falha no agendamento: ${error.message}`, "error");
+        }
+    }
+
+    function updateSelectedSlotsSummary() {
+        if (!selectedSlotsSummaryList) return;
+        selectedSlotsSummaryList.innerHTML = "";
+        if (selectedSlots.length === 0) {
+            selectedSlotsSummaryList.innerHTML = "<li><em>Nenhum horário selecionado - Agendamento somente observação</em></li>";
+            return;
+        }
+        selectedSlots.forEach(slot => {
+            const li = document.createElement("li");
+            li.textContent = `${slot.roomName} - ${slot.date} - ${slot.period}`;
+            selectedSlotsSummaryList.appendChild(li);
+        });
+    }
 
     // --- Event Listeners ---
     if (adminLoginLink) {
@@ -384,6 +475,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
     
+    if (generatePdfButton) { generatePdfButton.addEventListener("click", generatePdf); }
     if (closeModalButton) { closeModalButton.addEventListener("click", () => bookingModal.style.display = "none"); }
     window.addEventListener("click", (event) => { if (event.target === bookingModal) bookingModal.style.display = "none"; });
     if (modalBookingForm) { modalBookingForm.addEventListener("submit", (e) => { e.preventDefault(); createBooking(new FormData(modalBookingForm)); }); }
