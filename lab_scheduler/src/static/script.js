@@ -117,8 +117,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
             showMessage(scheduleMessage, result.message, "success");
             
-            // --- CORREÇÃO APLICADA AQUI ---
-            // Verifica se a string newUserName, depois de remover espaços, tem algum conteúdo.
             if (newUserName.trim()) {
                 cell.textContent = newUserName.trim();
                 cell.className = 'schedule-cell booked admin-editable';
@@ -299,16 +297,14 @@ document.addEventListener("DOMContentLoaded", () => {
     function checkIfBookingAllowed(dateStr) {
         if (!bookingWindowStatus) return false;
         const slotDate = new Date(`${dateStr}T12:00:00Z`);
-        const today = getMonday(new Date());
-        const nextWeek = new Date(today);
-        nextWeek.setUTCDate(today.getUTCDate() + 7);
+        const mondayOfSlotWeek = getMonday(slotDate);
+        const mondayOfCurrentWeek = getMonday(new Date());
 
-        if (slotDate >= today && slotDate < nextWeek) {
+        if (mondayOfSlotWeek.toISOString().split('T')[0] === mondayOfCurrentWeek.toISOString().split('T')[0]) {
             return bookingWindowStatus.current_week.open;
-        } else if (slotDate >= nextWeek && slotDate < new Date(nextWeek.getTime() + 7 * 24 * 60 * 60 * 1000)) {
+        } else {
             return bookingWindowStatus.next_week.open;
         }
-        return false;
     }
     
     function handleSlotClick(event) {
