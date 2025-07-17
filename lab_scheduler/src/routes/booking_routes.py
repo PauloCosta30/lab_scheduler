@@ -170,36 +170,36 @@ def get_booking_window_status():
         next_week_monday = current_week_monday + timedelta(weeks=1)
         
         current_week_cutoff_date = current_week_monday + timedelta(days=2)  # Quarta-feira
-        current_week_cutoff_time = time(23, 0, 0)  # 18:00
+        current_week_cutoff_time = time(23, 59, 0)  # 23:59
         current_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(current_week_cutoff_date, current_week_cutoff_time))
 
-        next_week_open_date = current_week_monday + timedelta(days=4)  # Sexta-feira
+        next_week_open_date = current_week_monday + timedelta(days=4)  # quinta-feira
         next_week_open_time = time(18, 0, 0)  # 18:00
         next_week_open_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_open_date, next_week_open_time))
 
         next_week_cutoff_date = next_week_monday + timedelta(days=2)  # Quarta-feira da próxima semana
-        next_week_cutoff_time = time(23, 0, 0)  # 18:00
+        next_week_cutoff_time = time(23, 59, 0)  # 23:59
         next_week_cutoff_datetime = BRASILIA_TZ.localize(datetime.combine(next_week_cutoff_date, next_week_cutoff_time))
 
         status = {
             "current_week": {"open": False, "message": "Fechado"},
             "next_week": {"open": False, "message": "Fechado"},
-            "general_message": "As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 23h, e a escala da próxima semana será liberada todas as quinta-feiras, às 18h."
+            "general_message": "As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 23:59, e a escala da próxima semana será liberada todas as quinta-feiras, às 18h."
         }
 
         if now_brasilia <= current_week_cutoff_datetime:
             status["current_week"]["open"] = True
-            status["current_week"]["message"] = "Aberto até quarta-feira às 18:00"
+            status["current_week"]["message"] = "Aberto até quarta-feira às 23:59"
         else:
-            status["current_week"]["message"] = "Fechado (após quarta-feira 18:00)"
+            status["current_week"]["message"] = "Fechado (após quarta-feira 23:59)"
 
         if now_brasilia >= next_week_open_datetime and now_brasilia <= next_week_cutoff_datetime:
             status["next_week"]["open"] = True
             status["next_week"]["message"] = "Aberto para a próxima semana"
         elif now_brasilia < next_week_open_datetime:
-            status["next_week"]["message"] = f"Abre na sexta-feira às 18:00 ({next_week_open_date.strftime('%d/%m')})"
+            status["next_week"]["message"] = f"Abre na quinta-feira às 18:00 ({next_week_open_date.strftime('%d/%m')})"
         else:
-            status["next_week"]["message"] = "Fechado (após quarta-feira 18:00 da próxima semana)"
+            status["next_week"]["message"] = "Fechado (após quarta-feira 23:59 da próxima semana)"
 
         return status
     except Exception as e:
@@ -207,7 +207,7 @@ def get_booking_window_status():
         return {
             "current_week": {"open": False, "message": "Erro no sistema"},
             "next_week": {"open": False, "message": "Erro no sistema"},
-            "general_message": "As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 18h, e a escala da próxima semana será liberada todas as sextas-feiras, às 18h."
+            "general_message": "As escolhas para a semana atual sempre serão encerradas às quartas-feiras, às 23:59, e a escala da próxima semana será liberada todas as quinta-feiras, às 18h."
         }
 
 @bookings_bp.route("/booking-window-status", methods=["GET"])
