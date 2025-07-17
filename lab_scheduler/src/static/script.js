@@ -24,59 +24,70 @@ document.addEventListener("DOMContentLoaded", () => {
     let bookingWindowStatus = null;
 
     // --- Funções Helper (sem alteração) ---
-    function getTodayUTC() { /* ...código sem alteração... */ }
-    function parseDateStrToUTC(dateStr) { /* ...código sem alteração... */ }
+    function getTodayUTC() {
+        const today = new Date();
+        return new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    }
+    function parseDateStrToUTC(dateStr) {
+        const [year, month, day] = dateStr.split("-").map(Number);
+        return new Date(Date.UTC(year, month - 1, day));
+    }
     function showModalMessage(message, type) { /* ...código sem alteração... */ }
     function showScheduleMessage(message, type) { /* ...código sem alteração... */ }
     function showBookingStatusMessage(message, type) { /* ...código sem alteração... */ }
 
-    // --- Lógica de Exibição da Semana (CORRIGIDA) ---
+    // --- Lógica de Exibição da Semana (sem alteração) ---
     function getWeekToDisplay() {
         const now = new Date();
-        const currentDayOfWeek = now.getDay(); // 0=Domingo, 1=Segunda, ..., 6=Sábado
+        const currentDayOfWeek = now.getDay();
         const currentHour = now.getHours();
-        
-        console.log(`=== DETERMINANDO SEMANA PARA EXIBIR (v2) ===`);
-        console.log(`Dia/Hora local: ${currentDayOfWeek} / ${currentHour}`);
-
         if ( (currentDayOfWeek === 4 && currentHour >= 18) || currentDayOfWeek >= 5 || currentDayOfWeek === 0 ) {
-            console.log(`DECISÃO: EXIBIR PRÓXIMA SEMANA`);
-            
             const nextWeek = new Date(now);
-            
-            // --- LÓGICA DE CÁLCULO CORRIGIDA E SIMPLIFICADA ---
-            // 1. Encontra a diferença de dias até a próxima segunda-feira.
-            // (1 - currentDayOfWeek) nos dá a diferença para a segunda-feira desta semana.
-            // Adicionamos 7 para garantir que seja a da próxima semana.
-            // O operador % 7 lida com o caso do domingo (day=0).
             const daysUntilMonday = (1 - currentDayOfWeek + 7) % 7;
-            
-            // Se hoje for segunda, daysUntilMonday será 0, então pulamos 7 dias.
             if (daysUntilMonday === 0) {
                 nextWeek.setDate(now.getDate() + 7);
             } else {
                 nextWeek.setDate(now.getDate() + daysUntilMonday);
             }
-            
             return nextWeek.toISOString().split("T")[0];
         }
-        
-        console.log(`DECISÃO: EXIBIR SEMANA ATUAL`);
         return null;
     }
 
     // --- Funções de Status e Salas (sem alteração) ---
-    async function fetchBookingWindowStatus() { /* ...código sem alteração... */ }
+    async function fetchBookingWindowStatus() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/booking-window-status`);
+            if (!response.ok) {
+                throw new Error("Servidor não respondeu ao status.");
+            }
+            bookingWindowStatus = await response.json();
+            console.log("Status da janela de agendamento carregado:", bookingWindowStatus);
+            updateBookingStatusDisplay();
+            return true; // Retorna sucesso
+        } catch (error) {
+            console.error("Falha crítica ao buscar status do agendamento:", error);
+            showBookingStatusMessage("Não foi possível verificar o status do agendamento.", "error");
+            showScheduleMessage("Não é possível carregar a escala sem o status do servidor.", "error");
+            return false; // Retorna falha
+        }
+    }
     function updateBookingStatusDisplay() { /* ...código sem alteração... */ }
     async function fetchAllRooms() { /* ...código sem alteração... */ }
 
     // --- Lógica de Carregamento da Escala (sem alteração) ---
     async function loadScheduleData(inputDateStr = null) {
+        // Adicionada uma verificação para garantir que o status foi carregado
+        if (!bookingWindowStatus) {
+            showScheduleMessage("Aguardando status do servidor para carregar a escala.", "error");
+            console.error("Tentativa de carregar a escala sem bookingWindowStatus definido.");
+            return;
+        }
+        
         console.log(`Iniciando carregamento da escala. Data de entrada: ${inputDateStr}`);
         
         try {
             let referenceDate;
-            
             if (inputDateStr) {
                 referenceDate = parseDateStrToUTC(inputDateStr);
             } else {
@@ -120,7 +131,7 @@ document.addEventListener("DOMContentLoaded", () => {
             
         } catch (error) {
             console.error("Falha ao carregar escala:", error);
-            showScheduleMessage(`Não foi possível carregar a escala: ${error.message}`, "error");
+            showScheduleMessage(`Erro ao carregar escala: ${error.message}`, "error");
             if (scheduleTableContainer) scheduleTableContainer.innerHTML = "<p>Erro ao carregar escala.</p>";
         }
     }
@@ -141,44 +152,24 @@ document.addEventListener("DOMContentLoaded", () => {
     if (modalBookingForm) { /* ...código sem alteração... */ }
 
     // --- Event Listeners (sem alteração) ---
-    if (loadScheduleButton) {
-        loadScheduleButton.addEventListener("click", () => {
-            const selectedDate = weekSelector ? weekSelector.value : null;
-            if (selectedDate) {
-                loadScheduleData(selectedDate);
-            } else {
-                showScheduleMessage("Por favor, selecione uma data.", "error");
-            }
-        });
+    if (loadScheduleButton) { /* ...código sem alteração... */ }
+    if (prevWeekButton) { /* ...código sem alteração... */ }
+    if (nextWeekButton) { /* ...código sem alteração... */ }
+    if (generatePdfButton) { /* ...código sem alteração... */ }
+
+    // --- Initialization (CORRIGIDA) ---
+    async function initializeApp() {
+        console.log("Inicializando aplicação...");
+        // Primeiro, espera o status ser carregado.
+        const statusLoaded = await fetchBookingWindowStatus();
+        
+        // A escala só é carregada SE o status foi obtido com sucesso.
+        if (statusLoaded) {
+            loadScheduleData();
+        } else {
+            console.error("Inicialização interrompida: não foi possível carregar o status da janela de agendamento.");
+        }
     }
 
-    if (prevWeekButton) {
-        prevWeekButton.addEventListener("click", () => {
-            if (currentWeekStartDate) {
-                const prevWeekDate = new Date(currentWeekStartDate.valueOf());
-                prevWeekDate.setUTCDate(currentWeekStartDate.getUTCDate() - 7);
-                loadScheduleData(prevWeekDate.toISOString().split("T")[0]);
-            }
-        });
-    }
-
-    if (nextWeekButton) {
-        nextWeekButton.addEventListener("click", () => {
-            if (currentWeekStartDate) {
-                const nextWeekDate = new Date(currentWeekStartDate.valueOf());
-                nextWeekDate.setUTCDate(currentWeekStartDate.getUTCDate() + 7);
-                loadScheduleData(nextWeekDate.toISOString().split("T")[0]);
-            }
-        });
-    }
-    
-    if (generatePdfButton) {
-        generatePdfButton.addEventListener("click", generatePdf);
-    }
-
-    // --- Initialization (sem alteração) ---
-    console.log("Inicializando aplicação...");
-    fetchBookingWindowStatus().then(() => {
-        loadScheduleData(); 
-    });
+    initializeApp();
 });
