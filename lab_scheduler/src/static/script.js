@@ -26,10 +26,41 @@ document.addEventListener("DOMContentLoaded", () => {
     let adminKey = null;
 
     // --- Funções Helper ---
-    function showMessage(element, message, type = '') { /* ... (código sem alteração) ... */ }
-    function showBookingStatus(message, type = 'info') { /* ... (código sem alteração) ... */ }
-    function getMonday(d) { /* ... (código sem alteração) ... */ }
-    function toYYYYMMDD(date) { /* ... (código sem alteração) ... */ }
+    function showMessage(element, message, type = '') {
+        if (element) {
+            element.textContent = message;
+            element.className = `message ${type}`;
+            if (type === 'success' || type === 'info') {
+                 setTimeout(() => {
+                    if (element.textContent === message) {
+                       element.textContent = '';
+                       element.className = 'message';
+                    }
+                }, 4000);
+            }
+        }
+    }
+    
+    function showBookingStatus(message, type = 'info') {
+        if(bookingStatusMessage) {
+            bookingStatusMessage.textContent = message;
+            bookingStatusMessage.className = `status-message ${type}`;
+        }
+    }
+
+    function getMonday(d) {
+        const date = new Date(d);
+        const day = date.getUTCDay();
+        const diff = date.getUTCDate() - day + (day === 0 ? -6 : 1);
+        return new Date(date.setUTCDate(diff));
+    }
+
+    function toYYYYMMDD(date) {
+        const year = date.getUTCFullYear();
+        const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(date.getUTCDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
 
     // --- Lógica de Admin ---
     function enterAdminMode() {
@@ -101,8 +132,72 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // --- Lógica de Carregamento ---
-    async function initializeApp() { /* ... (código sem alteração) ... */ }
-    async function loadScheduleFor(startDateStr) { /* ... (código sem alteração) ... */ }
+    async function initializeApp() {
+        console.log("1. Iniciando App...");
+        try {
+            const response = await fetch(`${API_BASE_URL}/booking-window-status`);
+            if (!response.ok) throw new Error(`Falha ao buscar status: ${response.status}`);
+            bookingWindowStatus = await response.json();
+            console.log("2. Status da janela carregado:", bookingWindowStatus);
+            showBookingStatus(bookingWindowStatus.general_message, 'info');
+
+            const now = new Date();
+            let referenceDate = now;
+            const currentDay = now.getDay();
+            const currentHour = now.getHours();
+
+            if ((currentDay === 4 && currentHour >= 18) || currentDay >= 5 || currentDay === 0) {
+                console.log("3. Decisão: Mostrar próxima semana.");
+                const nextWeek = new Date(now);
+                nextWeek.setDate(now.getDate() + 7);
+                referenceDate = nextWeek;
+            } else {
+                console.log("3. Decisão: Mostrar semana atual.");
+            }
+
+            const mondayOfTargetWeek = getMonday(referenceDate);
+            await loadScheduleFor(toYYYYMMDD(mondayOfTargetWeek));
+
+        } catch (error) {
+            console.error("ERRO CRÍTICO NA INICIALIZAÇÃO:", error);
+            showMessage(scheduleMessage, `Erro ao inicializar: ${error.message}`, "error");
+            showBookingStatus("Erro de conexão com o servidor.", "error");
+        }
+    }
+
+    async function loadScheduleFor(startDateStr) {
+        console.log(`4. Carregando escala para a semana de ${startDateStr}`);
+        showMessage(scheduleMessage, "Carregando escala...", "");
+
+        try {
+            currentWeekStartDate = new Date(`${startDateStr}T12:00:00Z`);
+            if(weekSelector) weekSelector.value = startDateStr;
+
+            const endDate = new Date(currentWeekStartDate);
+            endDate.setUTCDate(currentWeekStartDate.getUTCDate() + 4);
+            const endDateStr = toYYYYMMDD(endDate);
+
+            if (allRooms.length === 0) {
+                const roomsResponse = await fetch(`${API_BASE_URL}/rooms`);
+                if (!roomsResponse.ok) throw new Error("Falha ao carregar salas.");
+                allRooms = await roomsResponse.json();
+                console.log("5. Salas carregadas.");
+            }
+
+            const bookingsResponse = await fetch(`${API_BASE_URL}/bookings?start_date=${startDateStr}&end_date=${endDateStr}`);
+            if (!bookingsResponse.ok) throw new Error("Falha ao carregar agendamentos.");
+            const bookings = await bookingsResponse.json();
+            console.log(`6. ${bookings.length} agendamentos carregados.`);
+
+            renderScheduleTable(bookings, allRooms, currentWeekStartDate);
+            showMessage(scheduleMessage, "Escala carregada com sucesso.", "success");
+
+        } catch (error) {
+            console.error("ERRO AO CARREGAR ESCALA:", error);
+            showMessage(scheduleMessage, `Erro ao carregar escala: ${error.message}`, "error");
+            if(scheduleTableContainer) scheduleTableContainer.innerHTML = "";
+        }
+    }
 
     function renderScheduleTable(bookings, rooms, weekStartDate) {
         console.log("7. Renderizando tabela...");
@@ -139,7 +234,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const subHeaderRow = document.createElement("tr");
         subHeaderRow.innerHTML = "<td></td>";
-        periods.forEach(() => subHeaderRow.innerHTML += "<th>Manhã</th><th>Tarde</th>");
+        for (let i = 0; i < 5; i++) {
+            periods.forEach(() => subHeaderRow.innerHTML += "<th>Manhã</th><th>Tarde</th>");
+        }
         thead.appendChild(subHeaderRow);
         table.appendChild(thead);
 
@@ -148,7 +245,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const roomCell = document.createElement("td");
             roomCell.textContent = room.name;
             roomCell.className = "room-name";
-            row.appendChild(row);
+            row.appendChild(roomCell); // CORREÇÃO APLICADA AQUI
 
             datesOfWeek.forEach(dateStr => {
                 periods.forEach(period => {
@@ -196,8 +293,58 @@ document.addEventListener("DOMContentLoaded", () => {
         scheduleTableContainer.appendChild(table);
         console.log("8. Tabela renderizada com sucesso.");
     }
+    
+    function checkIfBookingAllowed(dateStr) {
+        if (!bookingWindowStatus) return false;
+        const slotDate = new Date(`${dateStr}T12:00:00Z`);
+        const today = getMonday(new Date());
+        const nextWeek = new Date(today);
+        nextWeek.setUTCDate(today.getUTCDate() + 7);
 
-    // ... (Resto das funções: checkIfBookingAllowed, handleSlotClick, etc. sem alteração)
+        if (slotDate >= today && slotDate < nextWeek) {
+            return bookingWindowStatus.current_week.open;
+        } else if (slotDate >= nextWeek && slotDate < new Date(nextWeek.getTime() + 7 * 24 * 60 * 60 * 1000)) {
+            return bookingWindowStatus.next_week.open;
+        }
+        return false;
+    }
+    
+    function handleSlotClick(event) {
+        const cell = event.currentTarget;
+        if (cell.classList.contains("booked") || cell.classList.contains("closed")) return;
+
+        const slotData = {
+            roomId: parseInt(cell.dataset.roomId),
+            roomName: cell.dataset.roomName,
+            date: cell.dataset.date,
+            period: cell.dataset.period,
+            cellRef: cell
+        };
+
+        const existingIndex = selectedSlots.findIndex(s => 
+            s.roomId === slotData.roomId && s.date === slotData.date && s.period === slotData.period
+        );
+
+        if (existingIndex > -1) {
+            selectedSlots.splice(existingIndex, 1);
+            cell.classList.remove("selected");
+            cell.textContent = "Disponível";
+        } else {
+            selectedSlots.push(slotData);
+            cell.classList.add("selected");
+            cell.textContent = "Selecionado";
+        }
+        updateButtonStates();
+    }
+
+    function updateButtonStates() {
+        if (proceedToBookingButton) proceedToBookingButton.disabled = false;
+        if (generatePdfButton) generatePdfButton.disabled = !currentWeekStartDate;
+    }
+
+    async function generatePdf() { /* ... (código sem alteração) ... */ }
+    async function createBooking(formData) { /* ... (código sem alteração) ... */ }
+    function updateSelectedSlotsSummary() { /* ... (código sem alteração) ... */ }
 
     // --- Event Listeners ---
     if (adminLoginLink) {
@@ -206,7 +353,41 @@ document.addEventListener("DOMContentLoaded", () => {
             enterAdminMode();
         });
     }
-    // ... (Resto dos event listeners sem alteração)
+
+    if (loadScheduleButton) {
+        loadScheduleButton.addEventListener("click", () => {
+            if (weekSelector.value) {
+                const selectedDate = new Date(`${weekSelector.value}T12:00:00Z`);
+                const selectedMonday = getMonday(selectedDate);
+                loadScheduleFor(toYYYYMMDD(selectedMonday));
+            }
+        });
+    }
+
+    if (prevWeekButton) {
+        prevWeekButton.addEventListener("click", () => {
+            if (currentWeekStartDate) {
+                const prevMonday = new Date(currentWeekStartDate);
+                prevMonday.setUTCDate(prevMonday.getUTCDate() - 7);
+                loadScheduleFor(toYYYYMMDD(prevMonday));
+            }
+        });
+    }
+
+    if (nextWeekButton) {
+        nextWeekButton.addEventListener("click", () => {
+            if (currentWeekStartDate) {
+                const nextMonday = new Date(currentWeekStartDate);
+                nextMonday.setUTCDate(nextMonday.getUTCDate() + 7);
+                loadScheduleFor(toYYYYMMDD(nextMonday));
+            }
+        });
+    }
+    
+    if (closeModalButton) { closeModalButton.addEventListener("click", () => bookingModal.style.display = "none"); }
+    window.addEventListener("click", (event) => { if (event.target === bookingModal) bookingModal.style.display = "none"; });
+    if (modalBookingForm) { modalBookingForm.addEventListener("submit", (e) => { e.preventDefault(); createBooking(new FormData(modalBookingForm)); }); }
+    if (proceedToBookingButton) { proceedToBookingButton.addEventListener("click", () => { updateSelectedSlotsSummary(); bookingModal.style.display = "block"; }); }
 
     // --- Inicialização ---
     initializeApp();
