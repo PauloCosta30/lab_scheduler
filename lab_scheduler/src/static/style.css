@@ -129,6 +129,70 @@ button:disabled {
     cursor: not-allowed;
 }
 
+/* ================================================================== */
+/* ================   INÍCIO DO NOVO CÓDIGO CSS    ==================== */
+/* ================================================================== */
+
+.week-navigation {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    background-color: #f9f9f9; /* Um fundo suave para destacar */
+    border: 1px solid #eee;
+    border-radius: 5px;
+    margin-bottom: 20px;
+    flex-wrap: wrap; /* Permite quebrar linha em telas menores */
+    gap: 15px; /* Espaçamento entre os elementos quando quebram a linha */
+}
+
+/* Estilo para os botões de navegação (< >) para combinar com o seu botão verde */
+.week-navigation button {
+    padding: 8px 12px; /* Um pouco menor para não dominar a tela */
+    font-size: 14px;
+    /* Herda o estilo do seu 'button' principal, mas podemos ajustar a cor */
+    background-color: #007bff; /* Um azul padrão para navegação */
+    border-color: #007bff;
+}
+
+.week-navigation button:hover {
+    background-color: #0056b3;
+}
+
+.date-selector-container {
+    display: flex;
+    align-items: center;
+    gap: 10px; /* Espaçamento entre o label, input e botão */
+    flex-grow: 1; /* Permite que o container cresça */
+    justify-content: center; /* Centraliza o conteúdo */
+}
+
+.date-selector-container label {
+    margin-bottom: 0; /* Remove a margem padrão do seu label aqui */
+    font-size: 14px;
+}
+
+.date-selector-container input[type="date"] {
+    padding: 8px;
+    margin-bottom: 0; /* Remove a margem padrão */
+    width: auto; /* Largura automática baseada no conteúdo */
+}
+
+/* Estilo específico para o botão "Carregar" para combinar com seu botão verde principal */
+.date-selector-container button {
+    background-color: #5cb85c; /* Sua cor verde principal */
+    border-color: #5cb85c;
+}
+
+.date-selector-container button:hover {
+    background-color: #4cae4c; /* Sua cor verde hover */
+}
+
+/* ================================================================== */
+/* =================    FIM DO NOVO CÓDIGO CSS     ==================== */
+/* ================================================================== */
+
+
 /* Modal Styles */
 .modal {
     display: none; /* Hidden by default */
@@ -192,7 +256,8 @@ button:disabled {
         font-size: 16px; 
     }
 
-    button {
+    /* Removido o width: 100% para botões gerais, para não afetar a navegação */
+    .action-buttons button, .modal-content button {
         width: 100%;
         padding: 12px;
         margin-top: 10px; /* Espaçamento entre botões */
@@ -217,6 +282,11 @@ button:disabled {
     .modal-content {
         margin: 5% auto;
         width: 90%;
+    }
+
+    /* Ajustes responsivos para a nova barra de navegação */
+    .week-navigation {
+        flex-direction: column;
     }
 }
 
@@ -260,4 +330,3 @@ button:disabled {
         font-size: 1.4em; /* Ajusta o tamanho do título para telas menores */
     }
 }
-
