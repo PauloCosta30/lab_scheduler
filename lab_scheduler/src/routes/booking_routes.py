@@ -306,16 +306,13 @@ def create_booking():
             except ValueError:
                 return jsonify({"error": f"Invalid date format '{booking_date_str}'."}), 400
             
-            now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
-            now_brasilia = now_utc.astimezone(BRASILIA_TZ)
-            today_brasilia = now_brasilia.date()
+            today_brasilia = datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(BRASILIA_TZ).date()
             current_week_monday = today_brasilia - timedelta(days=today_brasilia.weekday())
             next_week_monday = current_week_monday + timedelta(weeks=1)
 
             if booking_date_obj.weekday() >= 5:
                 return jsonify({"error": f"Agendamentos para {booking_date_str} são permitidos apenas de segunda a sexta-feira."}), 400
 
-            # --- LÓGICA DE VALIDAÇÃO DE DATA CORRIGIDA ---
             is_current_week_booking = current_week_monday <= booking_date_obj < next_week_monday
             is_next_week_booking = next_week_monday <= booking_date_obj < (next_week_monday + timedelta(weeks=1))
 
@@ -331,7 +328,6 @@ def create_booking():
                     return jsonify({"error": f"Agendamentos para a próxima semana estão fechados. {booking_window['next_week']['message']}"}), 403
                 if booking_date_obj < today_brasilia:
                     return jsonify({"error": f"Agendamento para {booking_date_str} não pode ser no passado."}), 400
-            # --- FIM DA LÓGICA CORRIGIDA ---
 
             room = Room.query.get(room_id)
             if not room:
@@ -413,52 +409,6 @@ def create_booking():
         current_app.logger.error(f"Falha ao criar agendamento(s) no servidor: {str(e)}")
         return jsonify({"error": "Falha ao criar agendamento(s) no servidor.", "details": str(e)}), 500
 
-@bookings_bp.route("/general-observation", methods=["POST"])
-def add_general_observation():
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "Invalid input"}), 400
-
-        user_name = data.get("user_name")
-        user_email = data.get("user_email")
-        observation = data.get("observation", "")
-        week_start_date_str = data.get("week_start_date")
-
-        if not all([user_name, user_email, observation, week_start_date_str]):
-            return jsonify({"error": "Missing fields."}), 400
-
-        if "@" not in user_email or "." not in user_email.split("@")[-1]:
-            return jsonify({"error": "Invalid email format"}), 400
-
-        try:
-            week_start_date = datetime.strptime(week_start_date_str, "%Y-%m-%d").date()
-        except ValueError:
-            return jsonify({"error": "Invalid date format for week_start_date."}), 400
-
-        general_obs_booking = Booking(
-            user_name=user_name,
-            user_email=user_email,
-            coordinator_name="",
-            observation=f"OBSERVAÇÃO GERAL: {observation}",
-            room_id=None,
-            booking_date=week_start_date,
-            period="Geral"
-        )
-        
-        db.session.add(general_obs_booking)
-        db.session.commit()
-
-        return jsonify({
-            "message": "Observação geral adicionada com sucesso!",
-            "observation": observation
-        }), 201
-
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Falha ao adicionar observação geral: {str(e)}")
-        return jsonify({"error": "Falha ao adicionar observação geral.", "details": str(e)}), 500
-
 @bookings_bp.route("/bookings", methods=["GET"])
 def get_bookings():
     try:
@@ -537,13 +487,9 @@ def generate_schedule_pdf():
         except ValueError:
             return jsonify({"error": "Formato de data inválido. Use YYYY-MM-DD"}), 400
         
-        current_app.logger.info(f"Gerando PDF para período: {start_date} a {end_date}")
-        
         bookings = Booking.query.outerjoin(Room).filter(
             Booking.booking_date.between(start_date, end_date)
         ).order_by(Booking.booking_date, Booking.period).all()
-        
-        current_app.logger.info(f"Encontrados {len(bookings)} agendamentos")
         
         rooms = Room.query.all()
         sorted_rooms = sort_rooms_custom(rooms)
@@ -574,12 +520,8 @@ def generate_schedule_pdf():
             }
         
         user_info = defaultdict(lambda: {
-            'email': '',
-            'coordinator': '',
-            'observation': '',
-            'bookings': []
+            'email': '', 'coordinator': '', 'observation': '', 'bookings': []
         })
-        
         general_observations = []
 
         for booking in bookings:
@@ -597,45 +539,26 @@ def generate_schedule_pdf():
             user_name = booking.user_name
             user_info[user_name]['email'] = booking.user_email
             user_info[user_name]['coordinator'] = booking.coordinator_name or ''
-            
             if booking.observation and not user_info[user_name]['observation']:
                  user_info[user_name]['observation'] = booking.observation
-
             if booking.room:
                 user_info[user_name]['bookings'].append({
-                    'room_name': booking.room.name,
-                    'date': booking_date,
-                    'period': booking.period
+                    'room_name': booking.room.name, 'date': booking_date, 'period': booking.period
                 })
-                
                 date_str = booking_date.isoformat()
                 if date_str in schedule_data:
                     schedule_data[date_str][booking.period][booking.room.name] = user_name
 
-        now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
-        now_brasilia = now_utc.astimezone(BRASILIA_TZ)
-        
-        current_app.logger.info("Preparando dados para o template HTML")
+        now_brasilia = datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(BRASILIA_TZ)
         
         template_data = {
-            'all_rooms': sorted_rooms,
-            'dates_of_week': dates_of_week,
-            'schedule_data': schedule_data,
-            'user_info': dict(user_info),
-            'general_observations': general_observations,
-            'start_date': start_date,
-            'end_date': end_date,
-            'generated_at': now_brasilia,
-            'zip': zip
+            'all_rooms': sorted_rooms, 'dates_of_week': dates_of_week, 'schedule_data': schedule_data,
+            'user_info': dict(user_info), 'general_observations': general_observations,
+            'start_date': start_date, 'end_date': end_date, 'generated_at': now_brasilia, 'zip': zip
         }
         
         html_content = render_template('schedule_pdf_template.html', **template_data)
-        
-        current_app.logger.info("Template HTML renderizado, gerando PDF")
-        
         pdf_bytes = HTML(string=html_content).write_pdf(presentational_hints=True)
-        
-        current_app.logger.info("PDF gerado com sucesso")
         
         response = make_response(pdf_bytes)
         response.headers['Content-Type'] = 'application/pdf'
@@ -649,3 +572,81 @@ def generate_schedule_pdf():
         current_app.logger.error(f"Traceback completo: {traceback.format_exc()}")
         return jsonify({"error": "Erro interno ao gerar PDF", "details": str(e)}), 500
 
+@bookings_bp.route("/admin/clear-by-date", methods=["POST"])
+@require_admin_key
+def clear_bookings_by_date_range():
+    try:
+        data = request.get_json()
+        if not data: return jsonify({"error": "Corpo da requisição ausente ou inválido"}), 400
+        start_date_str = data.get("start_date")
+        end_date_str = data.get("end_date")
+        if not start_date_str or not end_date_str: return jsonify({"error": "Parâmetros 'start_date' e 'end_date' são obrigatórios"}), 400
+        try:
+            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"error": "Formato de data inválido. Use YYYY-MM-DD"}), 400
+        
+        num_deleted = db.session.query(Booking).filter(Booking.booking_date.between(start_date, end_date)).delete()
+        db.session.commit()
+        
+        return jsonify({"message": f"{num_deleted} agendamentos entre {start_date_str} e {end_date_str} foram apagados."}), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erro ao apagar agendamentos por data: {str(e)}")
+        return jsonify({"error": "Erro interno ao apagar agendamentos", "details": str(e)}), 500
+
+# --- NOVA ROTA DE ADMINISTRAÇÃO ---
+@bookings_bp.route("/admin/booking", methods=["POST"])
+@require_admin_key
+def admin_create_or_update_booking():
+    """
+    Rota de Admin: Cria, atualiza ou remove um agendamento sem
+    verificar a janela de tempo.
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Requisição inválida"}), 400
+
+        room_id = data.get("room_id")
+        booking_date_str = data.get("booking_date")
+        period = data.get("period")
+        user_name = data.get("user_name", "").strip()
+
+        if not all([room_id, booking_date_str, period]):
+            return jsonify({"error": "Campos room_id, booking_date e period são obrigatórios"}), 400
+
+        try:
+            booking_date = datetime.strptime(booking_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"error": "Formato de data inválido"}), 400
+
+        existing_booking = Booking.query.filter_by(
+            room_id=room_id,
+            booking_date=booking_date,
+            period=period
+        ).first()
+
+        if not user_name:
+            if existing_booking:
+                db.session.delete(existing_booking)
+                db.session.commit()
+                return jsonify({"message": "Agendamento removido com sucesso"}), 200
+            else:
+                return jsonify({"message": "Nenhum agendamento para remover"}), 200
+
+        if existing_booking:
+            existing_booking.user_name = user_name
+            message = "Agendamento atualizado com sucesso"
+        else:
+            new_booking = Booking(
+                room_id=room_id,
+                booking_date=booking_date,
+                period=period,
+                user_name=user_name,
+                user_email="admin@edit.com",
+                coordinator_name="Admin",
+                observation="Editado pelo administrador"
+            )
+            db.session.add
