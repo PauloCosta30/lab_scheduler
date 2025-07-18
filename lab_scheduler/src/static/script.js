@@ -258,7 +258,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 user_email: formData.get("userEmail"),
                 coordinator_name: formData.get("coordinatorName"),
                 observation: formData.get("observation"),
-                slots: selectedSlots.map(s => ({ room_id: s.roomId, booking_date: s.date, period: s.period }))
+                slots: selectedSlots.map(s => ({ room_id: s.roomId, booking_date: s.date, period: s.period })),
+                // CORREÇÃO AQUI: Envia a data de início da semana para o backend
+                week_start_date: currentWeekStartDate ? toYYYYMMDD(currentWeekStartDate) : null
             };
             try {
                 const response = await fetch(`${API_BASE_URL}/bookings`, {
