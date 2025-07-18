@@ -107,7 +107,6 @@ def get_rooms():
 
 @bookings_bp.route("/bookings", methods=["POST"])
 def create_booking():
-    # ... (A rota de criação de booking não foi alterada) ...
     try:
         data = request.get_json()
         user_name, user_email, coordinator_name, observation, slots_data = data.get("user_name"), data.get("user_email"), data.get("coordinator_name"), data.get("observation", ""), data.get("slots")
@@ -119,8 +118,10 @@ def create_booking():
             if not observation:
                 return jsonify({"error": "É necessário selecionar ao menos uma sala ou fornecer uma observação."}), 400
             
+            # CORREÇÃO AQUI: Garante que a observação geral seja salva na segunda-feira da semana atual
             today_brasilia = datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(BRASILIA_TZ).date()
             week_start_date = today_brasilia - timedelta(days=today_brasilia.weekday())
+            
             db.session.add(Booking(user_name=user_name, user_email=user_email, coordinator_name=coordinator_name, observation=f"OBSERVAÇÃO GERAL: {observation}", booking_date=week_start_date, period="Geral"))
             db.session.commit()
             send_general_observation_confirmation_email(user_email, user_name, coordinator_name, observation, week_start_date)
@@ -196,7 +197,6 @@ def create_booking():
 
 @bookings_bp.route("/bookings", methods=["GET"])
 def get_bookings():
-    # ... (A rota de busca de bookings não foi alterada) ...
     try:
         start_date_str = request.args.get("start_date")
         end_date_str = request.args.get("end_date")
@@ -251,7 +251,6 @@ def generate_schedule_pdf():
         general_observations = []
 
         for b in bookings:
-            # CORREÇÃO AQUI: Captura observações gerais
             if b.period == "Geral":
                 general_observations.append({'user_name': b.user_name, 'observation': b.observation.replace("OBSERVAÇÃO GERAL: ", ""), 'date': b.booking_date})
                 continue
@@ -299,7 +298,6 @@ def generate_schedule_pdf():
         current_app.logger.error(traceback.format_exc())
         return jsonify({"error": "Erro interno ao gerar PDF"}), 500
 
-# ... (Rotas de admin não foram alteradas) ...
 @bookings_bp.route("/admin/clear-by-date", methods=["POST"])
 @require_admin_key
 def clear_bookings_by_date():
