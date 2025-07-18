@@ -28,7 +28,12 @@ document.addEventListener("DOMContentLoaded", () => {
             element.textContent = message;
             element.className = `message ${type}`;
             if (type === 'success' || type === 'info') {
-                setTimeout(() => { if (element.textContent === message) element.textContent = ''; }, 4000);
+                setTimeout(() => {
+                    if (element.textContent === message) {
+                        element.textContent = '';
+                        element.className = 'message';
+                    }
+                }, 4000);
             }
         }
     };
@@ -255,7 +260,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (!response.ok) throw new Error(result.error || `Erro ${response.status}`);
                 
                 showMessage(dom.modalFormMessage, result.message, "success");
-                dom.modalBookingForm.reset(); // Limpa o formulário
+                dom.modalBookingForm.reset();
 
                 setTimeout(() => {
                     dom.bookingModal.style.display = "none";
