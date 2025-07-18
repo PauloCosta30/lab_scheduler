@@ -192,12 +192,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
         checkIfBookingAllowed(dateStr) {
             if (!bookingWindowStatus) return false;
-            const mondayOfSlotWeek = getMonday(new Date(`${dateStr}T12:00:00Z`));
-            const mondayOfCurrentWeek = getMonday(new Date());
-            if (toYYYYMMDD(mondayOfSlotWeek) === toYYYYMMDD(mondayOfCurrentWeek)) {
+            const slotMonday = getMonday(new Date(`${dateStr}T12:00:00Z`));
+            const currentMonday = getMonday(new Date());
+            const nextMonday = new Date(currentMonday);
+            nextMonday.setUTCDate(currentMonday.getUTCDate() + 7);
+
+            const slotMondayStr = toYYYYMMDD(slotMonday);
+            const currentMondayStr = toYYYYMMDD(currentMonday);
+            const nextMondayStr = toYYYYMMDD(nextMonday);
+
+            if (slotMondayStr === currentMondayStr) {
                 return bookingWindowStatus.current_week.open;
             }
-            return bookingWindowStatus.next_week.open;
+            if (slotMondayStr === nextMondayStr) {
+                return bookingWindowStatus.next_week.open;
+            }
+            return false; // Bloqueia todas as outras semanas (passadas e futuras distantes)
         },
 
         updateButtonStates() {
