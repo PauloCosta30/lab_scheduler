@@ -230,4 +230,79 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             selectedSlots.forEach(slot => {
                 const li = document.createElement("li");
-                li.textContent = `${slot.roomName} -
+                li.textContent = `${slot.roomName} - ${slot.date} - ${slot.period}`;
+                dom.selectedSlotsSummaryList.appendChild(li);
+            });
+        },
+
+        async createBooking(formData) {
+            showMessage(dom.modalFormMessage, "Enviando agendamento...", "info");
+            const bookingData = {
+                user_name: formData.get("userName"),
+                user_email: formData.get("userEmail"),
+                coordinator_name: formData.get("coordinatorName"),
+                observation: formData.get("observation"),
+                slots: selectedSlots.map(s => ({ room_id: s.roomId, booking_date: s.date, period: s.period }))
+            };
+            try {
+                const response = await fetch(`${API_BASE_URL}/bookings`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(bookingData)
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || `Erro ${response.status}`);
+                showMessage(dom.modalFormMessage, result.message, "success");
+                setTimeout(() => {
+                    dom.bookingModal.style.display = "none";
+                    this.loadScheduleFor(toYYYYMMDD(currentWeekStartDate));
+                }, 2000);
+            } catch (error) {
+                showMessage(dom.modalFormMessage, `Falha no agendamento: ${error.message}`, "error");
+            }
+        },
+
+        enterAdminMode() {
+            if (isAdminMode) return;
+            const key = prompt("Por favor, insira a Chave de Administrador:");
+            if (key) {
+                adminKey = key;
+                isAdminMode = true;
+                const indicator = document.createElement('div');
+                indicator.className = 'admin-mode-indicator';
+                indicator.textContent = 'MODO ADMINISTRADOR ATIVADO';
+                document.body.insertAdjacentElement('afterbegin', indicator);
+                if (currentWeekStartDate) this.loadScheduleFor(toYYYYMMDD(currentWeekStartDate));
+            }
+        },
+
+        async handleAdminCellClick(cell) {
+            const { roomName, date, period, roomId } = cell.dataset;
+            const currentHolder = cell.classList.contains('booked') ? cell.textContent.trim() : "";
+            const newUserName = prompt(`Editando: ${roomName} - ${date} - ${period}\n\nUsuário Atual: "${currentHolder}"\n\nNovo nome (deixe em branco para remover):`, currentHolder);
+            if (newUserName === null) return;
+            showMessage(dom.scheduleMessage, "Salvando alteração...", "info");
+            try {
+                const response = await fetch(`${API_BASE_URL}/admin/booking`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "X-Admin-Key": adminKey },
+                    body: JSON.stringify({ room_id: parseInt(roomId), booking_date: date, period, user_name: newUserName.trim() })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || `Erro ${response.status}`);
+                showMessage(dom.scheduleMessage, result.message, "success");
+                if (newUserName.trim()) {
+                    cell.textContent = newUserName.trim();
+                    cell.className = 'schedule-cell booked admin-editable';
+                } else {
+                    cell.textContent = "Disponível";
+                    cell.className = 'schedule-cell available admin-editable';
+                }
+            } catch (error) {
+                showMessage(dom.scheduleMessage, `Falha na edição: ${error.message}`, "error");
+            }
+        }
+    };
+
+    app.init();
+});
