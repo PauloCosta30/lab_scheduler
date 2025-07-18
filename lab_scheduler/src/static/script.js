@@ -56,6 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
             window.addEventListener("click", event => { if (event.target === dom.bookingModal) dom.bookingModal.style.display = "none"; });
             if (dom.modalBookingForm) dom.modalBookingForm.addEventListener("submit", e => { e.preventDefault(); this.createBooking(new FormData(dom.modalBookingForm)); });
             if (dom.proceedToBookingButton) dom.proceedToBookingButton.addEventListener("click", () => { this.updateSelectedSlotsSummary(); dom.bookingModal.style.display = "block"; });
+            if (dom.generatePdfButton) dom.generatePdfButton.addEventListener("click", () => this.generatePdf());
         },
 
         async initializeApp() {
@@ -252,13 +253,43 @@ document.addEventListener("DOMContentLoaded", () => {
                 });
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.error || `Erro ${response.status}`);
+                
                 showMessage(dom.modalFormMessage, result.message, "success");
+                dom.modalBookingForm.reset(); // Limpa o formulário
+
                 setTimeout(() => {
                     dom.bookingModal.style.display = "none";
                     this.loadScheduleFor(toYYYYMMDD(currentWeekStartDate));
                 }, 2000);
             } catch (error) {
                 showMessage(dom.modalFormMessage, `Falha no agendamento: ${error.message}`, "error");
+            }
+        },
+
+        async generatePdf() {
+            if (!currentWeekStartDate) {
+                showMessage(dom.scheduleMessage, "Carregue uma escala primeiro.", "error");
+                return;
+            }
+            showMessage(dom.scheduleMessage, "Gerando PDF...", "info");
+            const startDate = toYYYYMMDD(currentWeekStartDate);
+            const endDate = toYYYYMMDD(new Date(currentWeekStartDate.getTime() + 4 * 24 * 60 * 60 * 1000));
+            try {
+                const response = await fetch(`${API_BASE_URL}/generate-pdf?start_date=${startDate}&end_date=${endDate}`);
+                if (!response.ok) throw new Error(`Erro do servidor: ${response.statusText}`);
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.style.display = "none";
+                a.href = url;
+                a.download = `escala_agendamentos_${startDate}_a_${endDate}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                showMessage(dom.scheduleMessage, "PDF gerado com sucesso!", "success");
+            } catch (error) {
+                showMessage(dom.scheduleMessage, `Falha ao gerar PDF: ${error.message}`, "error");
             }
         },
 
