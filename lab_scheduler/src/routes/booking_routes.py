@@ -118,7 +118,6 @@ def create_booking():
             if not observation:
                 return jsonify({"error": "É necessário selecionar ao menos uma sala ou fornecer uma observação."}), 400
             
-            # CORREÇÃO AQUI: Garante que a observação geral seja salva na segunda-feira da semana atual
             today_brasilia = datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(BRASILIA_TZ).date()
             week_start_date = today_brasilia - timedelta(days=today_brasilia.weekday())
             
@@ -246,21 +245,29 @@ def generate_schedule_pdf():
                 dates_of_week.append(current_d)
             current_d += timedelta(days=1)
 
+        # --- LÓGICA DE COLETA DE DADOS CORRIGIDA ---
         schedule_data = {d.isoformat(): {"Manhã": {}, "Tarde": {}} for d in dates_of_week}
         user_observations = defaultdict(lambda: {'email': '', 'coordinator': '', 'bookings': []})
         general_observations = []
 
         for b in bookings:
+            # Captura observações gerais
             if b.period == "Geral":
-                general_observations.append({'user_name': b.user_name, 'observation': b.observation.replace("OBSERVAÇÃO GERAL: ", ""), 'date': b.booking_date})
+                general_observations.append({
+                    'user_name': b.user_name,
+                    'observation': b.observation.replace("OBSERVAÇÃO GERAL: ", ""),
+                    'date': b.booking_date
+                })
                 continue
 
+            # Preenche a tabela da escala
             if b.room:
                 date_str = b.booking_date.isoformat()
                 if date_str in schedule_data:
                     schedule_data[date_str][b.period][b.room.name] = b.user_name
             
-            if b.observation:
+            # Agrupa observações por usuário (apenas se houver observação)
+            if b.observation and b.observation.strip():
                 user_name = b.user_name
                 user_observations[user_name]['email'] = b.user_email
                 user_observations[user_name]['coordinator'] = b.coordinator_name or ''
@@ -270,6 +277,7 @@ def generate_schedule_pdf():
                     'period': b.period,
                     'observation': b.observation
                 })
+        # --- FIM DA LÓGICA CORRIGIDA ---
 
         now_brasilia = datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(BRASILIA_TZ)
         
