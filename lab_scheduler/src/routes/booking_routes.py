@@ -109,7 +109,12 @@ def get_rooms():
 def create_booking():
     try:
         data = request.get_json()
-        user_name, user_email, coordinator_name, observation, slots_data = data.get("user_name"), data.get("user_email"), data.get("coordinator_name"), data.get("observation", ""), data.get("slots")
+        user_name = data.get("user_name")
+        user_email = data.get("user_email")
+        coordinator_name = data.get("coordinator_name")
+        observation = data.get("observation", "")
+        slots_data = data.get("slots")
+        week_start_date_str = data.get("week_start_date") # NOVO: Recebe a data do frontend
 
         if not all([user_name, user_email]):
             return jsonify({"error": "Nome e e-mail do usuário são obrigatórios."}), 400
@@ -118,13 +123,19 @@ def create_booking():
             if not observation:
                 return jsonify({"error": "É necessário selecionar ao menos uma sala ou fornecer uma observação."}), 400
             
-            today_brasilia = datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(BRASILIA_TZ).date()
-            week_start_date = today_brasilia - timedelta(days=today_brasilia.weekday())
+            # --- LÓGICA CORRIGIDA PARA OBSERVAÇÃO GERAL ---
+            if week_start_date_str:
+                week_start_date = datetime.strptime(week_start_date_str, "%Y-%m-%d").date()
+            else:
+                # Fallback, caso o frontend não envie a data
+                today_brasilia = datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(BRASILIA_TZ).date()
+                week_start_date = today_brasilia - timedelta(days=today_brasilia.weekday())
             
             db.session.add(Booking(user_name=user_name, user_email=user_email, coordinator_name=coordinator_name, observation=f"OBSERVAÇÃO GERAL: {observation}", booking_date=week_start_date, period="Geral"))
             db.session.commit()
             send_general_observation_confirmation_email(user_email, user_name, coordinator_name, observation, week_start_date)
             return jsonify({"message": "Observação geral adicionada com sucesso!"}), 201
+        # --- FIM DA CORREÇÃO ---
 
         booking_window = get_booking_window_status()
         today_brasilia = datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(BRASILIA_TZ).date()
@@ -245,28 +256,20 @@ def generate_schedule_pdf():
                 dates_of_week.append(current_d)
             current_d += timedelta(days=1)
 
-        # --- LÓGICA DE COLETA DE DADOS CORRIGIDA ---
         schedule_data = {d.isoformat(): {"Manhã": {}, "Tarde": {}} for d in dates_of_week}
         user_observations = defaultdict(lambda: {'email': '', 'coordinator': '', 'bookings': []})
         general_observations = []
 
         for b in bookings:
-            # Captura observações gerais
             if b.period == "Geral":
-                general_observations.append({
-                    'user_name': b.user_name,
-                    'observation': b.observation.replace("OBSERVAÇÃO GERAL: ", ""),
-                    'date': b.booking_date
-                })
+                general_observations.append({'user_name': b.user_name, 'observation': b.observation.replace("OBSERVAÇÃO GERAL: ", ""), 'date': b.booking_date})
                 continue
 
-            # Preenche a tabela da escala
             if b.room:
                 date_str = b.booking_date.isoformat()
                 if date_str in schedule_data:
                     schedule_data[date_str][b.period][b.room.name] = b.user_name
             
-            # Agrupa observações por usuário (apenas se houver observação)
             if b.observation and b.observation.strip():
                 user_name = b.user_name
                 user_observations[user_name]['email'] = b.user_email
@@ -277,7 +280,6 @@ def generate_schedule_pdf():
                     'period': b.period,
                     'observation': b.observation
                 })
-        # --- FIM DA LÓGICA CORRIGIDA ---
 
         now_brasilia = datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(BRASILIA_TZ)
         
