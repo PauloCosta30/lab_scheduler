@@ -242,7 +242,7 @@ def generate_schedule_pdf():
         dates_of_week = []
         current_d = start_date
         while current_d <= end_date:
-            if current_d.weekday() < 5: # Apenas dias de semana
+            if current_d.weekday() < 5:
                 dates_of_week.append(current_d)
             current_d += timedelta(days=1)
 
@@ -251,6 +251,7 @@ def generate_schedule_pdf():
         general_observations = []
 
         for b in bookings:
+            # CORREÇÃO AQUI: Captura observações gerais
             if b.period == "Geral":
                 general_observations.append({'user_name': b.user_name, 'observation': b.observation.replace("OBSERVAÇÃO GERAL: ", ""), 'date': b.booking_date})
                 continue
