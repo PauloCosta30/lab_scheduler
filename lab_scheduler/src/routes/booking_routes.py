@@ -116,7 +116,6 @@ def create_booking():
         if not all([user_name, user_email]):
             return jsonify({"error": "Nome e e-mail do usuário são obrigatórios."}), 400
         
-        # Regra: Agendamento somente com observação
         if not slots_data:
             if not observation:
                 return jsonify({"error": "É necessário selecionar ao menos uma sala ou fornecer uma observação."}), 400
@@ -128,8 +127,6 @@ def create_booking():
             send_general_observation_confirmation_email(user_email, user_name, coordinator_name, observation, week_start_date)
             return jsonify({"message": "Observação geral adicionada com sucesso!"}), 201
 
-        # --- INÍCIO DAS VALIDAÇÕES ---
-        
         booking_window = get_booking_window_status()
         today_brasilia = datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(BRASILIA_TZ).date()
         current_week_monday = today_brasilia - timedelta(days=today_brasilia.weekday())
@@ -140,7 +137,6 @@ def create_booking():
         for slot in slots_data:
             booking_date_obj = datetime.strptime(slot["booking_date"], "%Y-%m-%d").date()
             
-            # Validação da janela de agendamento
             is_current_week = current_week_monday <= booking_date_obj < (current_week_monday + timedelta(weeks=1))
             is_next_week = (current_week_monday + timedelta(weeks=1)) <= booking_date_obj < (current_week_monday + timedelta(weeks=2))
 
@@ -151,7 +147,6 @@ def create_booking():
             else:
                 return jsonify({"error": "Agendamentos só são permitidos para a semana atual ou próxima semana."}), 403
 
-            # Validação de conflito (sala já ocupada)
             if check_booking_conflict(slot["room_id"], booking_date_obj, slot["period"]):
                 return jsonify({"error": f"A sala no dia {slot['booking_date']} ({slot['period']}) já está reservada."}), 409
 
@@ -161,13 +156,11 @@ def create_booking():
             processed_slots.append({"room_id": room.id, "room_name": room.name, "booking_date": booking_date_obj, "period": slot["period"]})
             daily_new_bookings_count[booking_date_obj] += 1
 
-        # Regra: Máximo de 3 agendamentos por dia
         for b_date, count in daily_new_bookings_count.items():
             existing_count = Booking.query.filter_by(user_name=user_name, booking_date=b_date).count()
             if (existing_count + count) > MAX_BOOKINGS_PER_DAY:
                 return jsonify({"error": f"Limite de {MAX_BOOKINGS_PER_DAY} agendamentos por dia seria excedido em {b_date.strftime('%d/%m/%Y')}."}), 409
 
-        # Regra: Máximo de 1 sala "Geral" por período
         geral_slots_by_day_period = defaultdict(int)
         for slot in processed_slots:
             if slot["room_name"].startswith("Geral "):
@@ -187,9 +180,6 @@ def create_booking():
             if existing_geral:
                 return jsonify({"error": f"Você já possui um agendamento na sala '{existing_geral.room.name}' para o período ({period} de {b_date.strftime('%d/%m/%Y')})."}), 409
 
-        # --- FIM DAS VALIDAÇÕES ---
-
-        # Se todas as validações passaram, criar os agendamentos
         for slot in processed_slots:
             db.session.add(Booking(user_name=user_name, user_email=user_email, coordinator_name=coordinator_name, observation=observation, room_id=slot["room_id"], booking_date=slot["booking_date"], period=slot["period"]))
         
@@ -204,7 +194,6 @@ def create_booking():
         db.session.rollback()
         current_app.logger.error(f"Erro ao criar agendamento: {str(e)}")
         return jsonify({"error": "Ocorreu um erro interno no servidor."}), 500
-
 
 @bookings_bp.route("/bookings", methods=["GET"])
 def get_bookings():
@@ -252,10 +241,10 @@ def generate_schedule_pdf():
         rooms = Room.query.all()
         sorted_rooms = sort_rooms_custom(rooms)
         
-        # ... (Lógica de processamento de dados para o PDF) ...
+        # Lógica de processamento de dados para o PDF
+        # (Esta parte deve ser preenchida com a lógica completa do seu template)
+        html_content = f"<h1>Escala de {start_date.strftime('%d/%m')} a {end_date.strftime('%d/%m')}</h1><p>Total de agendamentos: {len(bookings)}</p>"
         
-        # Placeholder para a lógica completa do PDF
-        html_content = "<h1>PDF Gerado com Sucesso</h1>" # Substituir pela renderização do template
         pdf_bytes = HTML(string=html_content).write_pdf()
         
         response = make_response(pdf_bytes)
@@ -267,11 +256,9 @@ def generate_schedule_pdf():
         current_app.logger.error(f"Erro ao gerar PDF: {str(e)}")
         return jsonify({"error": "Erro interno ao gerar PDF"}), 500
 
-
 @bookings_bp.route("/admin/clear-by-date", methods=["POST"])
 @require_admin_key
 def clear_bookings_by_date():
-    # O código para limpar por data não foi alterado, mas está aqui para completude
     try:
         data = request.get_json()
         start_date_str = data.get("start_date")
@@ -289,7 +276,6 @@ def clear_bookings_by_date():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": f"Erro ao apagar agendamentos: {str(e)}"}), 500
-
 
 @bookings_bp.route("/admin/booking", methods=["POST"])
 @require_admin_key
