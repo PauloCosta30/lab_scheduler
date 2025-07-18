@@ -13,21 +13,10 @@
             <h1>Escala para uso dos laboratórios - ITV</h1>
         </div>
 
-        <!-- Status da Janela de Agendamento -->
         <div class="booking-status-container">
             <h3>Status do Agendamento</h3>
             <div id="bookingStatusMessage" class="status-message">
                 Carregando status...
-            </div>
-            <div class="status-details">
-                <div class="status-item">
-                    <span class="status-label"></span>
-                    <span id="currentWeekStatus" class="status-value">-</span>
-                </div>
-                <div class="status-item">
-                    <span class="status-label"></span>
-                    <span id="nextWeekStatus" class="status-value">-</span>
-                </div>
             </div>
         </div>
 
@@ -35,9 +24,18 @@
             <h2>Escala Semanal</h2>
             <p>Clique nos horários disponíveis na tabela para selecioná-los. Após selecionar, clique em "Prosseguir com Agendamento".</p>
             
-            <!-- DICA ADICIONADA AQUI -->
             <div class="info-tip">
                 <strong>💡 Dica:</strong> Se todas as salas estiverem ocupadas, você pode fazer um agendamento apenas com observação para solicitar encaixe. Clique em "Prosseguir com o agendamento" mesmo sem selecionar nenhuma sala.
+            </div>
+
+            <div class="week-navigation">
+                <button id="prevWeekButton">&lt; Semana Anterior</button>
+                <div class="date-picker-container">
+                    <label for="weekSelector">Ir para a semana de:</label>
+                    <input type="date" id="weekSelector">
+                    <button id="loadScheduleButton">Carregar</button>
+                </div>
+                <button id="nextWeekButton">Próxima Semana &gt;</button>
             </div>
 
             <div id="scheduleTableContainer">
@@ -50,16 +48,13 @@
             </div>
         </div>
 
-        <!-- Modal de Agendamento -->
         <div id="bookingModal" class="modal">
             <div class="modal-content">
                 <span class="close-button">&times;</span>
                 <h2>Confirmar Agendamento</h2>
                 <div id="selectedSlotsSummary">
                     <p><strong>Horários Selecionados:</strong></p>
-                    <ul>
-                        <!-- Lista de horários selecionados será populada aqui -->
-                    </ul>
+                    <ul></ul>
                 </div>
                 <form id="modalBookingForm">
                     <div>
@@ -83,6 +78,11 @@
                 <div id="modalFormMessage" class="message"></div>
             </div>
         </div>
+
+        <div class="admin-login-container">
+            <a href="#" id="adminLoginLink">Login de Administrador</a>
+        </div>
+
     </div>
 
     <script src="/static/script.js"></script>
