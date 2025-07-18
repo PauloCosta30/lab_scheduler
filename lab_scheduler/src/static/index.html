@@ -19,23 +19,27 @@
             <div id="bookingStatusMessage" class="status-message">
                 Carregando status...
             </div>
+            <div class="status-details">
+                <div class="status-item">
+                    <span class="status-label"></span>
+                    <span id="currentWeekStatus" class="status-value">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label"></span>
+                    <span id="nextWeekStatus" class="status-value">-</span>
+                </div>
+            </div>
         </div>
 
         <div class="schedule-container">
             <h2>Escala Semanal</h2>
+            <p>Clique nos horários disponíveis na tabela para selecioná-los. Após selecionar, clique em "Prosseguir com Agendamento".</p>
             
-            <!-- Barra de Navegação de Semana -->
-            <div class="week-navigation">
-                <button id="prevWeekButton" title="Ir para a semana anterior">&lt; Semana Anterior</button>
-                <div class="date-selector-container">
-                    <label for="weekSelector">Ir para a semana de:</label>
-                    <input type="date" id="weekSelector">
-                    <button id="loadScheduleButton">Carregar</button>
-                </div>
-                <button id="nextWeekButton" title="Ir para a próxima semana">Próxima Semana &gt;</button>
+            <!-- DICA ADICIONADA AQUI -->
+            <div class="info-tip">
+                <strong>💡 Dica:</strong> Se todas as salas estiverem ocupadas, você pode fazer um agendamento apenas com observação para solicitar encaixe. Clique em "Prosseguir com o agendamento" mesmo sem selecionar nenhuma sala.
             </div>
 
-            <p>Clique nos horários disponíveis na tabela para selecioná-los. Após selecionar, clique em "Prosseguir com Agendamento".</p>
             <div id="scheduleTableContainer">
                 <!-- Tabela da escala será gerada aqui -->
             </div>
@@ -82,10 +86,5 @@
     </div>
 
     <script src="/static/script.js"></script>
-
-    <!-- Link de Login de Administrador -->
-    <div class="admin-login-container">
-        <a href="#" id="adminLoginLink">Login de Administrador</a>
-    </div>
 </body>
 </html>
