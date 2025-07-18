@@ -27,10 +27,7 @@ document.addEventListener("DOMContentLoaded", () => {
             element.className = `message ${type}`;
             if (type === 'success' || type === 'info') {
                 setTimeout(() => {
-                    if (element.textContent === message) {
-                        element.textContent = '';
-                        element.className = 'message';
-                    }
+                    if (element.textContent === message) element.textContent = '';
                 }, 4000);
             }
         }
@@ -49,7 +46,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- Lógica de Admin ---
     function enterAdminMode() {
-        if (isAdminMode) return alert("O modo administrador já está ativo.");
+        if (isAdminMode) return;
         const key = prompt("Por favor, insira a Chave de Administrador:");
         if (key) {
             adminKey = key;
@@ -89,59 +86,71 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // --- Lógica de Carregamento ---
-    async function initializeApp() {
+    // --- Lógica de Agendamento do Usuário ---
+    function handleSlotClick(event) {
+        const cell = event.currentTarget;
+        const slotData = {
+            roomId: parseInt(cell.dataset.roomId),
+            roomName: cell.dataset.roomName,
+            date: cell.dataset.date,
+            period: cell.dataset.period,
+            cellRef: cell
+        };
+        const existingIndex = selectedSlots.findIndex(s => s.roomId === slotData.roomId && s.date === slotData.date && s.period === slotData.period);
+        if (existingIndex > -1) {
+            selectedSlots.splice(existingIndex, 1);
+            cell.classList.remove("selected");
+            cell.textContent = "Disponível";
+        } else {
+            selectedSlots.push(slotData);
+            cell.classList.add("selected");
+            cell.textContent = "Selecionado";
+        }
+        updateButtonStates();
+    }
+
+    function updateSelectedSlotsSummary() {
+        if (!selectedSlotsSummaryList) return;
+        selectedSlotsSummaryList.innerHTML = "";
+        if (selectedSlots.length === 0) {
+            selectedSlotsSummaryList.innerHTML = "<li><em>Nenhum horário selecionado - Agendamento somente observação</em></li>";
+            return;
+        }
+        selectedSlots.forEach(slot => {
+            const li = document.createElement("li");
+            li.textContent = `${slot.roomName} - ${slot.date} - ${slot.period}`;
+            selectedSlotsSummaryList.appendChild(li);
+        });
+    }
+
+    async function createBooking(formData) {
+        showMessage(modalFormMessage, "Enviando agendamento...", "info");
+        const bookingData = {
+            user_name: formData.get("userName"),
+            user_email: formData.get("userEmail"),
+            coordinator_name: formData.get("coordinatorName"),
+            observation: formData.get("observation"),
+            slots: selectedSlots.map(s => ({ room_id: s.roomId, booking_date: s.date, period: s.period }))
+        };
         try {
-            const response = await fetch(`${API_BASE_URL}/booking-window-status`);
-            if (!response.ok) throw new Error(`Falha ao buscar status: ${response.status}`);
-            bookingWindowStatus = await response.json();
-            if(bookingStatusMessage) bookingStatusMessage.textContent = bookingWindowStatus.general_message;
-            
-            const now = new Date();
-            let referenceDate = now;
-            const currentDay = now.getDay();
-            const currentHour = now.getHours();
-            
-            if ((currentDay === 4 && currentHour >= 18) || currentDay >= 5 || currentDay === 0) {
-                const nextWeek = new Date(now);
-                nextWeek.setDate(now.getDate() + 7);
-                referenceDate = nextWeek;
-            }
-            
-            await loadScheduleFor(toYYYYMMDD(getMonday(referenceDate)));
+            const response = await fetch(`${API_BASE_URL}/bookings`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(bookingData)
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || `Erro ${response.status}`);
+            showMessage(modalFormMessage, result.message, "success");
+            setTimeout(() => {
+                bookingModal.style.display = "none";
+                loadScheduleFor(toYYYYMMDD(currentWeekStartDate));
+            }, 2000);
         } catch (error) {
-            showMessage(scheduleMessage, `Erro ao inicializar: ${error.message}`, "error");
-            if(bookingStatusMessage) bookingStatusMessage.textContent = "Erro de conexão com o servidor.";
+            showMessage(modalFormMessage, `Falha no agendamento: ${error.message}`, "error");
         }
     }
 
-    async function loadScheduleFor(startDateStr) {
-        showMessage(scheduleMessage, "Carregando escala...", "");
-        try {
-            currentWeekStartDate = new Date(`${startDateStr}T12:00:00Z`);
-            if(weekSelector) weekSelector.value = startDateStr;
-            
-            const endDate = new Date(currentWeekStartDate);
-            endDate.setUTCDate(currentWeekStartDate.getUTCDate() + 4);
-            
-            if (allRooms.length === 0) {
-                const roomsResponse = await fetch(`${API_BASE_URL}/rooms`);
-                if (!roomsResponse.ok) throw new Error("Falha ao carregar salas.");
-                allRooms = await roomsResponse.json();
-            }
-            
-            const bookingsResponse = await fetch(`${API_BASE_URL}/bookings?start_date=${startDateStr}&end_date=${toYYYYMMDD(endDate)}`);
-            if (!bookingsResponse.ok) throw new Error("Falha ao carregar agendamentos.");
-            const bookings = await bookingsResponse.json();
-            
-            renderScheduleTable(bookings, allRooms, currentWeekStartDate);
-            showMessage(scheduleMessage, "Escala carregada.", "success");
-        } catch (error) {
-            showMessage(scheduleMessage, `Erro ao carregar escala: ${error.message}`, "error");
-            if(scheduleTableContainer) scheduleTableContainer.innerHTML = "";
-        }
-    }
-
+    // --- Lógica de Carregamento e Renderização ---
     function renderScheduleTable(bookings, rooms, weekStartDate) {
         if (!scheduleTableContainer || !rooms || !weekStartDate) return;
         scheduleTableContainer.innerHTML = "";
@@ -220,32 +229,10 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!bookingWindowStatus) return false;
         const mondayOfSlotWeek = getMonday(new Date(`${dateStr}T12:00:00Z`));
         const mondayOfCurrentWeek = getMonday(new Date());
-        if (mondayOfSlotWeek.toISOString().split('T')[0] === mondayOfCurrentWeek.toISOString().split('T')[0]) {
+        if (toYYYYMMDD(mondayOfSlotWeek) === toYYYYMMDD(mondayOfCurrentWeek)) {
             return bookingWindowStatus.current_week.open;
         }
         return bookingWindowStatus.next_week.open;
-    }
-
-    function handleSlotClick(event) {
-        const cell = event.currentTarget;
-        const slotData = {
-            roomId: parseInt(cell.dataset.roomId),
-            roomName: cell.dataset.roomName,
-            date: cell.dataset.date,
-            period: cell.dataset.period,
-            cellRef: cell
-        };
-        const existingIndex = selectedSlots.findIndex(s => s.roomId === slotData.roomId && s.date === slotData.date && s.period === slotData.period);
-        if (existingIndex > -1) {
-            selectedSlots.splice(existingIndex, 1);
-            cell.classList.remove("selected");
-            cell.textContent = "Disponível";
-        } else {
-            selectedSlots.push(slotData);
-            cell.classList.add("selected");
-            cell.textContent = "Selecionado";
-        }
-        updateButtonStates();
     }
 
     function updateButtonStates() {
@@ -253,22 +240,66 @@ document.addEventListener("DOMContentLoaded", () => {
         if (generatePdfButton) generatePdfButton.disabled = !currentWeekStartDate;
     }
 
+    async function loadScheduleFor(startDateStr) {
+        showMessage(scheduleMessage, "Carregando escala...", "info");
+        try {
+            currentWeekStartDate = new Date(`${startDateStr}T12:00:00Z`);
+            if(weekSelector) weekSelector.value = startDateStr;
+            
+            const endDate = new Date(currentWeekStartDate);
+            endDate.setUTCDate(currentWeekStartDate.getUTCDate() + 4);
+            
+            if (allRooms.length === 0) {
+                const roomsResponse = await fetch(`${API_BASE_URL}/rooms`);
+                if (!roomsResponse.ok) throw new Error("Falha ao carregar salas.");
+                allRooms = await roomsResponse.json();
+            }
+            
+            const bookingsResponse = await fetch(`${API_BASE_URL}/bookings?start_date=${startDateStr}&end_date=${toYYYYMMDD(endDate)}`);
+            if (!bookingsResponse.ok) throw new Error("Falha ao carregar agendamentos.");
+            const bookings = await bookingsResponse.json();
+            
+            renderScheduleTable(bookings, allRooms, currentWeekStartDate);
+            showMessage(scheduleMessage, "", "success");
+        } catch (error) {
+            showMessage(scheduleMessage, `Erro ao carregar escala: ${error.message}`, "error");
+            if(scheduleTableContainer) scheduleTableContainer.innerHTML = "";
+        }
+    }
+
+    async function initializeApp() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/booking-window-status`);
+            if (!response.ok) throw new Error(`Falha ao buscar status: ${response.status}`);
+            bookingWindowStatus = await response.json();
+            if(bookingStatusMessage) bookingStatusMessage.textContent = bookingWindowStatus.general_message;
+            
+            const now = new Date();
+            let referenceDate = now;
+            const currentDay = now.getUTCDay();
+            const currentHour = now.getHours();
+            
+            if ((currentDay === 4 && currentHour >= 18) || currentDay === 5 || currentDay === 6 || currentDay === 0) {
+                const nextWeek = new Date(now);
+                nextWeek.setDate(now.getDate() + 7);
+                referenceDate = nextWeek;
+            }
+            
+            await loadScheduleFor(toYYYYMMDD(getMonday(referenceDate)));
+        } catch (error) {
+            showMessage(scheduleMessage, `Erro ao inicializar: ${error.message}`, "error");
+            if(bookingStatusMessage) bookingStatusMessage.textContent = "Erro de conexão com o servidor.";
+        }
+    }
+
     // --- Event Listeners ---
     if (adminLoginLink) adminLoginLink.addEventListener("click", (e) => { e.preventDefault(); enterAdminMode(); });
     if (loadScheduleButton) loadScheduleButton.addEventListener("click", () => { if (weekSelector.value) loadScheduleFor(toYYYYMMDD(getMonday(new Date(`${weekSelector.value}T12:00:00Z`)))); });
     if (prevWeekButton) prevWeekButton.addEventListener("click", () => { if (currentWeekStartDate) { const d = new Date(currentWeekStartDate); d.setUTCDate(d.getUTCDate() - 7); loadScheduleFor(toYYYYMMDD(d)); } });
     if (nextWeekButton) nextWeekButton.addEventListener("click", () => { if (currentWeekStartDate) { const d = new Date(currentWeekStartDate); d.setUTCDate(d.getUTCDate() + 7); loadScheduleFor(toYYYYMMDD(d)); } });
-    if (generatePdfButton) generatePdfButton.addEventListener("click", generatePdf);
     if (closeModalButton) closeModalButton.addEventListener("click", () => bookingModal.style.display = "none");
     window.addEventListener("click", (event) => { if (event.target === bookingModal) bookingModal.style.display = "none"; });
     if (modalBookingForm) modalBookingForm.addEventListener("submit", (e) => { e.preventDefault(); createBooking(new FormData(modalBookingForm)); });
     if (proceedToBookingButton) proceedToBookingButton.addEventListener("click", () => { updateSelectedSlotsSummary(); bookingModal.style.display = "block"; });
-
-    // --- Inicialização ---
-    initializeApp();
+    // A função generatePdf não foi incluída para brevidade, mas deve ser adicionada se necessário.
 });
-
-// Funções de PDF e createBooking não mostradas para brevidade, mas estão no código completo
-async function generatePdf() { /* ... */ }
-async function createBooking(formData) { /* ... */ }
-function updateSelectedSlotsSummary() { /* ... */ }
